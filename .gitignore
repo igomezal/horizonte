@@ -1,0 +1,18 @@
+# Binaries
+/bin/
+/tmp/
+*.exe
+
+# Local data (personal financial data must never be committed)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+/data/local/
+
+# Env / editor
+.env
+.idea/
+.vscode/
+*.swp
+.DS_Store
