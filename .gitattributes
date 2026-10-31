@@ -1,0 +1,2 @@
+* text=auto eol=lf
+ui/static/vendor/** -diff linguist-vendored

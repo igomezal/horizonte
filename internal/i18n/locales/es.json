@@ -1,0 +1,50 @@
+{
+  "app.name": "Proyección",
+  "app.tagline": "Planificación financiera y de jubilación, privada y en tu propio equipo.",
+
+  "nav.home": "Inicio",
+  "nav.finances": "Finanzas actuales",
+  "nav.plan": "Plan",
+  "nav.cashflow": "Flujo de caja",
+  "nav.success": "Probabilidad de éxito",
+  "nav.backtest": "Prueba histórica",
+  "nav.scenarios": "Escenarios",
+  "nav.soon": "Próximamente",
+  "nav.menu": "Menú",
+
+  "lang.label": "Idioma",
+  "lang.es": "Español",
+  "lang.en": "English",
+
+  "theme.toggle": "Cambiar tema claro/oscuro",
+
+  "home.title": "Bienvenido",
+  "home.intro": "Modela toda tu vida financiera: ingresos, gastos, cuentas, deudas e hitos como la independencia financiera o la jubilación. Tus datos se guardan solo en este equipo.",
+  "home.start": "Empieza introduciendo tus finanzas actuales.",
+  "home.roadmap": "Qué se está construyendo",
+  "home.feature.finances": "Registra cuentas, ingresos, gastos y deudas a mano, sin vincular bancos.",
+  "home.feature.plan": "Proyección mes a mes de tu patrimonio neto hasta el final de tu vida.",
+  "home.feature.milestones": "Hitos como la independencia financiera que activan o detienen ingresos y gastos.",
+  "home.feature.cashflow": "Diagramas de Sankey del flujo de dinero de cada año.",
+  "home.feature.success": "Simulaciones de Montecarlo y pruebas con rentabilidades históricas.",
+  "home.feature.taxes": "Fiscalidad española (IRPF), empezando con un tipo efectivo fijo.",
+
+  "home.milestones": "Hitos",
+  "home.taxes": "Impuestos",
+
+  "demo.title": "Ejemplo: el poder del interés compuesto",
+  "demo.desc": "%s invertidos hoy más %s al mes, con una rentabilidad anual del %s durante %d años.",
+  "demo.final": "Valor final",
+  "demo.contributed": "Aportado",
+  "demo.growth": "Rendimientos",
+  "demo.year": "Año",
+  "demo.balance": "Saldo",
+
+  "footer.privacy": "Tus datos nunca salen de este equipo.",
+
+  "error.notfound.title": "Página no encontrada",
+  "error.notfound.body": "La página que buscas no existe.",
+  "error.server.title": "Algo ha fallado",
+  "error.server.body": "Se ha producido un error inesperado. Inténtalo de nuevo.",
+  "error.back": "Volver al inicio"
+}

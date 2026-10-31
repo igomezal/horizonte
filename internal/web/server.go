@@ -1,0 +1,102 @@
+// Package web contains the HTTP server, routes and handlers.
+package web
+
+import (
+	"fmt"
+	"io/fs"
+	"log/slog"
+	"net/http"
+
+	"github.com/igomezal/horizonte/internal/i18n"
+	"github.com/igomezal/horizonte/internal/store"
+)
+
+// Config configures the HTTP server.
+type Config struct {
+	Store   *store.Store
+	Catalog *i18n.Catalog
+	Logger  *slog.Logger
+	// Assets must contain templates/ and static/ (ui.FS, or os.DirFS("ui") in dev).
+	Assets fs.FS
+	// Dev re-parses templates on every request.
+	Dev bool
+}
+
+// Server serves the web UI.
+type Server struct {
+	store   *store.Store
+	catalog *i18n.Catalog
+	log     *slog.Logger
+	render  *renderer
+	handler http.Handler
+}
+
+// New builds the server and its routes.
+func New(cfg Config) (*Server, error) {
+	r, err := newRenderer(cfg.Assets, cfg.Catalog, cfg.Dev)
+	if err != nil {
+		return nil, fmt.Errorf("web: %w", err)
+	}
+	static, err := fs.Sub(cfg.Assets, "static")
+	if err != nil {
+		return nil, fmt.Errorf("web: static assets: %w", err)
+	}
+	s := &Server{
+		store:   cfg.Store,
+		catalog: cfg.Catalog,
+		log:     cfg.Logger,
+		render:  r,
+	}
+
+	var staticHandler http.Handler = http.StripPrefix("/static/", http.FileServerFS(static))
+	if cfg.Dev {
+		// Always revalidate in dev so CSS/JS edits show up on a normal reload.
+		next := staticHandler
+		staticHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-cache")
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("GET /static/", staticHandler)
+	mux.HandleFunc("GET /healthz", s.handleHealth)
+	mux.HandleFunc("GET /{$}", s.handleHome)
+	mux.HandleFunc("POST /lang", s.handleSetLang)
+	mux.HandleFunc("/", s.handleNotFound)
+
+	var h http.Handler = mux
+	h = i18n.Middleware(h)
+	h = sameOriginWrites(h)
+	h = securityHeaders(h)
+	h = s.recoverPanics(h)
+	h = logRequests(cfg.Logger, h)
+	s.handler = h
+	return s, nil
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }
+
+// page renders a full page, or only its "content" block for htmx navigation.
+func (s *Server) page(w http.ResponseWriter, r *http.Request, status int, page, titleKey string, data any) {
+	block := "layout"
+	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Boosted") != "true" {
+		block = "content"
+	}
+	pd := pageData{TitleKey: titleKey, Data: data}
+	if err := s.render.render(w, r, status, page, block, pd); err != nil {
+		s.serverError(w, r, err)
+	}
+}
+
+func (s *Server) serverError(w http.ResponseWriter, r *http.Request, err error) {
+	if err != nil {
+		s.log.Error("server error", "path", r.URL.Path, "err", err)
+	}
+	pd := pageData{TitleKey: "error.server.title", Data: errorData{
+		TitleKey: "error.server.title", BodyKey: "error.server.body",
+	}}
+	if rerr := s.render.render(w, r, http.StatusInternalServerError, "error", "layout", pd); rerr != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	}
+}

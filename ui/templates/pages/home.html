@@ -1,0 +1,44 @@
+{{define "content"}}
+{{with .Data}}
+<section class="hero">
+  <h1>{{t "home.title"}}</h1>
+  <p class="lead">{{t "home.intro"}}</p>
+  <p class="muted">{{t "home.start"}}</p>
+</section>
+
+<article class="card">
+  <header>
+    <h2>{{t "demo.title"}}</h2>
+    <p class="muted">{{t "demo.desc" (money .Initial) (money .Monthly) (percent .Rate 0) .Years}}</p>
+  </header>
+  <div class="stats">
+    <div class="stat">
+      <span class="stat-label">{{t "demo.final"}}</span>
+      <span class="stat-value">{{money .Final}}</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">{{t "demo.contributed"}}</span>
+      <span class="stat-value">{{money .Contributed}}</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">{{t "demo.growth"}}</span>
+      <span class="stat-value positive">{{money (sub .Final .Contributed)}}</span>
+    </div>
+  </div>
+  <div class="chart" data-chart="demo-chart" role="img" aria-label="{{t "demo.title"}}"></div>
+  <script type="application/json" id="demo-chart">{{json .Chart}}</script>
+</article>
+{{end}}
+
+<section>
+  <h2>{{t "home.roadmap"}}</h2>
+  <div class="feature-grid">
+    <article class="feature"><h3>{{t "nav.finances"}}</h3><p>{{t "home.feature.finances"}}</p></article>
+    <article class="feature"><h3>{{t "nav.plan"}}</h3><p>{{t "home.feature.plan"}}</p></article>
+    <article class="feature"><h3>{{t "nav.success"}}</h3><p>{{t "home.feature.success"}}</p></article>
+    <article class="feature"><h3>{{t "nav.cashflow"}}</h3><p>{{t "home.feature.cashflow"}}</p></article>
+    <article class="feature"><h3>{{t "home.milestones"}}</h3><p>{{t "home.feature.milestones"}}</p></article>
+    <article class="feature"><h3>{{t "home.taxes"}}</h3><p>{{t "home.feature.taxes"}}</p></article>
+  </div>
+</section>
+{{end}}

@@ -1,0 +1,50 @@
+{
+  "app.name": "Projection",
+  "app.tagline": "Private financial and retirement planning, running on your own machine.",
+
+  "nav.home": "Home",
+  "nav.finances": "Current finances",
+  "nav.plan": "Plan",
+  "nav.cashflow": "Cash flow",
+  "nav.success": "Chance of success",
+  "nav.backtest": "Historical backtest",
+  "nav.scenarios": "Scenarios",
+  "nav.soon": "Coming soon",
+  "nav.menu": "Menu",
+
+  "lang.label": "Language",
+  "lang.es": "Español",
+  "lang.en": "English",
+
+  "theme.toggle": "Toggle light/dark theme",
+
+  "home.title": "Welcome",
+  "home.intro": "Model your whole financial life: income, expenses, accounts, debts and milestones such as financial independence or retirement. Your data is stored only on this machine.",
+  "home.start": "Start by entering your current finances.",
+  "home.roadmap": "What is being built",
+  "home.feature.finances": "Record accounts, income, expenses and debts by hand, without linking banks.",
+  "home.feature.plan": "A month-by-month projection of your net worth to the end of your life.",
+  "home.feature.milestones": "Milestones such as financial independence that start or stop income and expenses.",
+  "home.feature.cashflow": "Sankey diagrams of how money flows each year.",
+  "home.feature.success": "Monte Carlo simulations and tests against historical returns.",
+  "home.feature.taxes": "Spanish taxes (IRPF), starting with a flat effective rate.",
+
+  "home.milestones": "Milestones",
+  "home.taxes": "Taxes",
+
+  "demo.title": "Example: the power of compound interest",
+  "demo.desc": "%s invested today plus %s a month, at a %s annual return over %d years.",
+  "demo.final": "Final value",
+  "demo.contributed": "Contributed",
+  "demo.growth": "Growth",
+  "demo.year": "Year",
+  "demo.balance": "Balance",
+
+  "footer.privacy": "Your data never leaves this machine.",
+
+  "error.notfound.title": "Page not found",
+  "error.notfound.body": "The page you are looking for does not exist.",
+  "error.server.title": "Something went wrong",
+  "error.server.body": "An unexpected error occurred. Please try again.",
+  "error.back": "Back to home"
+}

@@ -50,7 +50,7 @@ projection, Monte Carlo and backtests all reuse it.
 
 | # | Phase | Status |
 |---|---|---|
-| 0 | Skeleton: module, router, layout, htmx, theme, i18n (es/en), SQLite migrations | ☐ |
+| 0 | Skeleton: module, router, layout, htmx, theme, i18n (es/en), SQLite migrations | ✅ |
 | 1 | Current Finances: CRUD for people, accounts, income, expenses, debts | ☐ |
 | 2 | Monthly engine + Plan view: net worth and per-account charts, monthly/yearly table | ☐ |
 | 3 | Milestones: fixed and conditional, streams tied to milestones, chart timeline | ☐ |

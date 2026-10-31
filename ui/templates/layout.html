@@ -1,0 +1,36 @@
+{{define "layout"}}<!doctype html>
+<html lang="{{.Lang}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{{t .TitleKey}} · {{t "app.name"}}</title>
+  <script>
+    // Apply the saved theme before first paint to avoid a flash.
+    try { var th = localStorage.getItem("theme"); if (th) document.documentElement.dataset.theme = th; } catch (e) {}
+  </script>
+  <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/vendor/pico.min.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  <script src="/static/vendor/echarts.min.js" defer></script>
+  <script src="/static/js/charts.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
+  <script src="/static/vendor/alpine.min.js" defer></script>
+</head>
+<body hx-boost="true" x-data="{ navOpen: false }">
+  <div class="shell">
+    {{template "sidebar" .}}
+    <div class="main">
+      {{template "topbar" .}}
+      <main id="content" class="container-fluid">
+        {{template "content" .}}
+      </main>
+      <footer class="app-footer">
+        <small>{{t "footer.privacy"}}</small>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>
+{{end}}
