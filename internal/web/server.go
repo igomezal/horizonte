@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/igomezal/horizonte/internal/i18n"
 	"github.com/igomezal/horizonte/internal/store"
@@ -20,15 +21,19 @@ type Config struct {
 	Assets fs.FS
 	// Dev re-parses templates on every request.
 	Dev bool
+	// Now returns the current time (defaults to time.Now; tests pin it).
+	Now func() time.Time
 }
 
 // Server serves the web UI.
 type Server struct {
-	store   *store.Store
-	catalog *i18n.Catalog
-	log     *slog.Logger
-	render  *renderer
-	handler http.Handler
+	store     *store.Store
+	catalog   *i18n.Catalog
+	log       *slog.Logger
+	render    *renderer
+	resources map[string]*resource
+	now       func() time.Time
+	handler   http.Handler
 }
 
 // New builds the server and its routes.
@@ -42,10 +47,15 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("web: static assets: %w", err)
 	}
 	s := &Server{
-		store:   cfg.Store,
-		catalog: cfg.Catalog,
-		log:     cfg.Logger,
-		render:  r,
+		store:     cfg.Store,
+		catalog:   cfg.Catalog,
+		log:       cfg.Logger,
+		render:    r,
+		resources: newResources(cfg.Store),
+		now:       cfg.Now,
+	}
+	if s.now == nil {
+		s.now = time.Now
 	}
 
 	var staticHandler http.Handler = http.StripPrefix("/static/", http.FileServerFS(static))
@@ -63,6 +73,16 @@ func New(cfg Config) (*Server, error) {
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /{$}", s.handleHome)
 	mux.HandleFunc("POST /lang", s.handleSetLang)
+
+	mux.HandleFunc("GET /finances", s.handleFinances)
+	mux.HandleFunc("GET /finances/summary", s.handleFinancesSummary)
+	mux.HandleFunc("GET /finances/{kind}", s.handleSection)
+	mux.HandleFunc("POST /finances/{kind}", s.handleSave)
+	mux.HandleFunc("GET /finances/{kind}/new", s.handleNewForm)
+	mux.HandleFunc("GET /finances/{kind}/{id}", s.handleRow)
+	mux.HandleFunc("GET /finances/{kind}/{id}/edit", s.handleEditForm)
+	mux.HandleFunc("PUT /finances/{kind}/{id}", s.handleSave)
+	mux.HandleFunc("DELETE /finances/{kind}/{id}", s.handleDelete)
 	mux.HandleFunc("/", s.handleNotFound)
 
 	var h http.Handler = mux

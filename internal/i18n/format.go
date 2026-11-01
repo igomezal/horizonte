@@ -63,3 +63,13 @@ func FormatPercent(lang Lang, ratio float64, decimals int) string {
 	}
 	return n + " %"
 }
+
+// FormatPercentShort formats a ratio as a percentage with up to two decimals
+// and no trailing zeros: 0.03 → "3 %", 0.035 → "3,5 %".
+func FormatPercentShort(lang Lang, ratio float64) string {
+	n := FormatInput(lang, ratio*100, 2)
+	if lang == EN {
+		return n + "%"
+	}
+	return n + "\u00a0%"
+}

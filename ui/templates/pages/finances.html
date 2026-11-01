@@ -1,0 +1,237 @@
+{{define "content"}}
+<header class="page-head">
+  <h1>{{t "finances.title"}}</h1>
+  <p class="muted prose">{{t "finances.intro"}}</p>
+</header>
+{{template "summary" .Data.Summary}}
+{{template "fin-section" (index .Data.Sections "people")}}
+{{template "fin-section" (index .Data.Sections "accounts")}}
+{{template "fin-section" (index .Data.Sections "incomes")}}
+{{template "fin-section" (index .Data.Sections "expenses")}}
+{{template "fin-section" (index .Data.Sections "debts")}}
+{{end}}
+
+{{/* ---------- Summary (refreshes itself after any change) ---------- */}}
+{{define "summary"}}
+<section id="summary" class="fin-summary" aria-label="{{t "summary.label"}}"
+         hx-get="/finances/summary" hx-trigger="finances-changed from:body" hx-target="this" hx-swap="outerHTML">
+  <div class="lead-figure">
+    <p class="lead">{{t "summary.net_worth"}}</p>
+    <span class="figure{{if neg .NetWorth}} negative{{end}}">{{eur .NetWorth}}</span>
+    <p class="breakdown">
+      <span>{{t "summary.assets" (eur .Assets)}}</span>
+      <span>{{t "summary.debts" (eur .Debts)}}</span>
+    </p>
+    {{if .Empty}}<p class="muted">{{t "summary.empty"}}</p>{{end}}
+  </div>
+  <div class="flow">
+    <p class="lead">{{t "summary.monthly"}}</p>
+    <dl class="ledger compact">
+      <div class="ledger-row"><dt>{{t "summary.income"}}</dt><dd class="amount">{{eur .MonthlyIncome}}</dd></div>
+      <div class="ledger-row"><dt>{{t "summary.expenses"}}</dt><dd class="amount">{{if .MonthlyExpenses}}−{{end}}{{eur .MonthlyExpenses}}</dd></div>
+      <div class="ledger-row"><dt>{{t "summary.debt_payments"}}</dt><dd class="amount">{{if .MonthlyDebtPayments}}−{{end}}{{eur .MonthlyDebtPayments}}</dd></div>
+      <div class="ledger-row"><dt>{{t "summary.contributions"}}</dt><dd class="amount">{{if .MonthlyContributions}}−{{end}}{{eur .MonthlyContributions}}</dd></div>
+      <div class="ledger-row total"><dt>{{t "summary.unallocated"}}</dt>
+        <dd class="amount {{if neg .MonthlyUnallocated}}negative{{else if .MonthlyUnallocated}}positive{{end}}">{{eur .MonthlyUnallocated}}</dd></div>
+    </dl>
+    <p class="note muted">{{t "summary.note"}}</p>
+  </div>
+</section>
+{{end}}
+
+{{/* ---------- Section (one per resource kind) ---------- */}}
+{{define "fin-section"}}
+<section class="section fin-section" id="section-{{.Kind}}" aria-labelledby="h-{{.Kind}}"
+  {{- if ne .Kind "people"}} hx-get="/finances/{{.Kind}}" hx-trigger="people-changed from:body" hx-target="this" hx-swap="outerHTML"{{end}}>
+  <div class="section-head">
+    <h2 id="h-{{.Kind}}">{{t (printf "%s.title" .Kind)}}</h2>
+    {{if and .Rows (ne .Kind "people")}}
+    <p class="section-total amount">
+      {{- if or (eq .Kind "incomes") (eq .Kind "expenses")}}{{t "per_month" (eur .Total)}}{{else}}{{eur .Total}}{{end -}}
+    </p>
+    {{end}}
+  </div>
+  <p class="section-desc muted">{{t (printf "%s.desc" .Kind)}}</p>
+  {{if .Rows}}
+  <div class="entries">
+    {{range .Rows}}{{template "fin-row" .}}{{end}}
+  </div>
+  {{else}}
+  <p class="empty">{{t (printf "%s.empty" .Kind)}}</p>
+  {{end}}
+  <div id="new-{{.Kind}}" class="new-slot"></div>
+  {{if .CanAdd}}
+  <button type="button" class="add-btn" hx-get="/finances/{{.Kind}}/new" hx-target="#new-{{.Kind}}" hx-swap="innerHTML">
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    {{t (printf "%s.add" .Kind)}}
+  </button>
+  {{end}}
+</section>
+{{end}}
+
+{{/* ---------- Row: shared actions, kind-specific cells ---------- */}}
+{{define "fin-row"}}
+<div class="entry" id="{{.Kind}}-{{.ID}}" x-data="{ confirm: false }">
+  {{if eq .Kind "people"}}{{template "people-cells" .}}
+  {{else if eq .Kind "accounts"}}{{template "accounts-cells" .}}
+  {{else if eq .Kind "incomes"}}{{template "incomes-cells" .}}
+  {{else if eq .Kind "expenses"}}{{template "expenses-cells" .}}
+  {{else if eq .Kind "debts"}}{{template "debts-cells" .}}{{end}}
+  <div class="entry-actions" x-show="!confirm">
+    <button type="button" class="link-btn" hx-get="/finances/{{.Kind}}/{{.ID}}/edit" hx-target="#{{.Kind}}-{{.ID}}" hx-swap="outerHTML">{{t "form.edit"}}</button>
+    <button type="button" class="link-btn danger" @click="confirm = true">{{t "form.delete"}}</button>
+  </div>
+  <div class="entry-actions confirm" x-show="confirm" x-cloak>
+    <span>{{t "form.delete_confirm"}}</span>
+    <button type="button" class="link-btn danger" hx-delete="/finances/{{.Kind}}/{{.ID}}" hx-target="#section-{{.Kind}}" hx-swap="outerHTML">{{t "form.delete_yes"}}</button>
+    <button type="button" class="link-btn" @click="confirm = false">{{t "form.keep"}}</button>
+  </div>
+</div>
+{{end}}
+
+{{define "people-cells"}}{{with .Item}}
+<div class="entry-main">
+  <span class="entry-name">{{.Name}}</span>
+  <span class="entry-meta">
+    <span>{{t "people.born" (month .Birth)}}</span>
+    <span>{{t "people.until" .LifeExpectancy}}</span>
+  </span>
+</div>
+<div class="entry-amount"><span class="amount">{{t "people.age" (.AgeAt $.Now)}}</span></div>
+{{end}}{{end}}
+
+{{define "accounts-cells"}}{{with .Item}}
+<div class="entry-main">
+  <span class="entry-name">{{.Name}}</span>
+  <span class="entry-meta">
+    <span>{{t (printf "account.kind.%s" (str .Kind))}}</span>
+    {{with $.Owner}}<span>{{.}}</span>{{end}}
+    {{if .MonthlyContribution}}<span>{{t "accounts.contributes" (eur .MonthlyContribution)}}</span>{{end}}
+    {{with .AnnualReturn}}<span>{{t "accounts.return" (pct .)}}</span>{{end}}
+  </span>
+</div>
+<div class="entry-amount"><span class="amount">{{eur .Balance}}</span></div>
+{{end}}{{end}}
+
+{{define "stream-dates"}}
+{{if and (not .Start.IsZero) (.Now.Before .Start)}}<span>{{t "stream.starts" (month .Start)}}</span>
+{{else if and (not .End.IsZero) (.End.Before .Now)}}<span class="ended">{{t "stream.ended" (month .End)}}</span>
+{{else if not .End.IsZero}}<span>{{t "stream.until" (month .End)}}</span>{{end}}
+{{end}}
+
+{{define "incomes-cells"}}{{with .Item}}
+<div class="entry-main">
+  <span class="entry-name">{{.Name}}</span>
+  <span class="entry-meta">
+    <span>{{t (printf "income.kind.%s" (str .Kind))}}</span>
+    {{with $.Owner}}<span>{{.}}</span>{{end}}
+    {{if ne .PaymentsPerYear 12}}<span>{{t (printf "payments.short.%d" .PaymentsPerYear) (eur2 .Amount)}}</span>{{end}}
+    {{with .AnnualGrowth}}<span>{{t "stream.growth" (pct .)}}</span>{{else}}<span>{{t "stream.inflation"}}</span>{{end}}
+    {{template "stream-dates" (dict "Start" .Start "End" .End "Now" $.Now)}}
+  </span>
+</div>
+<div class="entry-amount"><span class="amount">{{t "per_month" (eur .MonthlyAverage)}}</span></div>
+{{end}}{{end}}
+
+{{define "expenses-cells"}}{{with .Item}}
+<div class="entry-main">
+  <span class="entry-name">{{.Name}}</span>
+  <span class="entry-meta">
+    <span>{{t (printf "expense.category.%s" (str .Category))}}</span>
+    {{if ne .PaymentsPerYear 12}}<span>{{t (printf "payments.short.%d" .PaymentsPerYear) (eur2 .Amount)}}</span>{{end}}
+    {{with .AnnualGrowth}}<span>{{t "stream.growth" (pct .)}}</span>{{else}}<span>{{t "stream.inflation"}}</span>{{end}}
+    {{template "stream-dates" (dict "Start" .Start "End" .End "Now" $.Now)}}
+  </span>
+</div>
+<div class="entry-amount"><span class="amount">{{t "per_month" (eur .MonthlyAverage)}}</span></div>
+{{end}}{{end}}
+
+{{define "debts-cells"}}{{with .Item}}
+{{$payoff := .PayoffMonth $.Now}}
+<div class="entry-main">
+  <span class="entry-name">{{.Name}}</span>
+  <span class="entry-meta">
+    <span>{{t (printf "debt.kind.%s" (str .Kind))}}</span>
+    <span>{{t "debts.rate" (pct .AnnualRate)}}</span>
+    <span>{{t "debts.payment" (eur2 .MonthlyPayment)}}</span>
+    {{if $payoff.IsZero}}<span class="negative">{{t "debts.never"}}</span>{{else}}<span>{{t "debts.payoff" (month $payoff)}}</span>{{end}}
+  </span>
+</div>
+<div class="entry-amount"><span class="amount">{{eur .Balance}}</span></div>
+{{end}}{{end}}
+
+{{/* ---------- Forms ---------- */}}
+{{define "form-open"}}
+<form id="{{.DOMID}}" class="entry-form" novalidate
+  {{- if .ID}} hx-put="/finances/{{.Kind}}/{{.ID}}"{{else}} hx-post="/finances/{{.Kind}}"{{end}}
+  hx-target="#section-{{.Kind}}" hx-swap="outerHTML">
+{{end}}
+
+{{define "people-form"}}
+{{template "form-open" .}}
+  <div class="form-grid">
+    {{template "field" (dict "F" . "name" "name" "label" "field.name" "type" "text" "required" true "placeholder" "people.placeholder")}}
+    {{template "field" (dict "F" . "name" "birth" "label" "field.birth" "type" "month" "required" true)}}
+    {{template "field" (dict "F" . "name" "life_expectancy" "label" "field.life_expectancy" "type" "int" "required" true "hint" "hint.life_expectancy")}}
+  </div>
+  {{template "form-actions" .}}
+</form>
+{{end}}
+
+{{define "accounts-form"}}
+{{template "form-open" .}}
+  <div class="form-grid">
+    {{template "field" (dict "F" . "name" "name" "label" "field.name" "type" "text" "required" true "placeholder" "accounts.placeholder")}}
+    {{template "f-select" (dict "F" . "name" "kind" "label" "field.type" "options" .Opt.AccountKinds "prefix" "account.kind")}}
+    {{template "f-owner" .}}
+    {{template "field" (dict "F" . "name" "balance" "label" "field.balance" "type" "money")}}
+    {{template "field" (dict "F" . "name" "contribution" "label" "field.contribution" "type" "money" "hint" "hint.contribution")}}
+    {{template "field" (dict "F" . "name" "return" "label" "field.return" "type" "percent" "placeholder" "placeholder.default" "hint" "hint.return")}}
+  </div>
+  {{template "form-actions" .}}
+</form>
+{{end}}
+
+{{define "incomes-form"}}
+{{template "form-open" .}}
+  <div class="form-grid">
+    {{template "field" (dict "F" . "name" "name" "label" "field.name" "type" "text" "required" true "placeholder" "incomes.placeholder")}}
+    {{template "f-select" (dict "F" . "name" "kind" "label" "field.type" "options" .Opt.IncomeKinds "prefix" "income.kind")}}
+    {{template "f-owner" .}}
+    {{template "field" (dict "F" . "name" "amount" "label" "field.amount_gross" "type" "money" "required" true "hint" "hint.amount_payment")}}
+    {{template "f-select" (dict "F" . "name" "payments" "label" "field.payments" "options" .Opt.IncomePayments "prefix" "payments")}}
+    {{template "field" (dict "F" . "name" "growth" "label" "field.growth" "type" "percent" "placeholder" "placeholder.inflation" "hint" "hint.growth")}}
+    {{template "field" (dict "F" . "name" "start" "label" "field.start" "type" "month" "hint" "hint.start")}}
+    {{template "field" (dict "F" . "name" "end" "label" "field.end" "type" "month" "hint" "hint.end")}}
+  </div>
+  {{template "form-actions" .}}
+</form>
+{{end}}
+
+{{define "expenses-form"}}
+{{template "form-open" .}}
+  <div class="form-grid">
+    {{template "field" (dict "F" . "name" "name" "label" "field.name" "type" "text" "required" true "placeholder" "expenses.placeholder")}}
+    {{template "f-select" (dict "F" . "name" "category" "label" "field.category" "options" .Opt.ExpenseCategories "prefix" "expense.category")}}
+    {{template "field" (dict "F" . "name" "amount" "label" "field.amount" "type" "money" "required" true "hint" "hint.amount_payment")}}
+    {{template "f-select" (dict "F" . "name" "payments" "label" "field.frequency" "options" .Opt.ExpensePayments "prefix" "frequency")}}
+    {{template "field" (dict "F" . "name" "growth" "label" "field.growth" "type" "percent" "placeholder" "placeholder.inflation" "hint" "hint.growth")}}
+    {{template "field" (dict "F" . "name" "start" "label" "field.start" "type" "month" "hint" "hint.start")}}
+    {{template "field" (dict "F" . "name" "end" "label" "field.end" "type" "month" "hint" "hint.end")}}
+  </div>
+  {{template "form-actions" .}}
+</form>
+{{end}}
+
+{{define "debts-form"}}
+{{template "form-open" .}}
+  <div class="form-grid">
+    {{template "field" (dict "F" . "name" "name" "label" "field.name" "type" "text" "required" true "placeholder" "debts.placeholder")}}
+    {{template "f-select" (dict "F" . "name" "kind" "label" "field.type" "options" .Opt.DebtKinds "prefix" "debt.kind")}}
+    {{template "field" (dict "F" . "name" "balance" "label" "field.debt_balance" "type" "money" "required" true "hint" "hint.debt_balance")}}
+    {{template "field" (dict "F" . "name" "rate" "label" "field.rate" "type" "percent" "required" true "hint" "hint.rate")}}
+    {{template "field" (dict "F" . "name" "payment" "label" "field.payment" "type" "money" "required" true)}}
+  </div>
+  {{template "form-actions" .}}
+</form>
+{{end}}

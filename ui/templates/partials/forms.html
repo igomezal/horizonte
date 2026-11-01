@@ -1,0 +1,81 @@
+{{/*
+  Reusable form fields. Called with dict:
+    F            the formView (values .F.V, errors .F.E, .F.DOMID)
+    name         input name
+    label        i18n key of the label
+    type         text | money | percent | month | int
+    required     true to mark the input required
+    placeholder  i18n key (optional)
+    hint         i18n key of help text shown under the input (optional)
+*/}}
+{{define "field"}}
+{{$id := printf "%s-%s" .F.DOMID .name}}
+{{$err := index .F.E .name}}
+<div class="field{{if $err}} has-error{{end}}">
+  <label for="{{$id}}">{{t .label}}</label>
+  <div class="input-wrap{{if eq .type "money"}} has-unit{{else if eq .type "percent"}} has-unit{{end}}">
+    <input id="{{$id}}" name="{{.name}}" value="{{index .F.V .name}}"
+      {{- if eq .type "month"}} type="month"
+      {{- else if eq .type "int"}} type="number" inputmode="numeric" step="1"
+      {{- else}} type="text"{{end}}
+      {{- if or (eq .type "money") (eq .type "percent")}} inputmode="decimal" autocomplete="off"{{end}}
+      {{- with .placeholder}} placeholder="{{t .}}"{{end}}
+      {{- if .required}} required{{end}}
+      {{- if eq .name "name"}} maxlength="80"{{end}}
+      {{- if $err}} aria-invalid="true" aria-describedby="{{$id}}-msg"{{else if .hint}} aria-describedby="{{$id}}-msg"{{end}}>
+    {{- if eq .type "money"}}<span class="unit" aria-hidden="true">€</span>{{else if eq .type "percent"}}<span class="unit" aria-hidden="true">%</span>{{end}}
+  </div>
+  {{if $err}}<small class="field-error" id="{{$id}}-msg">{{t $err}}</small>
+  {{- else if .hint}}<small class="field-hint" id="{{$id}}-msg">{{t .hint}}</small>{{end}}
+</div>
+{{end}}
+
+{{/* Select over an enum. Extra dict keys: options (slice), prefix (i18n key prefix). */}}
+{{define "f-select"}}
+{{$id := printf "%s-%s" .F.DOMID .name}}
+{{$err := index .F.E .name}}
+{{$cur := index .F.V .name}}
+{{$prefix := .prefix}}
+<div class="field{{if $err}} has-error{{end}}">
+  <label for="{{$id}}">{{t .label}}</label>
+  <select id="{{$id}}" name="{{.name}}"{{if $err}} aria-invalid="true" aria-describedby="{{$id}}-msg"{{end}}>
+    {{- range .options}}{{$val := str .}}
+    <option value="{{$val}}"{{if eq $val $cur}} selected{{end}}>{{t (printf "%s.%s" $prefix $val)}}</option>
+    {{- end}}
+  </select>
+  {{with $err}}<small class="field-error" id="{{$id}}-msg">{{t .}}</small>{{end}}
+</div>
+{{end}}
+
+{{/* Owner select: only shown once people exist. Called with the formView. */}}
+{{define "f-owner"}}
+{{if .People}}
+{{$id := printf "%s-owner" .DOMID}}
+{{$err := index .E "owner"}}
+{{$cur := index .V "owner"}}
+<div class="field{{if $err}} has-error{{end}}">
+  <label for="{{$id}}">{{t "field.owner"}}</label>
+  <select id="{{$id}}" name="owner"{{if $err}} aria-invalid="true" aria-describedby="{{$id}}-msg"{{end}}>
+    <option value="">{{t "owner.joint"}}</option>
+    {{- range .People}}
+    <option value="{{.ID}}"{{if eq (str .ID) $cur}} selected{{end}}>{{.Name}}</option>
+    {{- end}}
+  </select>
+  {{with $err}}<small class="field-error" id="{{$id}}-msg">{{t .}}</small>{{end}}
+</div>
+{{end}}
+{{end}}
+
+{{/* Save / cancel buttons. Called with the formView. */}}
+{{define "form-actions"}}
+{{with index .E "_form"}}<p class="field-error form-error" role="alert">{{t .}}</p>{{end}}
+<div class="form-actions">
+  <button type="submit">{{if .ID}}{{t "form.save"}}{{else}}{{t (printf "%s.add" .Kind)}}{{end}}</button>
+  {{if .ID}}
+  <button type="button" class="outline secondary"
+          hx-get="/finances/{{.Kind}}/{{.ID}}" hx-target="#{{.DOMID}}" hx-swap="outerHTML">{{t "form.cancel"}}</button>
+  {{else}}
+  <button type="button" class="outline secondary" onclick="this.closest('form').remove()">{{t "form.cancel"}}</button>
+  {{end}}
+</div>
+{{end}}

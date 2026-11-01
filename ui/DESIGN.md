@@ -54,6 +54,23 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
   description or amount on the right, a hairline between rows.
 - Radius 6px on controls only (buttons, inputs, switches). Content blocks have no radius.
 
+## Editable lists and forms (phase 1)
+
+- **Entry rows** (`.entry`): name in bold with plain meta facts beside each other underneath
+  (no separators), the amount right-aligned and tabular, then text actions ("Editar",
+  "Eliminar") as `.link-btn`. Rows are separated by hairlines.
+- **Delete is confirmed inline** in the row ("¿Eliminar? Sí, eliminar / No"), never with a
+  browser dialog.
+- **Inline forms** (`.entry-form`) replace the row being edited, or open under the list for a
+  new record. They are the one raised surface: `--papel-raised` with a 3px accent bar on the
+  left. Fields sit in an auto-fitting grid; the label goes above, then help text or the error
+  below.
+- **Money and percentages** are text inputs with `inputmode="decimal"` and a unit inside the
+  field (€, %). Users type their own format ("1.250,50"); the server parses it.
+- The submit button of a new form repeats the add action ("Añadir cuenta"); editing says
+  "Guardar cambios". Errors appear next to their field and the first invalid field gets focus.
+- Each section has a one-line description and an empty state that says what to add first.
+
 ## Motion
 
 - No entrance animations or hover transitions on content.

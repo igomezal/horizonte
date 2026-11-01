@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/igomezal/horizonte/internal/domain"
 	"github.com/igomezal/horizonte/internal/i18n"
 )
 
@@ -42,6 +43,28 @@ func (r *renderer) baseFuncs() template.FuncMap {
 		"percent": func(v float64, decimals int) string { return "" },
 		"number":  func(v float64, decimals int) string { return "" },
 		"sub":     func(a, b float64) float64 { return a - b },
+		"eur":     func(c domain.Cents) string { return "" },
+		"eur2":    func(c domain.Cents) string { return "" },
+		"pct":     func(r float64) string { return "" },
+		"month":   func(m domain.Month) string { return "" },
+		"neg":     func(c domain.Cents) bool { return c < 0 },
+		"str":     func(v any) string { return fmt.Sprint(v) },
+		// dict builds a map from key/value pairs so a template can pass several
+		// named arguments to another template: {{template "field" (dict "F" . "name" "x")}}.
+		"dict": func(kv ...any) (map[string]any, error) {
+			if len(kv)%2 != 0 {
+				return nil, fmt.Errorf("dict: odd number of arguments")
+			}
+			m := make(map[string]any, len(kv)/2)
+			for i := 0; i < len(kv); i += 2 {
+				k, ok := kv[i].(string)
+				if !ok {
+					return nil, fmt.Errorf("dict: key %v is not a string", kv[i])
+				}
+				m[k] = kv[i+1]
+			}
+			return m, nil
+		},
 		"json": func(v any) (template.JS, error) {
 			b, err := json.Marshal(v)
 			return template.JS(b), err
@@ -60,6 +83,15 @@ func (r *renderer) bind(t *template.Template, lang i18n.Lang) (*template.Templat
 		"money2":  func(v float64) string { return i18n.FormatMoney(lang, v, 2) },
 		"percent": func(v float64, decimals int) string { return i18n.FormatPercent(lang, v, decimals) },
 		"number":  func(v float64, decimals int) string { return i18n.FormatNumber(lang, v, decimals) },
+		"eur":     func(c domain.Cents) string { return i18n.FormatMoney(lang, c.Euros(), 0) },
+		"eur2": func(c domain.Cents) string { // cents only when not a whole amount
+			if c%100 == 0 {
+				return i18n.FormatMoney(lang, c.Euros(), 0)
+			}
+			return i18n.FormatMoney(lang, c.Euros(), 2)
+		},
+		"pct":   func(r float64) string { return i18n.FormatPercentShort(lang, r) },
+		"month": func(m domain.Month) string { return i18n.FormatMonth(lang, m.Year, m.Month) },
 	}), nil
 }
 
@@ -108,10 +140,10 @@ type pageData struct {
 	Data     any    // page-specific data
 }
 
-// render executes block ("layout" for full pages, or a named partial for htmx
-// requests) of page into a buffer first, so a template error never sends a
-// half-written page.
-func (r *renderer) render(w http.ResponseWriter, req *http.Request, status int, page, block string, pd pageData) error {
+// render executes block of page into a buffer first, so a template error never
+// sends a half-written page. Full pages pass a pageData (its language and path
+// are filled in here); partials pass their own view as the template root.
+func (r *renderer) render(w http.ResponseWriter, req *http.Request, status int, page, block string, data any) error {
 	t, err := r.lookup(page)
 	if err != nil {
 		return err
@@ -121,12 +153,15 @@ func (r *renderer) render(w http.ResponseWriter, req *http.Request, status int, 
 	if err != nil {
 		return err
 	}
-	pd.Lang = lang
-	pd.Langs = i18n.Supported
-	pd.Path = req.URL.Path
+	if pd, ok := data.(pageData); ok {
+		pd.Lang = lang
+		pd.Langs = i18n.Supported
+		pd.Path = req.URL.Path
+		data = pd
+	}
 
 	var buf bytes.Buffer
-	if err := t.ExecuteTemplate(&buf, block, pd); err != nil {
+	if err := t.ExecuteTemplate(&buf, block, data); err != nil {
 		return fmt.Errorf("execute %s/%s: %w", page, block, err)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
