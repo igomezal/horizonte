@@ -77,8 +77,10 @@
     {{t (printf "%s.add" .Kind)}}
   </button>
   {{end}}
-  {{if and .CanAdd (eq .Kind "incomes")}}<a class="tool-link" href="/finances/pension">{{t "pension.link"}}</a>{{end}}
-  {{if and .CanAdd (eq .Kind "expenses")}}<a class="tool-link" href="/finances/health">{{t "health.link"}}</a>{{end}}
+  {{/* Not boosted: a boosted link would inherit the section's hx-target="this"
+       and swap the whole tool page in place of the section. */}}
+  {{if and .CanAdd (eq .Kind "incomes")}}<a class="tool-link" href="/finances/pension" hx-boost="false">{{t "pension.link"}}</a>{{end}}
+  {{if and .CanAdd (eq .Kind "expenses")}}<a class="tool-link" href="/finances/health" hx-boost="false">{{t "health.link"}}</a>{{end}}
 </section>
 {{end}}
 

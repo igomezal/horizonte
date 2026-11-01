@@ -167,6 +167,7 @@
   "pension.base": "Base de cotización mensual",
   "pension.capped": "La pensión se limita a la pensión máxima de 2025.",
   "pension.disclaimer": "Es una estimación aproximada, no un cálculo oficial. Supone que tu base de cotización se mantiene en términos reales y que has cotizado sin interrupciones hasta hoy, y no incluye regímenes especiales ni la opción transitoria de los mejores 27 de los últimos 29 años. Las reglas pueden cambiar. Para una cifra fiable, usa el simulador de la Seguridad Social con tu vida laboral.",
+  "pension.already_retired": "%s ya ha pasado la edad ordinaria de jubilación (%d años). Si sigue trabajando, indica a qué edad cobrará la pensión; si ya la cobra, añádela como ingreso en Finanzas.",
   "pension.early_not_allowed": "No se puede adelantar tanto la jubilación con esos años cotizados: se calcula a la edad ordinaria (%d).",
   "pension.error.not_entitled": "No hay pensión que añadir con estos datos.",
   "pension.fix_fields": "Revisa estos datos para ver la estimación:",

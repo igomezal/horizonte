@@ -26,7 +26,13 @@ type pensionView struct {
 	MaxBase  float64
 	MinBase  float64
 	BaseUsed float64 // contribution base after the legal limits
+	// AlreadyRetired: the pension would start before this month (the
+	// person is past the ordinary age and no later age was given).
+	AlreadyRetired bool
 }
+
+// Addable reports whether the estimate can be added to the plan.
+func (v *pensionView) Addable() bool { return v.Entitled && v.Monthly > 0 && !v.AlreadyRetired }
 
 type pensionPage struct {
 	HasPeople bool
@@ -139,7 +145,8 @@ func estimatePension(who domain.Person, in pension.Input) *pensionView {
 	r := pension.Estimate(in)
 	return &pensionView{Result: r, Person: who.Name, Start: who.Birth.AddMonths(r.RetireAge * 12),
 		Years: float64(r.MonthsAtRetire) / 12, MaxBase: pension.MaxBase, MinBase: pension.MinBase,
-		BaseUsed: math.Max(pension.MinBase, math.Min(pension.MaxBase, in.MonthlyBase))}
+		BaseUsed:       math.Max(pension.MinBase, math.Min(pension.MaxBase, in.MonthlyBase)),
+		AlreadyRetired: r.RetireAge*12 < in.AgeMonths}
 }
 
 func (s *Server) pensionPeople(r *http.Request) (finCtx, []domain.Person, error) {
@@ -184,10 +191,10 @@ func (s *Server) handlePension(w http.ResponseWriter, r *http.Request) {
 		}
 		f, p, in := parsePension(fc.lang, fc.now, form, people)
 		page.Form = f
+		// Defaults that do not validate (e.g. no salary, so no base) are
+		// listed in the result so the user knows what to fill in.
 		if len(f.E) == 0 && p != nil {
 			page.Result = estimatePension(*p, in)
-		} else {
-			page.Form.E = domain.Errors{} // defaults that do not validate (e.g. no salary) are not errors yet
 		}
 	}
 	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") == "pension-tool" {
@@ -231,7 +238,7 @@ func (s *Server) handlePensionAdd(w http.ResponseWriter, r *http.Request) {
 	page := pensionPage{HasPeople: len(people) > 0, Form: f}
 	if len(f.E) == 0 && who != nil {
 		page.Result = estimatePension(*who, in)
-		if page.Result.Entitled && page.Result.Monthly > 0 {
+		if page.Result.Addable() {
 			inc := domain.Income{PlanID: fc.plan, Name: s.catalog.T(fc.lang, "pension.income_name", who.Name),
 				Kind: domain.IncomePension, OwnerID: &who.ID, Amount: domain.FromEuros(page.Result.Monthly),
 				PaymentsPerYear: pension.Payments, Start: page.Result.Start}

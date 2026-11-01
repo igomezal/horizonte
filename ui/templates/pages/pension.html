@@ -57,6 +57,8 @@
   {{if .Result}}{{with .Result}}
   {{if not .Entitled}}
   <p class="lead negative">{{t "pension.not_entitled" (number .Years 1)}}</p>
+  {{else if .AlreadyRetired}}
+  <p class="lead">{{t "pension.already_retired" .Person .RetireAge}}</p>
   {{else}}
   <div class="lead-figure">
     <p class="lead">{{t "pension.result_lead" .Person (month .Start) .RetireAge}}</p>
@@ -77,7 +79,7 @@
   {{end}}
   {{if .EarlyNotAllowed}}<p class="note negative">{{t "pension.early_not_allowed" .OrdinaryAge}}</p>{{end}}
   {{end}}
-  {{if .Result.Entitled}}
+  {{if .Result.Addable}}
   {{if $.Error}}<p class="field-error" role="alert">{{t $.Error}}</p>{{end}}
   <div class="form-actions"><button type="submit">{{t "pension.add"}}</button></div>
   <p class="note muted">{{t "pension.add_hint"}}</p>

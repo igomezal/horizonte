@@ -115,3 +115,43 @@ func TestPlanShowsEstate(t *testing.T) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// A person with no salary gets told which field to fill in, and a person
+// already past the ordinary age gets no start date in the past to add.
+func TestPensionMissingBaseAndRetired(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	mustPost(t, s, "/finances/people", url.Values{"name": {"Bea"}, "birth": {"1996-01"}, "life_expectancy": {"90"}})
+	mustPost(t, s, "/finances/people", url.Values{"name": {"Carlos"}, "birth": {"1956-01"}, "life_expectancy": {"95"}})
+
+	_, body := do(s, httptest.NewRequest("GET", "/finances/pension?person=1", nil))
+	if !strings.Contains(body, "Base de cotización mensual: Rellena este campo") {
+		t.Errorf("missing base not explained: %.400s", body[strings.Index(body, `id="pension-result"`):])
+	}
+
+	form := url.Values{"person": {"2"}, "years": {"40"}, "base": {"2000"}, "until": {"70"}, "retire": {""}, "regime": {"employee"}}
+	_, frag := do(s, htmxReq("POST", "/finances/pension/estimate", form))
+	if !strings.Contains(frag, "ya ha pasado la edad ordinaria") || strings.Contains(frag, `type="submit"`) {
+		t.Errorf("retired person: %.400s", frag)
+	}
+	if rec, _ := do(s, htmxReq("POST", "/finances/pension", form)); rec.Code == http.StatusSeeOther {
+		t.Error("a pension starting in the past was added")
+	}
+	// A later claiming age still gives an estimate (delayed retirement).
+	form.Set("retire", "72")
+	if _, frag := do(s, htmxReq("POST", "/finances/pension/estimate", form)); !strings.Contains(frag, "Bonificación por jubilación demorada") {
+		t.Errorf("delayed retirement: %.400s", frag)
+	}
+}
+
+// The tool links sit inside sections with hx-target="this": they must not be
+// boosted, or htmx swaps the whole tool page in place of the section.
+func TestToolLinksNotBoosted(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	mustPost(t, s, "/finances/people", url.Values{"name": {"Ana"}, "birth": {"1990-04"}, "life_expectancy": {"90"}})
+	_, body := do(s, httptest.NewRequest("GET", "/finances", nil))
+	for _, link := range []string{`href="/finances/pension" hx-boost="false"`, `href="/finances/health" hx-boost="false"`} {
+		if !strings.Contains(body, link) {
+			t.Errorf("finances page missing %s", link)
+		}
+	}
+}

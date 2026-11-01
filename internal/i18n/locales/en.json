@@ -167,6 +167,7 @@
   "pension.base": "Monthly contribution base",
   "pension.capped": "The pension is limited to the 2025 maximum.",
   "pension.disclaimer": "This is a rough estimate, not an official calculation. It assumes your contribution base stays the same in real terms and that you contributed without gaps up to now, and it leaves out special schemes and the transitional choice of the best 27 of the last 29 years. The rules may change. For a reliable figure, use the Social Security simulator with your employment history.",
+  "pension.already_retired": "%s is already past the ordinary retirement age (%d). If still working, enter the age the pension will start; if already receiving it, add it as an income in Finances.",
   "pension.early_not_allowed": "You can't retire that early with those years contributed: it is computed at the ordinary age (%d).",
   "pension.error.not_entitled": "There is no pension to add with these figures.",
   "pension.fix_fields": "Check these fields to see the estimate:",
