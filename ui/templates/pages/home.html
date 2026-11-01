@@ -19,15 +19,17 @@
   <p><a href="/finances">{{t "home.start_link"}}</a></p>
 </section>
 
-<section class="section" aria-labelledby="roadmap-heading">
-  <h2 id="roadmap-heading">{{t "home.roadmap"}}</h2>
-  <dl class="ledger">
-    <div class="ledger-row"><dt>{{t "nav.finances"}}</dt><dd>{{t "home.feature.finances"}}</dd></div>
-    <div class="ledger-row"><dt>{{t "nav.plan"}}</dt><dd>{{t "home.feature.plan"}}</dd></div>
-    <div class="ledger-row"><dt>{{t "home.milestones"}}</dt><dd>{{t "home.feature.milestones"}}</dd></div>
-    <div class="ledger-row"><dt>{{t "nav.cashflow"}}</dt><dd>{{t "home.feature.cashflow"}}</dd></div>
-    <div class="ledger-row"><dt>{{t "nav.success"}}</dt><dd>{{t "home.feature.success"}}</dd></div>
-    <div class="ledger-row"><dt>{{t "home.taxes"}}</dt><dd>{{t "home.feature.taxes"}}</dd></div>
+<section class="section" aria-labelledby="offer-heading">
+  <h2 id="offer-heading">{{t "home.offer"}}</h2>
+  <p class="section-desc muted">{{t "home.offer_desc"}}</p>
+  <dl class="ledger offer">
+    <div class="ledger-row"><dt><a href="/finances">{{t "nav.finances"}}</a></dt><dd>{{t "home.offer.finances"}}</dd></div>
+    <div class="ledger-row"><dt><a href="/plan">{{t "nav.plan"}}</a></dt><dd>{{t "home.offer.plan"}}</dd></div>
+    <div class="ledger-row"><dt><a href="/cashflow">{{t "nav.cashflow"}}</a></dt><dd>{{t "home.offer.cashflow"}}</dd></div>
+    <div class="ledger-row"><dt><a href="/success">{{t "nav.success"}}</a></dt><dd>{{t "home.offer.success"}}</dd></div>
+    <div class="ledger-row"><dt><a href="/backtest">{{t "nav.backtest"}}</a></dt><dd>{{t "home.offer.backtest"}}</dd></div>
+    <div class="ledger-row"><dt><a href="/scenarios">{{t "nav.scenarios"}}</a></dt><dd>{{t "home.offer.scenarios"}}</dd></div>
   </dl>
+  <p class="note muted">{{t "home.offer_note"}}</p>
 </section>
 {{end}}
