@@ -1,4 +1,4 @@
-# Proyección
+# Horizonte
 
 A self-hosted, privacy-first financial and retirement planner.
 It is built with Go and htmx, runs as a single binary, and stores data in a local SQLite file.
@@ -22,7 +22,7 @@ Flags:
 | Flag | Default | Description |
 |---|---|---|
 | `-addr` | `127.0.0.1:8080` | Listen address. Localhost only by default, so your data is not exposed on the network |
-| `-db` | `projection.db` | SQLite database file (git-ignored) |
+| `-db` | `horizonte.db` | SQLite database file (git-ignored) |
 | `-dev` | `false` | Read templates and static files from `./ui` on every request, so edits show up without restarting |
 
 ## Build

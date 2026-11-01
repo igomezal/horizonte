@@ -21,7 +21,7 @@ import (
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address (localhost only by default, for privacy)")
-	dbPath := flag.String("db", "projection.db", "path to the SQLite database file")
+	dbPath := flag.String("db", "horizonte.db", "path to the SQLite database file")
 	dev := flag.Bool("dev", false, "development mode: read templates and static files from ./ui on every request")
 	flag.Parse()
 
