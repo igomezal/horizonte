@@ -11,7 +11,7 @@ import (
 // synthetic builds a small history: constant monthly stock/bond/inflation.
 func synthetic(startYear, months int, stock, bond, infl float64) *history.Series {
 	s := &history.Series{Start: domain.Month{Year: startYear, Month: 1}}
-	for i := 0; i < months; i++ {
+	for range months {
 		s.Stock = append(s.Stock, stock)
 		s.Bond = append(s.Bond, bond)
 		s.Inflation = append(s.Inflation, infl)

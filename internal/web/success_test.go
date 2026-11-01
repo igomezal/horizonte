@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -66,8 +65,8 @@ func TestSaveMCSettingsKeepsPlanAssumptions(t *testing.T) {
 	if rec.Code != http.StatusOK || rec.Header().Get("HX-Trigger") != evSuccessChanged || !strings.Contains(body, "Guardado") {
 		t.Fatalf("save settings: %d %q", rec.Code, rec.Header().Get("HX-Trigger"))
 	}
-	p, _ := st.CurrentPlan(context.Background(), "x")
-	a, _ := st.GetAssumptions(context.Background(), p)
+	p, _ := st.CurrentPlan(t.Context(), "x")
+	a, _ := st.GetAssumptions(t.Context(), p)
 	if a.Volatility[domain.AccountInvestment] != 0.2 || a.MCRuns != 500 {
 		t.Errorf("settings not stored: %v %d", a.Volatility, a.MCRuns)
 	}
@@ -77,7 +76,7 @@ func TestSaveMCSettingsKeepsPlanAssumptions(t *testing.T) {
 
 	// Saving the Plan form again keeps the Monte Carlo settings.
 	do(s, htmxReq("POST", "/plan/assumptions", plan))
-	if a, _ = st.GetAssumptions(context.Background(), p); a.MCRuns != 500 || a.Volatility[domain.AccountInvestment] != 0.2 {
+	if a, _ = st.GetAssumptions(t.Context(), p); a.MCRuns != 500 || a.Volatility[domain.AccountInvestment] != 0.2 {
 		t.Errorf("Plan form reset the Monte Carlo settings: %v %d", a.Volatility, a.MCRuns)
 	}
 

@@ -3,7 +3,6 @@ package web
 import (
 	"log/slog"
 	"net/http"
-	"net/url"
 	"time"
 )
 
@@ -54,37 +53,13 @@ func securityHeaders(next http.Handler) http.Handler {
 
 // sameOriginWrites rejects state-changing requests that come from another site.
 // The app has no login, so this is what stops a malicious web page from
-// posting to the local server (CSRF).
+// posting to the local server (CSRF). net/http.CrossOriginProtection checks
+// Sec-Fetch-Site, falling back to comparing Origin with Host; requests with
+// neither header (curl, tests) and safe methods (GET, HEAD, OPTIONS) pass.
 func sameOriginWrites(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet, http.MethodHead, http.MethodOptions:
-			next.ServeHTTP(w, r)
-			return
-		}
-		if !isSameOrigin(r) {
-			http.Error(w, "cross-origin request rejected", http.StatusForbidden)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func isSameOrigin(r *http.Request) bool {
-	// Modern browsers send Sec-Fetch-Site on every request.
-	switch r.Header.Get("Sec-Fetch-Site") {
-	case "same-origin", "none":
-		return true
-	case "":
-		// Older browser or non-browser client: fall back to Origin.
-	default:
-		return false
-	}
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		// Non-browser clients (curl, tests) send neither header.
-		return true
-	}
-	u, err := url.Parse(origin)
-	return err == nil && u.Host == r.Host
+	cop := http.NewCrossOriginProtection()
+	cop.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+	}))
+	return cop.Handler(next)
 }

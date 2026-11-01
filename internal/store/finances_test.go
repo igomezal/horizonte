@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -11,7 +10,7 @@ import (
 
 func openTest(t *testing.T) (*Store, int64) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	s, err := Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -26,7 +25,7 @@ func openTest(t *testing.T) (*Store, int64) {
 
 func TestCurrentPlanIsStable(t *testing.T) {
 	s, id := openTest(t)
-	again, err := s.CurrentPlan(context.Background(), "Other")
+	again, err := s.CurrentPlan(t.Context(), "Other")
 	if err != nil || again != id {
 		t.Fatalf("CurrentPlan = %d, %v; want %d", again, err, id)
 	}
@@ -34,7 +33,7 @@ func TestCurrentPlanIsStable(t *testing.T) {
 
 func TestFinancesCRUD(t *testing.T) {
 	s, plan := openTest(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	pid, err := s.SavePerson(ctx, domain.Person{PlanID: plan, Name: "Ana", Birth: domain.Month{Year: 1990, Month: 4}, LifeExpectancy: 90})
 	if err != nil {
@@ -102,7 +101,7 @@ func TestFinancesCRUD(t *testing.T) {
 
 func TestPlanScoping(t *testing.T) {
 	s, plan := openTest(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	res, err := s.DB.Exec(`INSERT INTO plans (name) VALUES ('other')`)
 	if err != nil {
 		t.Fatal(err)

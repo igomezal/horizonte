@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -11,7 +10,7 @@ import (
 // seedFull creates a plan that uses every kind of link.
 func seedFull(t *testing.T, s *Store, plan int64) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	must := func(_ int64, err error) {
 		t.Helper()
 		if err != nil {
@@ -36,7 +35,7 @@ func seedFull(t *testing.T, s *Store, plan int64) {
 
 func TestCopyPlanRemapsEveryLink(t *testing.T) {
 	s, plan := openTest(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	seedFull(t, s, plan)
 
 	cp, err := s.CopyPlan(ctx, plan, "Jubilarme a los 60")
@@ -113,7 +112,7 @@ func TestCopyPlanRemapsEveryLink(t *testing.T) {
 
 func TestDeleteAndSwitchPlans(t *testing.T) {
 	s, plan := openTest(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	if err := s.DeletePlan(ctx, plan); !errors.Is(err, ErrLastPlan) {
 		t.Fatalf("deleting the last plan: %v", err)
 	}

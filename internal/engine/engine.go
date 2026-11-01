@@ -279,7 +279,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 	fixedInfl := monthlyRate(a.Inflation)
 	priceIndex := make([]float64, n+1)
 	priceIndex[0] = 1
-	for t := 0; t < n; t++ {
+	for t := range n {
 		mi := fixedInfl
 		if t < len(in.InflationPath) {
 			mi = in.InflationPath[t]
@@ -353,7 +353,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 
 	res.Months = make([]MonthRow, 0, n)
 	deflator := 1.0
-	for t := 0; t < n; t++ {
+	for t := range n {
 		m := in.Start.AddMonths(t)
 		if t > 0 {
 			deflator = priceIndex[t]

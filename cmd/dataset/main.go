@@ -109,7 +109,7 @@ func findColumns(sh *xls.Sheet) (columns, int, error) {
 		// "Date", "CPI" and "Rate GS10" must sit in the same header row (the row
 		// above also contains "Date", as part of "Date Fraction").
 		c.date, c.cpi, c.rate = -1, -1, -1
-		for col := 0; col < 30; col++ {
+		for col := range 30 {
 			switch strings.TrimSpace(sh.Get(r, col).Str) {
 			case "Date":
 				if c.date < 0 {
@@ -122,7 +122,7 @@ func findColumns(sh *xls.Sheet) (columns, int, error) {
 			}
 		}
 		// The multi-line headers: "Real Total Return Price" and "Monthly Total Bond Returns".
-		for col := 0; col < 30; col++ {
+		for col := range 30 {
 			if strings.TrimSpace(sh.Get(r, col).Str) == "Price" && strings.TrimSpace(sh.Get(r-1, col).Str) == "Return" &&
 				strings.TrimSpace(sh.Get(r-3, col).Str) == "Real" {
 				c.realTR = col

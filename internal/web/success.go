@@ -127,7 +127,7 @@ func (s *Server) buildSuccessView(lang i18n.Lang, in engine.Input, seed uint64) 
 		label, age := strconv.Itoa(year), strconv.Itoa(main.AgeAt(mc.YearEnd[y]))
 		v.Fan.Categories = append(v.Fan.Categories, label)
 		v.Fan.Ages = append(v.Fan.Ages, age)
-		for k := 0; k < 5; k++ {
+		for k := range 5 {
 			v.Fan.Bands[k] = append(v.Fan.Bands[k], round0(mc.NetWorth[y][k]))
 		}
 		v.Fan.Plan = append(v.Fan.Plan, round0(detByMonth[mc.YearEnd[y]]))

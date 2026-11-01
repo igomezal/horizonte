@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"runtime"
+	"slices"
 	"sort"
 	"sync"
 
@@ -116,7 +117,7 @@ func MonteCarlo(in Input, vol map[domain.AccountKind]float64, s MCSettings) MCRe
 	var years []int
 	var yearEnd []domain.Month
 	var yearLastIdx []int
-	for t := 0; t < n; t++ {
+	for t := range n {
 		m := in.Start.AddMonths(t)
 		if len(years) == 0 || years[len(years)-1] != m.Year {
 			years = append(years, m.Year)
@@ -170,16 +171,14 @@ func MonteCarlo(in Input, vol map[domain.AccountKind]float64, s MCSettings) MCRe
 	workers := runtime.GOMAXPROCS(0)
 	var wg sync.WaitGroup
 	next := make(chan int)
-	for w := 0; w < workers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range workers {
+		wg.Go(func() {
 			for r := range next {
 				runs[r] = runOne(r)
 			}
-		}()
+		})
 	}
-	for r := 0; r < s.Runs; r++ {
+	for r := range s.Runs {
 		next <- r
 	}
 	close(next)
@@ -215,7 +214,7 @@ func MonteCarlo(in Input, vol map[domain.AccountKind]float64, s MCSettings) MCRe
 		}
 		mm.Reached = len(idx)
 		if len(idx) > 0 {
-			sort.Ints(idx)
+			slices.Sort(idx)
 			at := func(p float64) domain.Month { return in.Start.AddMonths(idx[int(p*float64(len(idx)-1))]) }
 			mm.Best, mm.Median, mm.Worst = at(0.1), at(0.5), at(0.9)
 		}
@@ -244,7 +243,7 @@ func MonteCarlo(in Input, vol map[domain.AccountKind]float64, s MCSettings) MCRe
 
 // percentiles returns the 10/25/50/75/90th percentiles of xs (xs is reordered).
 func percentiles(xs []float64) Percentiles {
-	sort.Float64s(xs)
+	slices.Sort(xs)
 	at := func(p float64) float64 {
 		pos := p * float64(len(xs)-1)
 		lo := int(pos)

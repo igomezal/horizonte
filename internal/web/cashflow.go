@@ -1,10 +1,11 @@
 package web
 
 import (
+	"cmp"
 	"fmt"
 	"net/http"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/igomezal/horizonte/internal/domain"
@@ -234,8 +235,8 @@ func (s *Server) buildCashflowYear(lang i18n.Lang, in engine.Input, res engine.R
 	for i := range cy.Out {
 		cy.Out[i].Share = cy.Out[i].Value / cy.OutTotal
 	}
-	sort.SliceStable(cy.Out, func(i, j int) bool { return cy.Out[i].Value > cy.Out[j].Value })
-	sort.SliceStable(cy.In, func(i, j int) bool { return cy.In[i].Value > cy.In[j].Value })
+	slices.SortStableFunc(cy.Out, func(a, b cfLine) int { return cmp.Compare(b.Value, a.Value) })
+	slices.SortStableFunc(cy.In, func(a, b cfLine) int { return cmp.Compare(b.Value, a.Value) })
 	cy.Sankey = ch
 	cy.IRPF = buildIRPF(res.TaxYears, y.Year, d)
 	return cy

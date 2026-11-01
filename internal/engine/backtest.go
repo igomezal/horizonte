@@ -53,10 +53,7 @@ func Backtest(in Input, s *history.Series, from domain.Month) (Result, int) {
 		return Result{}, 0
 	}
 	n := in.Start.MonthsUntil(end) + 1
-	covered := s.Len() - start
-	if covered > n {
-		covered = n
-	}
+	covered := min(s.Len()-start, n)
 
 	a := in.Assumptions
 	in.InflationPath = make([]float64, covered)
@@ -120,17 +117,15 @@ func Rolling(in Input, s *history.Series) []RollingStart {
 	starts := make([]RollingStart, len(years))
 	var wg sync.WaitGroup
 	next := make(chan int)
-	for w := 0; w < runtime.GOMAXPROCS(0); w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range runtime.GOMAXPROCS(0) {
+		wg.Go(func() {
 			for k := range next {
 				res, covered := Backtest(in, s, domain.Month{Year: years[k], Month: 1})
 				starts[k] = summarizeStart(years[k], res)
 				starts[k].Covered = covered
 				starts[k].Partial = covered < len(res.Months)
 			}
-		}()
+		})
 	}
 	for k := range years {
 		next <- k

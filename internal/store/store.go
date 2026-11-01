@@ -2,13 +2,14 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"embed"
 	"fmt"
 	"io/fs"
 	"path"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -106,7 +107,7 @@ func loadMigrations() ([]migration, error) {
 		}
 		ms = append(ms, migration{version: v, name: e.Name(), sql: string(body)})
 	}
-	sort.Slice(ms, func(i, j int) bool { return ms[i].version < ms[j].version })
+	slices.SortFunc(ms, func(a, b migration) int { return cmp.Compare(a.version, b.version) })
 	for i := 1; i < len(ms); i++ {
 		if ms[i].version == ms[i-1].version {
 			return nil, fmt.Errorf("store: duplicate migration version %d", ms[i].version)

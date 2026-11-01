@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -15,7 +15,7 @@ func TestCatalogParity(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := c.Keys(Default)
-	sort.Strings(want)
+	slices.Sort(want)
 	for _, l := range Supported {
 		got := map[string]bool{}
 		for _, k := range c.Keys(l) {

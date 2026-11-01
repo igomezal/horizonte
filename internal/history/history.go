@@ -45,17 +45,10 @@ func (s *Series) Index(m domain.Month) int {
 	return i
 }
 
-var (
-	once   sync.Once
-	loaded *Series
-	errLd  error
-)
+var loadOnce = sync.OnceValues(func() (*Series, error) { return Parse(csvData) })
 
 // Load parses the embedded dataset (once).
-func Load() (*Series, error) {
-	once.Do(func() { loaded, errLd = Parse(csvData) })
-	return loaded, errLd
-}
+func Load() (*Series, error) { return loadOnce() }
 
 // Parse reads the CSV format written by cmd/dataset:
 //

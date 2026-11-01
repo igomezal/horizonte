@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -19,7 +18,7 @@ import (
 
 func newFinanceServer(t *testing.T) (*Server, *store.Store) {
 	t.Helper()
-	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
+	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,8 +82,8 @@ func TestCreateAccountWithSpanishNumbers(t *testing.T) {
 		t.Errorf("section missing new account: %s", body)
 	}
 
-	plan, _ := st.CurrentPlan(context.Background(), "x")
-	accts, _ := st.ListAccounts(context.Background(), plan)
+	plan, _ := st.CurrentPlan(t.Context(), "x")
+	accts, _ := st.ListAccounts(t.Context(), plan)
 	if len(accts) != 1 || accts[0].Balance != 1234567 || accts[0].MonthlyContribution != 30000 ||
 		accts[0].AnnualReturn == nil || *accts[0].AnnualReturn != 0.065 {
 		t.Fatalf("stored account = %+v", accts)

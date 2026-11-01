@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -10,7 +9,7 @@ import (
 
 func TestMilestonesAndLinks(t *testing.T) {
 	s, plan := openTest(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	pid, _ := s.SavePerson(ctx, domain.Person{PlanID: plan, Name: "Ana", Birth: domain.Month{Year: 1990, Month: 4}, LifeExpectancy: 90})
 
 	ret, err := s.SaveMilestone(ctx, domain.Milestone{PlanID: plan, Name: "Jubilación", Kind: domain.MilestoneAge, PersonID: &pid, Age: 65})
@@ -71,7 +70,7 @@ func TestMilestonesAndLinks(t *testing.T) {
 
 func TestFIREVariantsStored(t *testing.T) {
 	s, plan := openTest(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	pid, _ := s.SavePerson(ctx, domain.Person{PlanID: plan, Name: "Ana", Birth: domain.Month{Year: 1990, Month: 4}, LifeExpectancy: 90})
 	lean, err := s.SaveMilestone(ctx, domain.Milestone{PlanID: plan, Name: "Lean", Kind: domain.MilestoneFI,
 		FIVariant: domain.FILean, FIMultiple: 25, FIAmount: 1800000})

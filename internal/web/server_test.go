@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -18,7 +17,7 @@ import (
 
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
-	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
+	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

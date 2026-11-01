@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -41,8 +40,8 @@ func TestPensionEstimateFromPlan(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("add: %d %s", rec.Code, b)
 	}
-	plan, _ := st.CurrentPlan(context.Background(), "x")
-	incomes, _ := st.ListIncomes(context.Background(), plan)
+	plan, _ := st.CurrentPlan(t.Context(), "x")
+	incomes, _ := st.ListIncomes(t.Context(), plan)
 	got := incomes[len(incomes)-1]
 	if got.Name != "Pensión pública (Ana)" || got.Kind != domain.IncomePension || got.PaymentsPerYear != 14 ||
 		got.Amount != 250000 || got.Start != (domain.Month{Year: 2055, Month: 4}) || got.OwnerID == nil {
@@ -72,8 +71,8 @@ func TestHealthPhasesBecomeExpenses(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("add: %d %s", rec.Code, b)
 	}
-	plan, _ := st.CurrentPlan(context.Background(), "x")
-	exps, _ := st.ListExpenses(context.Background(), plan)
+	plan, _ := st.CurrentPlan(t.Context(), "x")
+	exps, _ := st.ListExpenses(t.Context(), plan)
 	var health []domain.Expense
 	for _, e := range exps {
 		if e.Category == domain.ExpenseHealth {

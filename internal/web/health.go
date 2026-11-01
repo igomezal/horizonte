@@ -123,10 +123,7 @@ func phaseSpan(p domain.Person, ph healthPhase, now domain.Month) (start, end do
 	if planEnd.Before(end) {
 		end = planEnd
 	}
-	months = start.MonthsUntil(end) + 1
-	if months < 0 {
-		months = 0
-	}
+	months = max(start.MonthsUntil(end)+1, 0)
 	return start, end, months
 }
 

@@ -344,7 +344,7 @@ func Read(data []byte) ([]*Sheet, error) {
 			}
 			count := int(le.Uint32(rec.data[4:]))
 			r := &sstReader{parts: parts}
-			for i := 0; i < count; i++ {
+			for range count {
 				s, ok := r.str()
 				if !ok {
 					break

@@ -1,13 +1,12 @@
 package store
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 )
 
 func TestOpenMigratesAndIsIdempotent(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 
 	s, err := Open(ctx, dbPath)
@@ -40,7 +39,7 @@ func TestOpenMigratesAndIsIdempotent(t *testing.T) {
 }
 
 func TestSettings(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	s, err := Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)

@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -94,8 +93,8 @@ func TestSaveAssumptions(t *testing.T) {
 	if !strings.Contains(body, `value="25,5"`) || !strings.Contains(body, "Guardado") {
 		t.Errorf("saved form not re-rendered: %s", body)
 	}
-	plan, _ := st.CurrentPlan(context.Background(), "x")
-	a, _ := st.GetAssumptions(context.Background(), plan)
+	plan, _ := st.CurrentPlan(t.Context(), "x")
+	a, _ := st.GetAssumptions(t.Context(), plan)
 	if a.Inflation != 0.03 || a.TaxRate != 0.255 {
 		t.Errorf("stored = %+v", a)
 	}
@@ -122,8 +121,8 @@ func TestWithdrawalStrategyFromPlanForm(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("save: %d %s", rec.Code, body)
 	}
-	plan, _ := st.CurrentPlan(context.Background(), "x")
-	a, _ := st.GetAssumptions(context.Background(), plan)
+	plan, _ := st.CurrentPlan(t.Context(), "x")
+	a, _ := st.GetAssumptions(t.Context(), plan)
 	if a.Withdrawal.Strategy != "guardrails" || a.Withdrawal.Rate != 0.045 || a.Withdrawal.Floor != 0.75 ||
 		a.Order[0] != "investment" || a.PensionAvailableMS == nil {
 		t.Errorf("stored = %+v / %v / %v", a.Withdrawal, a.Order, a.PensionAvailableMS)
@@ -160,8 +159,8 @@ func TestTaxModelFromPlanForm(t *testing.T) {
 	if rec, b := do(s, htmxReq("POST", "/plan/assumptions", form)); rec.Code != http.StatusOK {
 		t.Fatalf("save: %d %s", rec.Code, b)
 	}
-	plan, _ := st.CurrentPlan(context.Background(), "x")
-	if a, _ := st.GetAssumptions(context.Background(), plan); a.TaxModel != "es" || a.TaxRegion != "madrid" {
+	plan, _ := st.CurrentPlan(t.Context(), "x")
+	if a, _ := st.GetAssumptions(t.Context(), plan); a.TaxModel != "es" || a.TaxRegion != "madrid" {
 		t.Errorf("stored %q / %q", a.TaxModel, a.TaxRegion)
 	}
 	form.Set("tax_region", "atlantis")

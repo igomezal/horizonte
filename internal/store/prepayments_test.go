@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -10,7 +9,7 @@ import (
 
 func TestPrepaymentsCRUD(t *testing.T) {
 	s, plan := openTest(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	debt, _ := s.SaveDebt(ctx, domain.Debt{PlanID: plan, Name: "Hipoteca", Kind: domain.DebtMortgage,
 		Balance: 10000000, AnnualRate: 0.03, MonthlyPayment: 60000})
 
@@ -47,7 +46,7 @@ func TestPrepaymentsCRUD(t *testing.T) {
 
 func TestRedirectAccounts(t *testing.T) {
 	s, plan := openTest(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	fund, _ := s.SaveAccount(ctx, domain.Account{PlanID: plan, Name: "Fondo", Kind: domain.AccountInvestment})
 	debt, err := s.SaveDebt(ctx, domain.Debt{PlanID: plan, Name: "Coche", Kind: domain.DebtCar,
 		Balance: 100000, MonthlyPayment: 10000, RedirectAccountID: &fund})

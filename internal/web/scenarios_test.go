@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -21,7 +20,7 @@ func postForm(s *Server, path string, form url.Values) *httptest.ResponseRecorde
 func TestCreateScenarioWithPreset(t *testing.T) {
 	s, st := newFinanceServer(t)
 	seedMC(t, s)
-	ctx := context.Background()
+	ctx := t.Context()
 	base, _ := st.CurrentPlan(ctx, "x")
 
 	rec := postForm(s, "/scenarios", url.Values{"name": {"Pesimista"}, "source": {"1"}, "preset": {"pessimistic"}})
@@ -63,7 +62,7 @@ func TestCreateScenarioWithPreset(t *testing.T) {
 func TestScenarioActivateRenameDelete(t *testing.T) {
 	s, st := newFinanceServer(t)
 	seedMC(t, s)
-	ctx := context.Background()
+	ctx := t.Context()
 	postForm(s, "/scenarios", url.Values{"name": {"Copia"}, "source": {"1"}, "preset": {"exact"}})
 
 	// Switch back from the top bar and return to where we were.

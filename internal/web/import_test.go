@@ -2,7 +2,6 @@ package web
 
 import (
 	"bytes"
-	"context"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -26,7 +25,7 @@ func uploadPlan(s *Server, content string) (*httptest.ResponseRecorder, string) 
 func TestExportThenImportPlan(t *testing.T) {
 	s, st := newFinanceServer(t)
 	seedCashflow(t, s)
-	ctx := context.Background()
+	ctx := t.Context()
 	src, _ := st.CurrentPlan(ctx, "x")
 	st.RenamePlan(ctx, src, "Plan de Ána")
 
@@ -78,7 +77,7 @@ func TestImportRejectsBadFiles(t *testing.T) {
 			t.Errorf("upload %.30q: %d, want message %q", c.content, rec.Code, c.want)
 		}
 	}
-	if plans, _ := st.ListPlans(context.Background()); len(plans) != 1 {
+	if plans, _ := st.ListPlans(t.Context()); len(plans) != 1 {
 		t.Errorf("a rejected file must not create plans: %d", len(plans))
 	}
 }
@@ -86,7 +85,7 @@ func TestImportRejectsBadFiles(t *testing.T) {
 func TestExportAllThenImport(t *testing.T) {
 	s, st := newFinanceServer(t)
 	seedCashflow(t, s)
-	ctx := context.Background()
+	ctx := t.Context()
 	src, _ := st.CurrentPlan(ctx, "x")
 	child, err := st.CopyPlan(ctx, src, "Jubilarme a los 60")
 	if err != nil {

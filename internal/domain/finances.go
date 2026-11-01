@@ -2,6 +2,7 @@ package domain
 
 import (
 	"math"
+	"slices"
 	"strings"
 )
 
@@ -66,12 +67,7 @@ func validateSpan(start, end Month, errs Errors) {
 }
 
 func oneOf[T comparable](v T, allowed []T) bool {
-	for _, a := range allowed {
-		if v == a {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowed, v)
 }
 
 // ---------- People ----------

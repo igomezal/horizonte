@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -11,7 +10,7 @@ import (
 
 func TestAssumptionsRoundTrip(t *testing.T) {
 	s, plan := openTest(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	got, err := s.GetAssumptions(ctx, plan)
 	if err != nil || got.Inflation != engine.DefaultAssumptions().Inflation {
@@ -54,7 +53,7 @@ func TestAssumptionsRoundTrip(t *testing.T) {
 
 func TestWithdrawalSettingsRoundTrip(t *testing.T) {
 	s, plan := openTest(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	pid, _ := s.SavePerson(ctx, domain.Person{PlanID: plan, Name: "Ana", Birth: domain.Month{Year: 1990, Month: 4}, LifeExpectancy: 90})
 	ret, _ := s.SaveMilestone(ctx, domain.Milestone{PlanID: plan, Name: "Jubilación", Kind: domain.MilestoneAge, PersonID: &pid, Age: 65})
 
@@ -97,7 +96,7 @@ func TestWithdrawalSettingsRoundTrip(t *testing.T) {
 
 func TestTaxModelRoundTrip(t *testing.T) {
 	s, plan := openTest(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	a, _ := s.GetAssumptions(ctx, plan)
 	if a.TaxModel != engine.TaxES || a.TaxRegion != "general" {
 		t.Fatalf("defaults = %q / %q", a.TaxModel, a.TaxRegion)

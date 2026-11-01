@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -170,11 +171,7 @@ func (s *Server) buildScenariosPage(ctx context.Context, lang i18n.Lang, now dom
 		page.Rows = append(page.Rows, row)
 	}
 
-	var years []int
-	for y := range yearSet {
-		years = append(years, y)
-	}
-	sort.Ints(years)
+	years := slices.Sorted(maps.Keys(yearSet))
 	page.Chart = scenarioChartSpec{Type: "scenarios"}
 	for _, y := range years {
 		page.Chart.Categories = append(page.Chart.Categories, strconv.Itoa(y))

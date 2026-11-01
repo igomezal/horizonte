@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -8,7 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -240,7 +241,7 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 		est.HasPension = est.HasPension || acc.Kind == domain.AccountPension
 		est.HasProperty = est.HasProperty || acc.Kind == domain.AccountRealEstate
 	}
-	sort.SliceStable(est.Lines, func(i, j int) bool { return est.Lines[i].Value > est.Lines[j].Value })
+	slices.SortStableFunc(est.Lines, func(a, b estateLine) int { return cmp.Compare(b.Value, a.Value) })
 	for i := range est.Lines {
 		est.Lines[i].Share = est.Lines[i].Value / gross
 	}
@@ -363,7 +364,7 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 		v.Timeline = append(v.Timeline, timelineItem{Label: s.catalog.T(lang, "plan.chart.fail"), Kind: "fail",
 			Month: res.FailMonth, Age: main.AgeAt(res.FailMonth), Reached: true})
 	}
-	sort.SliceStable(v.Timeline, func(i, j int) bool { return v.Timeline[i].Month.Before(v.Timeline[j].Month) })
+	slices.SortStableFunc(v.Timeline, func(a, b timelineItem) int { return cmp.Compare(a.Month.Index(), b.Month.Index()) })
 	v.Timeline = append(v.Timeline, unreached...)
 
 	v.Chart = ch
