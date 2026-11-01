@@ -20,6 +20,8 @@
       currency: "EUR",
       maximumFractionDigits: compact ? 1 : 0,
       notation: compact ? "compact" : "standard",
+      // es-ES skips the separator for 4-digit amounts; the app always groups (6.578 €).
+      useGrouping: compact ? "auto" : "always",
     });
   }
 
@@ -200,6 +202,128 @@
     return opt;
   };
 
+  // Cash flow for one year: money in (left) → "your money" → money out (right).
+  // Colours keep their meaning: green income, ochre savings drawn, red gaps
+  // and debts, blue money going into accounts, muted tax and expenses.
+  builders.sankey = function (spec, el) {
+    const fmt = moneyFormatter(false);
+    const text = cssVar("--chart-text");
+    const colors = {
+      income: cssVar("--app-positive"),
+      savings: cssVar("--chart-5"),
+      shortfall: cssVar("--app-negative"),
+      center: cssVar("--app-text"),
+      tax: cssVar("--app-muted"),
+      expense: cssVar("--chart-text"),
+      debt: cssVar("--app-negative"),
+      saving: cssVar("--app-contributed"),
+    };
+    const labels = {};
+    spec.nodes.forEach((n) => (labels[n.name] = n.label));
+    const narrow = el && el.clientWidth < 640;
+    // Tiny flows get no label (they would overlap); they stay in the tooltip and ledger.
+    const total = spec.links.filter((l) => l.target === "center").reduce((t, l) => t + l.value, 0) || 1;
+    return {
+      textStyle: { fontFamily: getComputedStyle(document.body).fontFamily, color: text },
+      tooltip: {
+        trigger: "item",
+        backgroundColor: cssVar("--chart-tooltip-bg"),
+        borderColor: cssVar("--chart-grid"),
+        textStyle: { color: text },
+        formatter: (p) =>
+          p.dataType === "edge"
+            ? echarts.format.encodeHTML(labels[p.data.source] + " → " + labels[p.data.target]) + "<br><strong>" + fmt.format(p.data.value) + "</strong>"
+            : echarts.format.encodeHTML(labels[p.data.name]) + "<br><strong>" + fmt.format(p.value) + "</strong>",
+      },
+      series: [{
+        type: "sankey",
+        left: narrow ? 4 : 8,
+        right: narrow ? 90 : 170,
+        top: 8,
+        bottom: 8,
+        nodeWidth: 12,
+        nodeGap: 10,
+        layoutIterations: 0, // keep the order the server sends
+        draggable: false,
+        emphasis: { focus: "adjacency" },
+        data: spec.nodes.map((n) => ({
+          name: n.name,
+          itemStyle: { color: colors[n.kind] || text, borderWidth: 0 },
+          label: {
+            color: text,
+            fontSize: narrow ? 10 : 12,
+            formatter: () => labels[n.name] + "\n" + fmt.format(n.value),
+            position: n.kind === "center" ? "inside" : undefined,
+            show: n.kind !== "center" && n.value / total >= 0.025,
+          },
+        })),
+        links: spec.links.map((l) => ({ source: l.source, target: l.target, value: l.value })),
+        lineStyle: { color: "gradient", opacity: 0.32, curveness: 0.5 },
+        label: { color: text },
+      }],
+    };
+  };
+
+  // Savings rate per year: green when you save, red when you spend savings.
+  builders["savings-rate"] = function (spec) {
+    const opt = baseOption();
+    const pct = new Intl.NumberFormat(locale(), { style: "percent", maximumFractionDigits: 0 });
+    opt.legend.show = false;
+    opt.grid.top = 16;
+    opt.xAxis.data = spec.categories;
+    opt.xAxis.boundaryGap = true;
+    opt.xAxis.axisLabel.hideOverlap = true;
+    opt.yAxis.axisLabel.formatter = (v) => pct.format(v);
+    opt.tooltip.valueFormatter = (v) => (v == null ? "—" : pct.format(v));
+    const pos = cssVar("--app-positive"), neg = cssVar("--app-negative");
+    opt.series = [{
+      name: spec.series[0].name,
+      type: "bar",
+      barMaxWidth: 14,
+      data: spec.series[0].data.map((v) => (v == null ? null : { value: v, itemStyle: { color: v < 0 ? neg : pos } })),
+    }];
+    return opt;
+  };
+
+  // Stacked bars per year (expenses by category; debts in red).
+  builders["stacked-bars"] = function (spec) {
+    const opt = baseOption();
+    const fmt = moneyFormatter(false);
+    const palette = [cssVar("--chart-1"), cssVar("--chart-2"), cssVar("--chart-5"), cssVar("--app-muted")];
+    opt.xAxis.data = spec.categories;
+    opt.xAxis.boundaryGap = true;
+    opt.xAxis.axisLabel.hideOverlap = true;
+    opt.legend.type = "scroll";
+    opt.tooltip.valueFormatter = (v) => fmt.format(v);
+    let k = 0;
+    opt.series = spec.series.map((s) => {
+      const isDebt = s.kind === "debt";
+      const color = isDebt ? cssVar("--app-negative") : palette[k % palette.length];
+      const opacity = isDebt ? 0.85 : k < palette.length ? 0.9 : 0.55;
+      if (!isDebt) k++;
+      return {
+        name: s.name, type: "bar", stack: "total", barMaxWidth: 14,
+        itemStyle: { color: color, opacity: opacity },
+        emphasis: { focus: "series" },
+        data: s.data,
+      };
+    });
+    return opt;
+  };
+
+  // Charts that select a year: clicking a bar moves the year picker.
+  function wireYearSelect(chart, spec) {
+    chart.off("click");
+    if (!spec.selectYear) return;
+    chart.on("click", (p) => {
+      const slider = document.querySelector("[data-year-slider]");
+      if (!slider || p.dataIndex == null) return;
+      slider.value = spec.categories[p.dataIndex];
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+      slider.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
   function render(el) {
     const dataEl = document.getElementById(el.dataset.chart);
     if (!dataEl || typeof echarts === "undefined") return;
@@ -217,6 +341,7 @@
     }
     const chart = echarts.getInstanceByDom(el) || echarts.init(el, null, { renderer: "svg" });
     chart.setOption(build(spec, el), true);
+    wireYearSelect(chart, spec);
   }
 
   function renderAll(root) {

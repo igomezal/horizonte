@@ -25,6 +25,18 @@
     if (field) field.focus();
   });
 
+  // Year picker: previous/next buttons move the slider and let htmx load the year.
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-year-step]");
+    if (!btn) return;
+    const slider = document.querySelector("[data-year-slider]");
+    if (!slider) return;
+    const next = Number(slider.value) + Number(btn.dataset.yearStep);
+    if (next < Number(slider.min) || next > Number(slider.max)) return;
+    slider.value = String(next);
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
   // Theme toggle (event delegation, so it keeps working after htmx body swaps).
   document.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-theme-toggle]");

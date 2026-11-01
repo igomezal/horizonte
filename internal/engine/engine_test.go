@@ -492,3 +492,69 @@ func TestRedirectAfterPayoff(t *testing.T) {
 		t.Errorf("fund should stay empty without redirects: %v", res.Months[7].Balances[1])
 	}
 }
+
+func sum(xs []float64) float64 {
+	var t float64
+	for _, x := range xs {
+		t += x
+	}
+	return t
+}
+
+func TestFlowBalancesEveryMonth(t *testing.T) {
+	fund := int64(2)
+	a := flat()
+	a.TaxRate = 0.2
+	a.Returns[domain.AccountInvestment] = 0.05
+	in := Input{
+		People: []domain.Person{personFor(40)},
+		Accounts: []domain.Account{
+			{ID: 1, Kind: domain.AccountCash, Balance: 300000},
+			{ID: 2, Kind: domain.AccountInvestment, Balance: 1000000, MonthlyContribution: 20000},
+		},
+		Incomes: []domain.Income{
+			{Amount: 250000, PaymentsPerYear: 14, End: start.AddMonths(20)},
+			{Amount: 30000, PaymentsPerYear: 12},
+		},
+		Expenses: []domain.Expense{
+			{Amount: 90000, PaymentsPerYear: 12, Category: domain.ExpenseHousing},
+			{Amount: 60000, PaymentsPerYear: 1, Category: domain.ExpenseLeisure},
+		},
+		Debts: []domain.Debt{{ID: 1, Balance: 600000, AnnualRate: 0.04, MonthlyPayment: 50000, RedirectAccountID: &fund}},
+		Prepayments: []domain.Prepayment{{DebtID: 1, Amount: 20000, Frequency: domain.PrepayMonthly,
+			Mode: domain.ReduceTerm, RedirectAccountID: &fund}},
+		Assumptions: a,
+		Start:       start,
+		Detail:      true,
+	}
+	res := Simulate(in)
+	for _, m := range res.Months {
+		f := m.Flow
+		in := sum(f.Income) + sum(f.Withdrawals) + m.Shortfall
+		out := m.Tax + sum(f.Expenses) + sum(f.Debts) + sum(f.Contributions) + m.SurplusSaved
+		if !near(in, out, 1e-6) {
+			t.Fatalf("%v: in %.4f != out %.4f", m.Month, in, out)
+		}
+		if !near(sum(f.Income), m.Income, 1e-9) || !near(sum(f.Debts), m.DebtPayments, 1e-9) ||
+			!near(sum(f.Contributions), m.Contributions, 1e-9) || !near(sum(f.Withdrawals), m.Withdrawals, 1e-9) {
+			t.Fatalf("%v: flow does not match the totals", m.Month)
+		}
+	}
+	// The salary ends in month 20: later months draw on savings.
+	if sum(res.Months[30].Flow.Withdrawals) == 0 {
+		t.Error("expected withdrawals once the salary has ended")
+	}
+	years := res.Years()
+	if years[0].Months != 2 || years[1].Months != 12 || years[1].Flow == nil {
+		t.Errorf("years = %d/%d months, flow %v", years[0].Months, years[1].Months, years[1].Flow != nil)
+	}
+	if got, want := sum(years[1].Flow.Expenses), years[1].Expenses; !near(got, want, 1e-6) {
+		t.Errorf("yearly flow expenses %v != %v", got, want)
+	}
+
+	// Without Detail no breakdown is allocated.
+	in.Detail = false
+	if Simulate(in).Months[0].Flow != nil {
+		t.Error("Flow should be nil without Detail")
+	}
+}

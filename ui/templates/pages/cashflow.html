@@ -1,0 +1,87 @@
+{{define "content"}}
+<header class="page-head">
+  <h1>{{t "cashflow.title"}}</h1>
+  <p class="muted prose">{{t "cashflow.intro"}}</p>
+</header>
+{{with .Data}}
+{{if not .HasPeople}}
+<p class="empty">{{t "plan.no_people"}}</p>
+<p><a href="/finances">{{t "plan.go_finances"}}</a></p>
+{{else}}
+<div class="cf-controls">
+  <div class="year-picker">
+    <button type="button" class="icon-btn" data-year-step="-1" aria-label="{{t "cf.prev_year"}}">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <span class="year-end" aria-hidden="true">{{.MinYear}}</span>
+    <input type="range" name="y" min="{{.MinYear}}" max="{{.MaxYear}}" value="{{.Year.Year}}" step="1"
+           aria-label="{{t "cf.year"}}" data-year-slider
+           hx-get="/cashflow/year" hx-trigger="input changed delay:120ms" hx-target="#cf-year" hx-swap="outerHTML"
+           hx-include="this" hx-vals='{"real": "{{if .Opts.Real}}1{{else}}0{{end}}"}'>
+    <span class="year-end" aria-hidden="true">{{.MaxYear}}</span>
+    <button type="button" class="icon-btn" data-year-step="1" aria-label="{{t "cf.next_year"}}">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+  <div class="segmented" role="group" aria-label="{{t "plan.toggle.units"}}">
+    <a href="/cashflow?y={{.Year.Year}}&amp;real=1"{{if .Opts.Real}} aria-current="true"{{end}}>{{t "plan.toggle.real"}}</a>
+    <a href="/cashflow?y={{.Year.Year}}&amp;real=0"{{if not .Opts.Real}} aria-current="true"{{end}}>{{t "plan.toggle.nominal"}}</a>
+  </div>
+</div>
+
+{{template "cf-year" .Year}}
+
+<section class="section" aria-labelledby="h-rate">
+  <h2 id="h-rate">{{t "cf.rate_title"}}</h2>
+  <p class="section-desc muted">{{t "cf.rate_desc"}}</p>
+  <div class="chart" data-chart="cf-rate" role="img" aria-label="{{t "cf.rate_title"}}"></div>
+  <script type="application/json" id="cf-rate">{{json .RateChart}}</script>
+</section>
+
+<section class="section" aria-labelledby="h-cats">
+  <h2 id="h-cats">{{t "cf.cats_title"}}</h2>
+  <p class="section-desc muted">{{t "cf.cats_desc"}}</p>
+  <div class="chart" data-chart="cf-cats" role="img" aria-label="{{t "cf.cats_title"}}"></div>
+  <script type="application/json" id="cf-cats">{{json .CatChart}}</script>
+</section>
+{{end}}
+{{end}}
+{{end}}
+
+{{/* The selected year: summary, Sankey diagram and ledger. Swapped by the year picker. */}}
+{{define "cf-year"}}
+<section id="cf-year" class="cf-year" aria-live="polite" aria-label="{{t "cf.year"}} {{.Year}}">
+  <div class="lead-figure verdict">
+    <p class="lead">
+      {{t "cf.in_year" .Year .Ages}}
+      {{if .Partial}}<span class="muted">{{t "cf.partial" (month .From) (month .To)}}</span>{{end}}
+    </p>
+    {{if .HasIncome}}
+    <span class="figure{{if lt .Rate 0.0}} negative{{end}}">{{percent .Rate 0}}</span>
+    <p class="breakdown"><span>{{if lt .Savings 0.0}}{{t "cf.rate_negative" (money .Savings) (money .NetIncome)}}{{else}}{{t "cf.rate_positive" (money .Savings) (money .NetIncome)}}{{end}}</span></p>
+    {{else}}
+    <span class="figure">{{money .Withdrawals}}</span>
+    <p class="breakdown"><span>{{t "cf.no_income"}}</span></p>
+    {{end}}
+    {{if gt .Shortfall 0.0}}<p class="negative">{{t "cf.shortfall" (money .Shortfall)}}</p>{{end}}
+  </div>
+
+  <div class="chart chart-sankey" data-chart="cf-sankey-{{.Year}}" role="img" aria-label="{{t "cf.sankey_label" .Year}}"></div>
+  <script type="application/json" id="cf-sankey-{{.Year}}">{{json .Sankey}}</script>
+
+  <div class="cf-ledger">
+    <div>
+      <h3>{{t "cf.ins"}} <span class="amount">{{money .InTotal}}</span></h3>
+      <dl class="ledger compact">
+        {{range .In}}<div class="ledger-row"><dt><span class="dot dot-{{.Kind}}" aria-hidden="true"></span>{{.Label}}</dt><dd class="amount">{{money .Value}} <span class="muted share">{{percent .Share 0}}</span></dd></div>{{end}}
+      </dl>
+    </div>
+    <div>
+      <h3>{{t "cf.outs"}} <span class="amount">{{money .OutTotal}}</span></h3>
+      <dl class="ledger compact">
+        {{range .Out}}<div class="ledger-row"><dt><span class="dot dot-{{.Kind}}" aria-hidden="true"></span>{{.Label}}</dt><dd class="amount">{{money .Value}} <span class="muted share">{{percent .Share 0}}</span></dd></div>{{end}}
+      </dl>
+    </div>
+  </div>
+</section>
+{{end}}

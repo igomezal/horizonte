@@ -73,6 +73,9 @@ type Input struct {
 	Milestones  []domain.Milestone
 	Assumptions Assumptions
 	Start       domain.Month // first projected month (normally the current month)
+	// Detail records a per-stream breakdown of every month (MonthRow.Flow),
+	// used by the cash-flow view. Off for bulk runs such as Monte Carlo.
+	Detail bool
 }
 
 // EndMonth is the last projected month: when the longest-lived person
@@ -106,9 +109,52 @@ type MonthRow struct {
 	Withdrawals   float64 // taken from accounts to cover a deficit
 	Shortfall     float64 // deficit nothing could cover this month
 
+	// SurplusSaved is money left over after contributions that went to the
+	// surplus account (or was spent when there is none).
+	SurplusSaved float64
+	// Flow is the per-stream breakdown, only when Input.Detail is set.
+	Flow *Flow
+
 	Balances    []float64 // per account, in Result.Accounts order
 	DebtBalance float64
 	NetWorth    float64
+}
+
+// Flow breaks a month (or year) down by stream. Slices are indexed like the
+// matching Input slice. For every period:
+//
+//	sum(Income) + sum(Withdrawals) + Shortfall =
+//	    Tax + sum(Expenses) + sum(Debts) + sum(Contributions) + SurplusSaved
+type Flow struct {
+	Income        []float64 // per income stream
+	Expenses      []float64 // per expense
+	Debts         []float64 // per debt: instalments plus early repayments and fees
+	Contributions []float64 // per account: contributions, freed instalments, redirects
+	Withdrawals   []float64 // per account
+}
+
+func newFlow(in Input) *Flow {
+	return &Flow{
+		Income:        make([]float64, len(in.Incomes)),
+		Expenses:      make([]float64, len(in.Expenses)),
+		Debts:         make([]float64, len(in.Debts)),
+		Contributions: make([]float64, len(in.Accounts)),
+		Withdrawals:   make([]float64, len(in.Accounts)),
+	}
+}
+
+func addSlice(dst, src []float64) {
+	for i := range src {
+		dst[i] += src[i]
+	}
+}
+
+func (f *Flow) add(o *Flow) {
+	addSlice(f.Income, o.Income)
+	addSlice(f.Expenses, o.Expenses)
+	addSlice(f.Debts, o.Debts)
+	addSlice(f.Contributions, o.Contributions)
+	addSlice(f.Withdrawals, o.Withdrawals)
 }
 
 // Savings is what was left after tax, expenses and debt payments (negative
@@ -141,12 +187,13 @@ type DebtPaidOff struct {
 
 // Result is a full projection.
 type Result struct {
-	Accounts   []domain.Account
-	Months     []MonthRow
-	Milestones []MilestoneHit // in the order given in Input
-	PaidOff    []DebtPaidOff  // in payoff order
-	FailMonth  domain.Month   // first month with a shortfall; zero if the money lasts
-	Shortfall  float64        // total uncovered deficit, nominal euros
+	Accounts       []domain.Account
+	Months         []MonthRow
+	Milestones     []MilestoneHit // in the order given in Input
+	PaidOff        []DebtPaidOff  // in payoff order
+	SurplusAccount int            // index of the account receiving surplus money, -1 if none
+	FailMonth      domain.Month   // first month with a shortfall; zero if the money lasts
+	Shortfall      float64        // total uncovered deficit, nominal euros
 }
 
 // Failed reports whether the money ran out at some point.
@@ -177,7 +224,7 @@ func Simulate(in Input) Result {
 // simulate runs the projection with rate(t, i) giving account i's return in month t.
 func simulate(in Input, rate func(t, i int) float64) Result {
 	end := in.EndMonth()
-	res := Result{Accounts: in.Accounts}
+	res := Result{Accounts: in.Accounts, SurplusAccount: -1}
 	if end.IsZero() || end.Before(in.Start) {
 		return res
 	}
@@ -212,6 +259,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		debtIdx[d.ID] = i
 	}
 	surplusIdx := surplusAccount(in.Accounts, a.SurplusAccountID)
+	res.SurplusAccount = surplusIdx
 	order := drawdownOrder(in.Accounts)
 	// Age and date milestones are known up front; financial independence is
 	// added the month the projection reaches it.
@@ -226,6 +274,11 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 			deflator *= 1 + infl
 		}
 		row := MonthRow{Month: m, Deflator: deflator}
+		var flow *Flow
+		if in.Detail {
+			flow = newFlow(in)
+			row.Flow = flow
+		}
 
 		// 1. Investment growth on the balances carried in.
 		for i := range balances {
@@ -234,14 +287,21 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 
 		// 2. Income, tax and expenses.
 		var spendingRate float64 // average monthly spending, for financial independence
-		for _, inc := range in.Incomes {
-			row.Income += incomeThisMonth(inc, resolved, m, t, in.Start, a.Inflation)
+		for k, inc := range in.Incomes {
+			v := incomeThisMonth(inc, resolved, m, t, in.Start, a.Inflation)
+			row.Income += v
+			if flow != nil {
+				flow.Income[k] = v
+			}
 		}
 		row.Tax = row.Income * a.TaxRate
-		for _, e := range in.Expenses {
+		for k, e := range in.Expenses {
 			amount, avg := expenseThisMonth(e, resolved, m, t, in.Start, a.Inflation)
 			row.Expenses += amount
 			spendingRate += avg
+			if flow != nil {
+				flow.Expenses[k] = amount
+			}
 		}
 
 		// 3. Debt payments (fixed instalment, French amortisation).
@@ -257,6 +317,9 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 			}
 			row.DebtPayments += pay
 			spendingRate += pay
+			if flow != nil {
+				flow.Debts[i] += pay
+			}
 			if debts[i] == 0 && !paidOff[i] {
 				paidOff[i] = true
 				res.PaidOff = append(res.PaidOff, DebtPaidOff{Debt: d, Month: m})
@@ -284,6 +347,9 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 						available -= amount
 						balances[to] += amount
 						row.Redirected += amount
+						if flow != nil {
+							flow.Contributions[to] += amount
+						}
 					}
 				}
 				continue
@@ -300,6 +366,9 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 			debts[i] -= amount
 			row.DebtPayments += cost
 			row.Prepayments += cost
+			if flow != nil {
+				flow.Debts[i] += cost
+			}
 			if debts[i] < 0.005 {
 				debts[i] = 0
 				if !paidOff[i] {
@@ -332,6 +401,9 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 				balances[i] += c
 				row.Contributions += c
 				cash -= c
+				if flow != nil {
+					flow.Contributions[i] += c
+				}
 			}
 			// Instalments freed by paid-off debts go to their chosen account.
 			for i, d := range in.Debts {
@@ -343,8 +415,12 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 				balances[to] += c
 				row.Contributions += c
 				cash -= c
+				if flow != nil {
+					flow.Contributions[to] += c
+				}
 			}
 			if cash > 0 {
+				row.SurplusSaved = cash
 				if surplusIdx >= 0 {
 					balances[surplusIdx] += cash
 				} else {
@@ -361,6 +437,9 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 				}
 				balances[i] -= take
 				row.Withdrawals += take
+				if flow != nil {
+					flow.Withdrawals[i] += take
+				}
 				need -= take
 				if need <= 0 {
 					break
@@ -554,6 +633,9 @@ type YearRow struct {
 	Deflator float64  // of the last month
 
 	Income, Tax, Expenses, DebtPayments, Prepayments, Contributions, Withdrawals, Shortfall float64
+	SurplusSaved                                                                            float64
+	Months                                                                                  int   // projected months in the year (12 except the first and last years)
+	Flow                                                                                    *Flow // summed breakdown, when the months have one
 }
 
 // Savings is income after tax, expenses and debt payments for the year.
@@ -575,6 +657,20 @@ func (r Result) Years() []YearRow {
 		y.Contributions += m.Contributions
 		y.Withdrawals += m.Withdrawals
 		y.Shortfall += m.Shortfall
+		y.SurplusSaved += m.SurplusSaved
+		y.Months++
+		if m.Flow != nil {
+			if y.Flow == nil {
+				y.Flow = &Flow{
+					Income:        make([]float64, len(m.Flow.Income)),
+					Expenses:      make([]float64, len(m.Flow.Expenses)),
+					Debts:         make([]float64, len(m.Flow.Debts)),
+					Contributions: make([]float64, len(m.Flow.Contributions)),
+					Withdrawals:   make([]float64, len(m.Flow.Withdrawals)),
+				}
+			}
+			y.Flow.add(m.Flow)
+		}
 		y.Last = m
 		y.Deflator = m.Deflator
 	}

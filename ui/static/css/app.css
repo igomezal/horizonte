@@ -904,6 +904,88 @@ table.projection tr.short td {
   background: color-mix(in srgb, var(--app-negative) 8%, transparent);
 }
 
+/* ---------- Cash flow ---------- */
+.cf-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.year-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1 1 22rem;
+  max-width: 36rem;
+}
+.year-picker input[type="range"] {
+  flex: 1;
+  margin: 0;
+  accent-color: var(--app-accent);
+}
+.year-end {
+  font-size: 0.8125rem;
+  color: var(--app-muted);
+  font-variant-numeric: tabular-nums;
+}
+.cf-year .lead .muted {
+  font-size: 0.9375rem;
+  margin-left: 0.5rem;
+}
+.chart-sankey {
+  height: 460px;
+  margin: 1rem 0 0.5rem;
+}
+.cf-ledger {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1rem 3rem;
+}
+.cf-ledger h3 {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--app-text);
+}
+.cf-ledger dt {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.cf-ledger .share {
+  display: inline-block;
+  min-width: 3.25rem;
+  text-align: right;
+  font-weight: 400;
+}
+.dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 2px;
+  flex: none;
+  background: var(--app-muted);
+}
+.dot-income {
+  background: var(--app-positive);
+}
+.dot-savings {
+  background: var(--chart-5);
+}
+.dot-shortfall,
+.dot-debt {
+  background: var(--app-negative);
+}
+.dot-saving {
+  background: var(--app-contributed);
+}
+.dot-expense {
+  background: var(--chart-text);
+}
+
 /* ---------- Error pages ---------- */
 .notice h1 {
   margin-bottom: 0.5rem;

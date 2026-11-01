@@ -98,6 +98,19 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
 - **Settings that drive a result recalculate live** (`hx-trigger="change"`), with a quiet
   status line ("Guardado. El plan se ha recalculado.") instead of a save button.
 
+## Cash flow (phase 4)
+
+- **One year at a time**, chosen with a slider (previous/next buttons, year labels at both
+  ends) or by clicking a bar in any yearly chart; the URL keeps the year.
+- **The hero figure is the savings rate** (savings ÷ net income). A year without income shows
+  what came out of savings instead, and says so in words.
+- **Sankey colours keep their meaning:** income green, money drawn from savings ochre
+  (200 €), gaps and debts red, money going into accounts blue, tax and spending neutral ink.
+  Flows under 2,5 % of the total have no label on the diagram; the ledger below always lists
+  every flow with its share.
+- **Yearly bar charts:** savings rate in green/red by sign (no bar when there is no income);
+  spending stacked by category with debts in red.
+
 ## Motion
 
 - No entrance animations or hover transitions on content.
