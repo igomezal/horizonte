@@ -1,0 +1,15 @@
+# Only cmd/, internal/, ui/ and go.mod/go.sum are needed to build.
+# Personal financial data must never end up in an image.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+.env
+.git/
+bin/
+perf/
+*.exe
+*.md
+.idea/
+.vscode/

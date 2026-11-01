@@ -1,0 +1,17 @@
+# docker compose up -d   →   http://localhost:8347
+services:
+  horizonte:
+    build: .
+    image: horizonte:latest
+    restart: unless-stopped # comes back after a crash or a host reboot
+    ports:
+      - "127.0.0.1:8347:8347" # localhost only: the app has no login
+    volumes:
+      - horizonte-data:/data # the database, kept outside the container
+    environment:
+      # Optional error reporting; leave unset to send nothing.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+
+volumes:
+  horizonte-data:

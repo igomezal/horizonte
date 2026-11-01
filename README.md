@@ -14,14 +14,14 @@ See [PLAN.md](PLAN.md) for the roadmap and phase status.
 
 ```sh
 go run ./cmd/server
-# open http://127.0.0.1:8080
+# open http://127.0.0.1:8347
 ```
 
 Flags:
 
 | Flag | Default | Description |
 |---|---|---|
-| `-addr` | `127.0.0.1:8080` | Listen address. Localhost only by default, so your data is not exposed on the network |
+| `-addr` | `127.0.0.1:8347` | Listen address. Localhost only by default, so your data is not exposed on the network |
 | `-db` | `horizonte.db` | SQLite database file (git-ignored) |
 | `-dev` | `false` | Read templates and static files from `./ui` on every request, so edits show up without restarting |
 
@@ -32,6 +32,40 @@ go build -o bin/server ./cmd/server
 ```
 
 All templates, CSS, JS and vendored libraries (htmx, Alpine.js, ECharts, Pico.css) are embedded in the binary.
+
+## Docker
+
+```sh
+docker compose up -d        # build and start on http://localhost:8347
+```
+
+The database is stored in the `/data` volume (`horizonte-data` in
+`compose.yaml`), outside the container, so it survives restarts, crashes and
+image upgrades. `restart: unless-stopped` brings the app back after a crash or
+a reboot. Writes are committed to disk before they are acknowledged, so
+stopping or killing the container never loses saved changes.
+
+To keep the database in a host folder instead of a named volume, mount a
+directory (not the `.db` file: SQLite also keeps `-wal` and `-shm` files next
+to it), writable by the container user, uid 65532:
+
+```sh
+docker run -d --restart unless-stopped -p 127.0.0.1:8347:8347 \
+  -v /srv/horizonte:/data horizonte:latest
+```
+
+Build for both architectures (push to a registry, since a local image store
+holds one platform per tag):
+
+```sh
+docker buildx build --platform linux/amd64,linux/arm64 \
+  --build-arg VERSION=$(git rev-parse --short HEAD) -t <registry>/horizonte:latest --push .
+```
+
+The app has no login, so publish the port on `127.0.0.1` (as above) or put it
+behind an authenticating reverse proxy. Back up by copying `/data` while the
+container is stopped. Set `SENTRY_DSN` in the environment to enable error
+reporting.
 
 ## Error reporting (optional)
 

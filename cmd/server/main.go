@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -23,10 +24,19 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", "127.0.0.1:8080", "listen address (localhost only by default, for privacy)")
+	addr := flag.String("addr", "127.0.0.1:8347", "listen address (localhost only by default, for privacy)")
 	dbPath := flag.String("db", "horizonte.db", "path to the SQLite database file")
 	dev := flag.Bool("dev", false, "development mode: read templates and static files from ./ui on every request")
+	health := flag.Bool("healthcheck", false, "check that a server listening on -addr is healthy, then exit (for container health checks)")
 	flag.Parse()
+
+	if *health {
+		if err := healthcheck(*addr); err != nil {
+			fmt.Fprintln(os.Stderr, "unhealthy:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	snt, sentryErr := initSentry(*dev)
 	log, access := newLoggers(snt.DSN != "")
