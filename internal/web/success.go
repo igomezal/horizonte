@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -91,12 +92,12 @@ type successPage struct {
 	Form mcSettingsForm
 }
 
-func (s *Server) buildSuccessView(lang i18n.Lang, in engine.Input, seed uint64) successView {
+func (s *Server) buildSuccessView(ctx context.Context, lang i18n.Lang, in engine.Input, seed uint64) successView {
 	v := successView{HasPeople: len(in.People) > 0, Seed: seed}
 	if !v.HasPeople {
 		return v
 	}
-	mc := engine.MonteCarlo(in, in.Assumptions.Volatility, engine.MCSettings{
+	mc := monteCarlo(ctx, "success", in, engine.MCSettings{
 		Runs: in.Assumptions.MCRuns, Seed: seed, Correlation: mcCorrelation,
 	})
 	if mc.Runs == 0 {
@@ -186,7 +187,7 @@ func (s *Server) handleSuccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := successPage{
-		View: s.buildSuccessView(fc.lang, in, parseSeed(r)),
+		View: s.buildSuccessView(r.Context(), fc.lang, in, parseSeed(r)),
 		Form: newMCForm(s.mcSettingsValues(fc.lang, in.Assumptions), domain.Errors{}),
 	}
 	s.page(w, r, http.StatusOK, "success", "success.title", page)
@@ -204,7 +205,7 @@ func (s *Server) handleSuccessResults(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	v := s.buildSuccessView(fc.lang, in, parseSeed(r))
+	v := s.buildSuccessView(r.Context(), fc.lang, in, parseSeed(r))
 	if err := s.render.render(w, r, http.StatusOK, "success", "mc-results", v); err != nil {
 		s.serverError(w, r, err)
 	}

@@ -1,6 +1,9 @@
 package web
 
 import (
+	"fmt"
+	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 	"log/slog"
 	"net/http"
 	"time"
@@ -16,7 +19,9 @@ func (s *statusRecorder) WriteHeader(code int) {
 	s.ResponseWriter.WriteHeader(code)
 }
 
-// logRequests logs method, path, status and duration of every request.
+// logRequests logs method, path, status and duration of every request. It
+// writes to the access logger (stdout only): Sentry already records every
+// request as a trace, so sending these lines too would only add volume.
 func logRequests(log *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -32,7 +37,11 @@ func (s *Server) recoverPanics(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if v := recover(); v != nil {
-				s.log.Error("panic", "path", r.URL.Path, "panic", v)
+				// sentryhttp has already captured the panic as an error with a
+				// stack trace; this line keeps it visible in stdout and Logs.
+				s.log.ErrorContext(r.Context(), "handler panicked",
+					"http.request.method", r.Method, "http.route", r.Pattern,
+					"error.type", fmt.Sprintf("%T", v))
 				s.serverError(w, r, nil)
 			}
 		}()
@@ -56,9 +65,20 @@ func securityHeaders(next http.Handler) http.Handler {
 // posting to the local server (CSRF). net/http.CrossOriginProtection checks
 // Sec-Fetch-Site, falling back to comparing Origin with Host; requests with
 // neither header (curl, tests) and safe methods (GET, HEAD, OPTIONS) pass.
-func sameOriginWrites(next http.Handler) http.Handler {
+func sameOriginWrites(log *slog.Logger, next http.Handler) http.Handler {
 	cop := http.NewCrossOriginProtection()
 	cop.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A warning, not an error: the request was blocked as intended. A burst
+		// of these means a page or extension is trying to post to the app, or a
+		// reverse proxy is rewriting Host/Origin and breaking real form posts.
+		log.WarnContext(r.Context(), "cross-origin write rejected",
+			"http.request.method", r.Method,
+			"url.path", r.URL.Path,
+			"horizonte.csrf.sec_fetch_site", r.Header.Get("Sec-Fetch-Site"),
+			"horizonte.csrf.has_origin", r.Header.Get("Origin") != "")
+		// Counted too, so a burst can drive an alert without searching logs.
+		meter(r.Context()).Count("horizonte.csrf.rejected", 1, sentry.WithAttributes(
+			attribute.String("http.request.method", r.Method)))
 		http.Error(w, "cross-origin request rejected", http.StatusForbidden)
 	}))
 	return cop.Handler(next)

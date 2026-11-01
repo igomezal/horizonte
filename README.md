@@ -51,6 +51,18 @@ SENTRY_DSN=https://<key>@<org>.ingest.de.sentry.io/<project> go run ./cmd/server
 Because the app holds personal financial data, collection is restricted: no IP addresses, cookies, request bodies or query strings, no browser console output, and only a few harmless request headers.
 Stack traces, route names and timings are sent.
 
+With Sentry enabled, server logs at info level and above (startup, schema migrations, plan created/activated/deleted, imports and exports, blocked cross-origin posts, server errors) and a few browser logs (failed htmx requests, broken charts) are also sent to Sentry Logs, linked to their traces.
+Logs carry IDs, counts and categories only, never amounts or names you typed; the conventions are documented in `cmd/server/logging.go`.
+Per-request access lines stay on stdout.
+Browser console output (from the app, htmx and Alpine) is sent too, but only when it can't contain figures: a console message with a currency, a decimal or grouped number, four or more digits in a row, HTML or a serialized object is not sent at all, and query strings are stripped from the rest.
+
+Sentry Metrics cover what traces and issues can't show: Monte Carlo and backtest run time (with runs, horizon and CPU count), import and export outcomes, rejected forms per route, blocked cross-origin posts, database size and plan count at startup, and in the browser the time of htmx requests and chart rendering.
+Plan results such as success rates, ages or amounts are never sent; the conventions are in `internal/web/metrics.go`.
+
+Session Replay records 10% of browser sessions (all of them with `-dev` or `SENTRY_ENVIRONMENT=development`), plus the minute before any error.
+All text and input values are masked and all media is blocked, charts included, so a replay shows the page layout and where you clicked, never your figures.
+Network requests keep only method, status and size, and query strings are stripped from URLs.
+
 ## Test
 
 ```sh

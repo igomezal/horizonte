@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"os"
 	"strings"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
+
+	"github.com/igomezal/horizonte/internal/store"
 )
 
 // release is the app version reported to Sentry. Set it at build time with
@@ -54,6 +58,8 @@ func initSentry(dev bool) (sentrySettings, error) {
 			},
 			QueryParams: &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
 		},
+		// Sentry Logs need no option in current sentry-go: they are on once the
+		// slog integration is set up (see logging.go).
 		EnableTracing: true,
 		TracesSampler: func(ctx sentry.SamplingContext) float64 {
 			// Static files and health checks are noise, not performance data.
@@ -72,4 +78,19 @@ func initSentry(dev bool) (sentrySettings, error) {
 		Environment: env,
 		Release:     sentry.CurrentHub().Client().Options().Release,
 	}, nil
+}
+
+// recordStartupGauges records the size of this install once per start. Slow
+// pages or failed migrations are much easier to explain next to how big the
+// database is and how many plans it holds. A no-op when Sentry is off.
+func recordStartupGauges(ctx context.Context, st *store.Store, dbPath string) {
+	m := sentry.NewMeter(ctx)
+	schema := attribute.Int("horizonte.db.schema_version", st.Migration().To)
+	if fi, err := os.Stat(dbPath); err == nil {
+		m.Gauge("horizonte.db.size", float64(fi.Size()),
+			sentry.WithUnit(sentry.UnitByte), sentry.WithAttributes(schema))
+	}
+	if plans, err := st.ListPlans(ctx); err == nil {
+		m.Gauge("horizonte.plans", float64(len(plans)), sentry.WithAttributes(schema))
+	}
 }

@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/static/vendor/pico.min.css">
   <link rel="stylesheet" href="/static/css/app.css">
   {{- with .Sentry}}{{if .DSN}}
-  <script src="/static/vendor/sentry.tracing.min.js"></script>
+  <script src="/static/vendor/sentry.tracing.replay.logs.min.js"></script>
   <script src="/static/js/sentry-init.js" data-dsn="{{.DSN}}" data-environment="{{.Environment}}" data-release="{{.Release}}"></script>
   {{- end}}{{end}}
   <script src="/static/vendor/htmx.min.js" defer></script>

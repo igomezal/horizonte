@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 	"html/template"
 	"io/fs"
 	"net/http"
@@ -173,6 +175,14 @@ func (r *renderer) render(w http.ResponseWriter, req *http.Request, status int, 
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, block, data); err != nil {
 		return fmt.Errorf("execute %s/%s: %w", page, block, err)
+	}
+	if status == http.StatusUnprocessableEntity {
+		// Every form that comes back with validation errors passes here.
+		// Counted per route: a form that keeps getting rejected points to
+		// confusing fields or a parsing bug (e.g. a number format). Field
+		// values are never recorded.
+		meter(req.Context()).Count("horizonte.form.rejected", 1, sentry.WithAttributes(
+			attribute.String("http.route", req.Pattern)))
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)

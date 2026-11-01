@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"math"
 	"net/http"
 	"strconv"
@@ -159,7 +160,7 @@ func (s *Server) crisisLabel(lang i18n.Lang, key string) string {
 	return s.catalog.T(lang, "bt.crisis."+key)
 }
 
-func (s *Server) buildBacktestView(lang i18n.Lang, in engine.Input, hs *history.Series, sel func() (domain.Month, string)) btView {
+func (s *Server) buildBacktestView(ctx context.Context, lang i18n.Lang, in engine.Input, hs *history.Series, sel func() (domain.Month, string)) btView {
 	v := btView{HasPeople: len(in.People) > 0, DataFrom: hs.Start, DataTo: hs.End()}
 	if !v.HasPeople {
 		return v
@@ -169,7 +170,7 @@ func (s *Server) buildBacktestView(lang i18n.Lang, in engine.Input, hs *history.
 		v.EndAge = main.AgeAt(end)
 	}
 
-	all := engine.Rolling(in, hs)
+	all := rolling(ctx, "backtest", in, hs)
 	var starts []engine.RollingStart // fully historical: the headline result
 	for _, st := range all {
 		if st.Partial {
@@ -292,7 +293,7 @@ func (s *Server) handleBacktest(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	v := s.buildBacktestView(fc.lang, in, hs, s.scenarioFromQuery(r, fc.lang, hs))
+	v := s.buildBacktestView(r.Context(), fc.lang, in, hs, s.scenarioFromQuery(r, fc.lang, hs))
 	s.page(w, r, http.StatusOK, "backtest", "backtest.title", v)
 }
 

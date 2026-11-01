@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -27,16 +28,16 @@ func main() {
 	dev := flag.Bool("dev", false, "development mode: read templates and static files from ./ui on every request")
 	flag.Parse()
 
-	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	snt, err := initSentry(*dev)
-	if err != nil {
-		log.Error("sentry init failed; continuing without error reporting", "err", err)
+	snt, sentryErr := initSentry(*dev)
+	log, access := newLoggers(snt.DSN != "")
+	if sentryErr != nil {
+		log.Error("sentry init failed; continuing without error reporting", "error.message", sentryErr.Error())
 	} else if snt.DSN != "" {
-		log.Info("sentry error reporting enabled", "environment", snt.Environment, "release", snt.Release)
+		log.Info("sentry enabled", "horizonte.sentry.environment", snt.Environment, "horizonte.sentry.release", snt.Release)
 	}
-	err = run(*addr, *dbPath, *dev, snt, log)
+	err := run(*addr, *dbPath, *dev, snt, log, access)
 	if err != nil {
-		log.Error("fatal", "err", err)
+		log.Error("server stopped with an error", "error.message", err.Error())
 		sentry.CaptureException(err)
 	}
 	sentry.Flush(2 * time.Second)
@@ -45,7 +46,7 @@ func main() {
 	}
 }
 
-func run(addr, dbPath string, dev bool, snt sentrySettings, log *slog.Logger) error {
+func run(addr, dbPath string, dev bool, snt sentrySettings, log, access *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -54,6 +55,15 @@ func run(addr, dbPath string, dev bool, snt sentrySettings, log *slog.Logger) er
 		return err
 	}
 	defer st.Close()
+	// Answers "which schema is this install on?" when a bug only shows up for
+	// some users, and records upgrades as they happen.
+	mig := st.Migration()
+	log.InfoContext(ctx, "database ready",
+		"horizonte.db.file", filepath.Base(dbPath),
+		"horizonte.db.schema_version", mig.To,
+		"horizonte.db.migrations_applied", mig.Applied,
+		"horizonte.db.schema_version_before", mig.From)
+	recordStartupGauges(ctx, st, dbPath)
 
 	catalog, err := i18n.Load()
 	if err != nil {
@@ -63,11 +73,11 @@ func run(addr, dbPath string, dev bool, snt sentrySettings, log *slog.Logger) er
 	var assets fs.FS = ui.FS
 	if dev {
 		assets = os.DirFS("ui")
-		log.Info("dev mode: serving templates and static files from ./ui")
+		log.Info("dev mode: serving templates and static files from ./ui", "horizonte.server.dev", true)
 	}
 
 	srv, err := web.New(web.Config{
-		Store: st, Catalog: catalog, Logger: log, Assets: assets, Dev: dev,
+		Store: st, Catalog: catalog, Logger: log, AccessLog: access, Assets: assets, Dev: dev,
 		Sentry: web.BrowserSentry{DSN: snt.DSN, Environment: snt.Environment, Release: snt.Release},
 	})
 	if err != nil {
@@ -82,7 +92,7 @@ func run(addr, dbPath string, dev bool, snt sentrySettings, log *slog.Logger) er
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("listening", "url", "http://"+addr, "db", dbPath)
+		log.Info("listening", "url.full", "http://"+addr, "horizonte.server.dev", dev)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
@@ -95,7 +105,7 @@ func run(addr, dbPath string, dev bool, snt sentrySettings, log *slog.Logger) er
 	case <-ctx.Done():
 	}
 
-	log.Info("shutting down")
+	log.Info("shutting down", "horizonte.server.reason", "signal")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return httpSrv.Shutdown(shutdownCtx)

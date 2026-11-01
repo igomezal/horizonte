@@ -730,6 +730,14 @@
     opt.legend.data = names.map((n) => (typeof n === "string" ? { name: n, icon: icons[n] || "roundRect" } : n));
   }
 
+  // Sentry Logs helper; returns false when Sentry is not enabled, so the
+  // caller can fall back to the local console.
+  function logError(message, attrs) {
+    const logger = window.Sentry && window.Sentry.logger;
+    if (logger) logger.error(message, attrs);
+    return !!logger;
+  }
+
   function render(el) {
     const dataEl = document.getElementById(el.dataset.chart);
     if (!dataEl || typeof echarts === "undefined") return;
@@ -737,19 +745,44 @@
     try {
       spec = JSON.parse(dataEl.textContent);
     } catch (e) {
-      console.error("chart: invalid JSON for", el.dataset.chart, e);
+      // The chart silently stays empty, so log it. The data itself holds
+      // financial figures and is never logged, only where it came from; the
+      // SyntaxError message can quote the JSON, so it only goes to the local
+      // console when Sentry is off.
+      const sent = logError("chart data invalid", {
+        "horizonte.chart.id": el.dataset.chart,
+        "error.type": e.name,
+        "horizonte.page": location.pathname,
+      });
+      if (!sent) console.error("chart: invalid JSON for", el.dataset.chart, e);
       return;
     }
     const build = builders[spec.type];
     if (!build) {
-      console.error("chart: unknown type", spec.type);
+      const sent = logError("chart type unknown", {
+        "horizonte.chart.id": el.dataset.chart,
+        "horizonte.chart.type": String(spec.type),
+        "horizonte.page": location.pathname,
+      });
+      if (!sent) console.error("chart: unknown type", spec.type);
       return;
     }
+    const t0 = performance.now();
     const chart = echarts.getInstanceByDom(el) || echarts.init(el, null, { renderer: "svg" });
     const opt = build(spec, el);
     applyLegendIcons(opt);
     chart.setOption(opt, true);
     wireYearSelect(chart, spec);
+    // Charts re-render on every swap, theme change and resize, on the main
+    // thread. Per-type timing shows which chart makes the UI feel slow
+    // (e.g. a 60-year sankey or heatmap on a low-end laptop).
+    const metrics = window.Sentry && window.Sentry.metrics;
+    if (metrics) {
+      metrics.distribution("horizonte.chart.render.duration", performance.now() - t0, {
+        unit: "millisecond",
+        attributes: { "horizonte.chart.type": String(spec.type), "horizonte.page": location.pathname },
+      });
+    }
   }
 
   function renderAll(root) {

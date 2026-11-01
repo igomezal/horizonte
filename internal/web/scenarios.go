@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getsentry/sentry-go"
 	"maps"
 	"net/http"
 	"slices"
@@ -107,13 +108,13 @@ func (s *Server) summarizePlan(ctx context.Context, lang i18n.Lang, now domain.M
 		}
 	}
 
-	mc := engine.MonteCarlo(in, in.Assumptions.Volatility, engine.MCSettings{
+	mc := monteCarlo(ctx, "scenarios", in, engine.MCSettings{
 		Runs: mcRunsCompare, Seed: defaultSeed, Correlation: mcCorrelation,
 	})
 	row.MCRate = mc.SuccessRate()
 
 	full, ok := 0, 0
-	for _, st := range engine.Rolling(in, hs) {
+	for _, st := range rolling(ctx, "scenarios", in, hs) {
 		if st.Partial {
 			continue
 		}
@@ -292,6 +293,12 @@ func (s *Server) handleCreateScenario(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	// Audit trail: which plan a later error belongs to, and where it came from.
+	// Plan names are user text, so only IDs and the preset are logged.
+	s.log.InfoContext(r.Context(), "plan created",
+		"horizonte.plan.id", id,
+		"horizonte.plan.source_id", src,
+		"horizonte.plan.preset", preset)
 	http.Redirect(w, r, "/scenarios", http.StatusSeeOther)
 }
 
@@ -314,6 +321,7 @@ func (s *Server) handleActivatePlan(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	s.log.InfoContext(r.Context(), "plan activated", "horizonte.plan.id", id)
 	next := safeRedirect(r.FormValue("next"))
 	if r.FormValue("next") == "" {
 		next = "/scenarios"
@@ -345,8 +353,17 @@ func (s *Server) handleDeletePlan(w http.ResponseWriter, r *http.Request) {
 		s.handleNotFound(w, r)
 		return
 	}
-	if err := s.store.DeletePlan(r.Context(), id); err != nil &&
-		!errors.Is(err, store.ErrNotFound) && !errors.Is(err, store.ErrLastPlan) {
+	err := s.store.DeletePlan(r.Context(), id)
+	switch {
+	case err == nil:
+		s.log.InfoContext(r.Context(), "plan deleted", "horizonte.plan.id", id)
+	case errors.Is(err, store.ErrLastPlan):
+		// The UI hides the delete button on the last plan, so reaching this
+		// means a stale page or a UI bug worth knowing about.
+		s.log.WarnContext(r.Context(), "plan delete refused",
+			"horizonte.plan.id", id, "horizonte.plan.refused_reason", "last_plan")
+	case errors.Is(err, store.ErrNotFound):
+	default:
 		s.serverError(w, r, err)
 		return
 	}
@@ -379,8 +396,17 @@ func (s *Server) handleExportPlan(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-%s.json"`, slug(p.Name), now.Format("2006-01-02")))
 	w.Header().Set("Cache-Control", "no-store")
 	if err := backup.Write(w, backup.FromSnapshot(p.Name, snap, now)); err != nil {
-		s.log.Error("export plan", "err", err)
+		// Headers are already sent, so the user gets a truncated file and no
+		// error page: this log is the only trace of it.
+		countExport(r.Context(), "plan", false)
+		s.log.ErrorContext(r.Context(), "export failed",
+			"horizonte.export.scope", "plan", "horizonte.plan.id", id,
+			"error.type", fmt.Sprintf("%T", err), "error.message", err.Error())
+		return
 	}
+	countExport(r.Context(), "plan", true)
+	s.log.InfoContext(r.Context(), "export completed",
+		"horizonte.export.scope", "plan", "horizonte.export.plans", 1, "horizonte.plan.id", id)
 }
 
 // POST /scenarios/import: create a new plan from a JSON file and make it active.
@@ -390,7 +416,11 @@ func (s *Server) handleImportPlan(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	fail := func(msg string) {
+	fail := func(msg string, reason importReject) {
+		// Expected for bad files, but a run of "format" or "version" rejections
+		// usually means an export/import mismatch between releases.
+		s.log.WarnContext(r.Context(), "import rejected", reason.attrs()...)
+		countImport(r.Context(), "rejected", reason.Reason)
 		page, err := s.buildScenariosPage(r.Context(), fc.lang, fc.now)
 		if err != nil {
 			s.serverError(w, r, err)
@@ -400,26 +430,34 @@ func (s *Server) handleImportPlan(w http.ResponseWriter, r *http.Request) {
 		s.page(w, r, http.StatusUnprocessableEntity, "scenarios", "scenarios.title", page)
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, backup.MaxSize+64<<10)
-	file, _, err := r.FormFile("file")
+	file, header, err := r.FormFile("file")
 	if err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
-			fail(s.catalog.T(fc.lang, "import.error.too_large"))
+			fail(s.catalog.T(fc.lang, "import.error.too_large"), importReject{Reason: "too_large"})
 		} else {
-			fail(s.catalog.T(fc.lang, "import.error.no_file"))
+			fail(s.catalog.T(fc.lang, "import.error.no_file"), importReject{Reason: "no_file"})
 		}
 		return
 	}
 	defer file.Close()
+	// File size spread tells whether the backup.MaxSize limit fits real files.
+	meter(r.Context()).Distribution("horizonte.import.file_size", float64(header.Size),
+		sentry.WithUnit(sentry.UnitByte))
 	entries, err := backup.Read(file, fc.now)
 	if err != nil {
-		fail(s.importErrorMessage(fc.lang, err))
+		fail(s.importErrorMessage(fc.lang, err), classifyImportError(err))
 		return
 	}
-	if _, err := s.importEntries(r.Context(), entries); err != nil {
+	ids, err := s.importEntries(r.Context(), entries)
+	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
+	countImport(r.Context(), "completed", "")
+	s.log.InfoContext(r.Context(), "import completed",
+		"horizonte.import.plans", len(ids),
+		"horizonte.import.format_version", backup.Version)
 	http.Redirect(w, r, "/scenarios", http.StatusSeeOther)
 }
 
@@ -482,8 +520,45 @@ func (s *Server) handleExportAll(w http.ResponseWriter, r *http.Request) {
 		slug(s.catalog.T(fc.lang, "scenarios.export_all_file")), now.Format("2006-01-02")))
 	w.Header().Set("Cache-Control", "no-store")
 	if err := backup.Write(w, backup.FromEntries(entries, now)); err != nil {
-		s.log.Error("export plans", "err", err)
+		countExport(r.Context(), "all", false)
+		s.log.ErrorContext(r.Context(), "export failed",
+			"horizonte.export.scope", "all", "horizonte.export.plans", len(entries),
+			"error.type", fmt.Sprintf("%T", err), "error.message", err.Error())
+		return
 	}
+	countExport(r.Context(), "all", true)
+	s.log.InfoContext(r.Context(), "export completed",
+		"horizonte.export.scope", "all", "horizonte.export.plans", len(entries))
+}
+
+// importReject is a log-safe description of why an import was refused: the
+// error category plus, for invalid records, the section and field name. The
+// plan and record names in backup.InvalidError are user text and are left out.
+type importReject struct {
+	Reason, Section, Field string
+}
+
+func classifyImportError(err error) importReject {
+	var ie *backup.InvalidError
+	switch {
+	case errors.Is(err, backup.ErrNotPlan):
+		return importReject{Reason: "format"}
+	case errors.Is(err, backup.ErrVersion):
+		return importReject{Reason: "version"}
+	case errors.Is(err, backup.ErrTooLarge):
+		return importReject{Reason: "too_large"}
+	case errors.As(err, &ie):
+		return importReject{Reason: "invalid", Section: ie.Section, Field: ie.Field}
+	}
+	return importReject{Reason: "format"}
+}
+
+func (r importReject) attrs() []any {
+	a := []any{"horizonte.import.reject_reason", r.Reason}
+	if r.Section != "" {
+		a = append(a, "horizonte.import.section", r.Section, "horizonte.import.field", r.Field)
+	}
+	return a
 }
 
 func (s *Server) importErrorMessage(lang i18n.Lang, err error) string {

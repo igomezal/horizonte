@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/getsentry/sentry-go v0.50.0
+	github.com/getsentry/sentry-go/slog v0.50.0
 	modernc.org/sqlite v1.59.0
 )
 

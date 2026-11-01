@@ -29,9 +29,19 @@ type querier interface {
 
 // Store wraps the SQLite connection.
 type Store struct {
-	DB *sql.DB
-	q  querier // DB, or the transaction of an InTx call
+	DB        *sql.DB
+	q         querier // DB, or the transaction of an InTx call
+	migration MigrationResult
 }
+
+// MigrationResult describes what Open did to the database schema.
+type MigrationResult struct {
+	From, To int // schema version before and after Open
+	Applied  int // number of migrations applied
+}
+
+// Migration reports the schema migrations run by Open.
+func (s *Store) Migration() MigrationResult { return s.migration }
 
 // InTx runs fn with a Store whose queries all happen in one transaction: it
 // commits if fn returns nil and rolls everything back otherwise. Called on a
@@ -132,6 +142,7 @@ func (s *Store) migrate(ctx context.Context) error {
 		`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&current); err != nil {
 		return fmt.Errorf("store: read schema version: %w", err)
 	}
+	s.migration = MigrationResult{From: current, To: current}
 
 	ms, err := loadMigrations()
 	if err != nil {
@@ -157,6 +168,8 @@ func (s *Store) migrate(ctx context.Context) error {
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("store: commit %s: %w", m.name, err)
 		}
+		s.migration.To = m.version
+		s.migration.Applied++
 	}
 	return nil
 }

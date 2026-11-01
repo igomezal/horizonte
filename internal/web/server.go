@@ -20,6 +20,8 @@ type Config struct {
 	Store   *store.Store
 	Catalog *i18n.Catalog
 	Logger  *slog.Logger
+	// AccessLog receives one line per request (defaults to Logger).
+	AccessLog *slog.Logger
 	// Assets must contain templates/ and static/ (ui.FS, or os.DirFS("ui") in dev).
 	Assets fs.FS
 	// Dev re-parses templates on every request.
@@ -128,13 +130,17 @@ func New(cfg Config) (*Server, error) {
 
 	var h http.Handler = mux
 	h = i18n.Middleware(h)
-	h = sameOriginWrites(h)
+	h = sameOriginWrites(cfg.Logger, h)
 	h = securityHeaders(h)
 	// Sentry sits inside recoverPanics: it reports the panic and re-panics so
 	// recoverPanics still renders the 500 page. It is a no-op without a DSN.
 	h = sentryhttp.New(sentryhttp.Options{Repanic: true}).Handle(h)
 	h = s.recoverPanics(h)
-	h = logRequests(cfg.Logger, h)
+	access := cfg.AccessLog
+	if access == nil {
+		access = cfg.Logger
+	}
+	h = logRequests(access, h)
 	s.handler = h
 	return s, nil
 }
@@ -163,7 +169,9 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request, status int, page, 
 
 func (s *Server) serverError(w http.ResponseWriter, r *http.Request, err error) {
 	if err != nil {
-		s.log.Error("server error", "path", r.URL.Path, "err", err)
+		s.log.ErrorContext(r.Context(), "server error",
+			"http.request.method", r.Method, "http.route", r.Pattern,
+			"error.type", fmt.Sprintf("%T", err), "error.message", err.Error())
 		hub := sentry.GetHubFromContext(r.Context())
 		if hub == nil {
 			hub = sentry.CurrentHub()
