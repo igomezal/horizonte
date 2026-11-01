@@ -104,3 +104,18 @@
   {{- else}}<small class="field-hint" id="{{$mid}}-msg" x-show="ms === ''">{{t .hint}}</small>{{end}}
 </div>
 {{end}}
+
+{{/* Account that receives money freed by a paid-off debt. dict: F, label,
+     none (i18n key of the empty option), hint. */}}
+{{define "f-redirect"}}
+{{$id := printf "%s-redirect" .F.DOMID}}{{$cur := index .F.V "redirect"}}{{$err := index .F.E "redirect"}}
+<div class="field{{if $err}} has-error{{end}}">
+  <label for="{{$id}}">{{t .label}}</label>
+  <select id="{{$id}}" name="redirect" aria-describedby="{{$id}}-msg">
+    <option value="">{{t .none}}</option>
+    {{range .F.Accounts}}<option value="{{.ID}}"{{if eq (str .ID) $cur}} selected{{end}}>{{.Name}}</option>{{end}}
+  </select>
+  {{if $err}}<small class="field-error" id="{{$id}}-msg">{{t $err}}</small>
+  {{else}}<small class="field-hint" id="{{$id}}-msg">{{t .hint}}</small>{{end}}
+</div>
+{{end}}

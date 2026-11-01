@@ -145,6 +145,9 @@ func (s *Server) loadInput(ctx context.Context, fc finCtx) (engine.Input, error)
 	if in.Milestones, err = s.store.ListMilestones(ctx, fc.plan); err != nil {
 		return in, err
 	}
+	if in.Prepayments, err = s.store.ListPrepayments(ctx, fc.plan); err != nil {
+		return in, err
+	}
 	in.Assumptions, err = s.store.GetAssumptions(ctx, fc.plan)
 	return in, err
 }

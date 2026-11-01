@@ -305,6 +305,9 @@ type Debt struct {
 	Balance        Cents   // outstanding principal
 	AnnualRate     float64 // nominal annual rate (TIN)
 	MonthlyPayment Cents
+	// RedirectAccountID receives the freed instalment once the debt is paid
+	// off. Nil: it becomes unallocated money like any other surplus.
+	RedirectAccountID *int64
 }
 
 // Validate checks the debt.

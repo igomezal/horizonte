@@ -43,6 +43,8 @@ func itemID(item any) int64 {
 		return v.ID
 	case domain.Milestone:
 		return v.ID
+	case domain.Prepayment:
+		return v.ID
 	}
 	return 0
 }
@@ -322,15 +324,17 @@ func newResources(st *store.Store) map[string]*resource {
 				return map[string]string{
 					"name": d.Name, "kind": string(d.Kind), "balance": inMoney(lang, d.Balance),
 					"rate": inPercent(lang, d.AnnualRate), "payment": inMoney(lang, d.MonthlyPayment),
+					"redirect": inOwner(d.RedirectAccountID),
 				}
 			},
 			parse: func(p *formParser, now domain.Month) (any, domain.Errors) {
 				it := domain.Debt{
-					Name:           p.str("name"),
-					Kind:           domain.DebtKind(p.str("kind")),
-					Balance:        p.money("balance", true),
-					AnnualRate:     p.percent("rate"),
-					MonthlyPayment: p.money("payment", true),
+					Name:              p.str("name"),
+					Kind:              domain.DebtKind(p.str("kind")),
+					Balance:           p.money("balance", true),
+					AnnualRate:        p.percent("rate"),
+					MonthlyPayment:    p.money("payment", true),
+					RedirectAccountID: p.owner("redirect"),
 				}
 				p.merge(it.Validate())
 				return it, p.errs
@@ -349,6 +353,53 @@ func newResources(st *store.Store) map[string]*resource {
 				}
 				return t
 			},
+		},
+		{
+			kind: "prepayments",
+			list: func(ctx context.Context, plan int64) ([]any, error) { return toAny(st.ListPrepayments(ctx, plan)) },
+			get: func(ctx context.Context, plan, id int64) (any, error) {
+				return st.GetPrepayment(ctx, plan, id)
+			},
+			values: func(lang i18n.Lang, item any) map[string]string {
+				if item == nil {
+					return map[string]string{"frequency": string(domain.PrepayOnce), "mode": string(domain.ReduceTerm)}
+				}
+				p := item.(domain.Prepayment)
+				return map[string]string{
+					"debt": strconv.FormatInt(p.DebtID, 10), "amount": inMoney(lang, p.Amount),
+					"frequency": string(p.Frequency), "mode": string(p.Mode), "fee": inPercent(lang, p.FeeRate),
+					"start": p.Start.String(), "end": p.End.String(),
+					"start_ms": inOwner(p.StartMS), "end_ms": inOwner(p.EndMS),
+					"redirect": inOwner(p.RedirectAccountID),
+				}
+			},
+			parse: func(p *formParser, now domain.Month) (any, domain.Errors) {
+				it := domain.Prepayment{
+					RedirectAccountID: p.owner("redirect"),
+					Amount:            p.money("amount", true),
+					Frequency:         domain.PrepaymentFrequency(p.str("frequency")),
+					Mode:              domain.PrepaymentMode(p.str("mode")),
+				}
+				if id := p.owner("debt"); id != nil {
+					it.DebtID = *id
+				}
+				if fee := p.optPercent("fee"); fee != nil {
+					it.FeeRate = *fee
+				}
+				it.StartMS, it.Start = p.boundary("start_ms", "start")
+				if it.Frequency != domain.PrepayOnce {
+					it.EndMS, it.End = p.boundary("end_ms", "end")
+				}
+				p.merge(it.Validate())
+				return it, p.errs
+			},
+			save: func(ctx context.Context, plan, id int64, item any) error {
+				it := item.(domain.Prepayment)
+				it.ID, it.PlanID = id, plan
+				_, err := st.SavePrepayment(ctx, it)
+				return err
+			},
+			del: st.DeletePrepayment,
 		},
 	}
 	m := make(map[string]*resource, len(rs))

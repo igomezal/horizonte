@@ -76,7 +76,7 @@ func TestCreateAccountWithSpanishNumbers(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body: %s", rec.Code, body)
 	}
-	if got := rec.Header().Get("HX-Trigger"); got != evFinancesChanged {
+	if got := rec.Header().Get("HX-Trigger"); !strings.Contains(got, evFinancesChanged) || !strings.Contains(got, evAccountsChanged) {
 		t.Errorf("HX-Trigger = %q", got)
 	}
 	if !strings.Contains(body, "Fondo indexado") || !strings.Contains(body, "12.346 €") {

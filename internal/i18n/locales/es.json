@@ -169,7 +169,29 @@
   "debts.payoff": "Terminas de pagar en %s",
   "debts.placeholder": "Hipoteca",
   "debts.rate": "TIN %s",
+  "debts.redirect_to": "Después, la cuota va a %s",
   "debts.title": "Deudas",
+  "debts.without_prepayments": "(sin contar amortizaciones)",
+
+  "prepayments.add": "Añadir amortización",
+  "prepayments.desc": "Pagos extra para reducir una deuda antes de tiempo: una sola vez, cada mes o cada año. Elige si quieres pagar menos cuota o terminar antes. Si ese mes no hay dinero suficiente, se paga lo que haya.",
+  "prepayments.empty": "No hay amortizaciones anticipadas. Añade un pago extra para ver cuánto antes terminas.",
+  "prepayments.need_debt": "Añade primero una deuda para poder amortizarla.",
+  "prepayments.title": "Amortizaciones anticipadas",
+
+  "prepay.fee": "Comisión %s",
+  "prepay.freq.monthly": "Cada mes",
+  "prepay.freq.once": "Una sola vez",
+  "prepay.freq.yearly": "Cada año",
+  "prepay.mode.payment": "Reduce cuota",
+  "prepay.mode.term": "Reduce plazo",
+  "prepay.mode_option.payment": "Reducir cuota",
+  "prepay.mode_option.term": "Reducir plazo",
+  "prepay.once_date": "Una vez, en %s",
+  "prepay.once_ms": "Una vez, al llegar %s",
+  "prepay.redirect_to": "Después, a %s",
+
+  "per_year": "%s/año",
 
   "account.kind.cash": "Cuenta corriente",
   "account.kind.deposit": "Ahorro o depósito",
@@ -223,6 +245,9 @@
 
   "contrib.always": "Mientras sobre dinero",
 
+  "redirect.skip": "No hacer el pago",
+  "redirect.unallocated": "Dinero sin asignar",
+
   "surplus.default": "Primera cuenta corriente",
 
   "field.age": "Edad",
@@ -235,7 +260,9 @@
   "field.contrib_until": "Aportar hasta",
   "field.contribution": "Aportación mensual",
   "field.date": "Mes",
+  "field.debt": "Deuda",
   "field.debt_balance": "Saldo pendiente",
+  "field.debt_redirect": "Al terminar de pagar, la cuota va a",
   "field.end": "Hasta",
   "field.fi_budget": "Gasto anual objetivo",
   "field.fi_multiple": "Veces tu gasto anual",
@@ -251,6 +278,11 @@
   "field.payment": "Cuota mensual",
   "field.payments": "Pagos al año",
   "field.person": "Persona",
+  "field.prepay_amount": "Importe de cada pago",
+  "field.prepay_fee": "Comisión",
+  "field.prepay_mode": "Qué quieres reducir",
+  "field.prepay_redirect": "Si la deuda ya está pagada, el pago va a",
+  "field.prepay_when": "Cuándo",
   "field.rate": "Interés anual (TIN)",
   "field.return": "Rentabilidad anual",
   "field.start": "Desde",
@@ -263,6 +295,7 @@
   "hint.contrib_until": "Las aportaciones paran cuando llega el hito.",
   "hint.contribution": "Lo que añades a esta cuenta cada mes.",
   "hint.debt_balance": "Lo que te queda por pagar, sin intereses futuros.",
+  "hint.debt_redirect": "Desde el mes siguiente, lo que pagabas de cuota se aporta a esta cuenta si ese mes sobra dinero.",
   "hint.end": "Vacío: sin fecha de fin.",
   "hint.fi.barista": "Tus ahorros cubren lo que no paga un trabajo a tiempo parcial.",
   "hint.fi.coast": "Puedes dejar de ahorrar: lo que ya tienes, creciendo con la rentabilidad prevista, llegará a FIRE a la edad objetivo.",
@@ -274,6 +307,10 @@
   "hint.growth": "Déjalo vacío para que suba con la inflación.",
   "hint.inflation": "Sube los gastos e ingresos que siguen la inflación y convierte a euros de hoy.",
   "hint.life_expectancy": "Edad hasta la que quieres que llegue el plan.",
+  "hint.prepay_amount": "Lo que adelantas cada vez, sin contar la comisión.",
+  "hint.prepay_fee": "Porcentaje sobre lo amortizado. La ley lo limita, por ejemplo al 0,25 % en hipotecas variables durante los primeros años.",
+  "hint.prepay_redirect": "Los pagos que tocan cuando la deuda ya no existe se envían a esta cuenta.",
+  "hint.prepay_when": "Para un solo pago, el mes en que lo haces. Para pagos periódicos, cuándo empiezan (vacío: ya).",
   "hint.rate": "Tipo nominal, el que aparece en tu contrato.",
   "hint.return": "Déjalo vacío para usar la rentabilidad por defecto de este tipo de cuenta.",
   "hint.start": "Vacío: ya está activo.",
@@ -282,6 +319,7 @@
 
   "placeholder.default": "Por defecto",
   "placeholder.inflation": "Inflación",
+  "placeholder.no_fee": "Sin comisión",
 
   "form.cancel": "Cancelar",
   "form.delete": "Eliminar",

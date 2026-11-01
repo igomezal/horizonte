@@ -10,6 +10,7 @@
 {{template "fin-section" (index .Data.Sections "incomes")}}
 {{template "fin-section" (index .Data.Sections "expenses")}}
 {{template "fin-section" (index .Data.Sections "debts")}}
+{{template "fin-section" (index .Data.Sections "prepayments")}}
 {{end}}
 
 {{/* ---------- Summary (refreshes itself after any change) ---------- */}}
@@ -44,7 +45,7 @@
 {{define "fin-section"}}
 <section class="section fin-section" id="section-{{.Kind}}" aria-labelledby="h-{{.Kind}}"
   {{- if ne .Kind "people"}} hx-get="/finances/{{.Kind}}" hx-target="this" hx-swap="outerHTML"
-  hx-trigger="people-changed from:body{{if ne .Kind "milestones"}}, milestones-changed from:body{{end}}"{{end}}>
+  hx-trigger="people-changed from:body{{if ne .Kind "milestones"}}, milestones-changed from:body{{end}}{{if or (eq .Kind "prepayments") (eq .Kind "debts")}}, debts-changed from:body, accounts-changed from:body{{end}}"{{end}}>
   <div class="section-head">
     <h2 id="h-{{.Kind}}">{{t (printf "%s.title" .Kind)}}</h2>
     {{if and .Rows .HasTotal}}
@@ -59,7 +60,7 @@
     {{range .Rows}}{{template "fin-row" .}}{{end}}
   </div>
   {{else}}
-  <p class="empty">{{t (printf "%s.empty" .Kind)}}</p>
+  <p class="empty">{{t .EmptyKey}}</p>
   {{end}}
   <div id="new-{{.Kind}}" class="new-slot"></div>
   {{if .CanAdd}}
@@ -79,7 +80,8 @@
   {{else if eq .Kind "accounts"}}{{template "accounts-cells" .}}
   {{else if eq .Kind "incomes"}}{{template "incomes-cells" .}}
   {{else if eq .Kind "expenses"}}{{template "expenses-cells" .}}
-  {{else if eq .Kind "debts"}}{{template "debts-cells" .}}{{end}}
+  {{else if eq .Kind "debts"}}{{template "debts-cells" .}}
+  {{else if eq .Kind "prepayments"}}{{template "prepayments-cells" .}}{{end}}
   <div class="entry-actions" x-show="!confirm">
     <button type="button" class="link-btn" hx-get="/finances/{{.Kind}}/{{.ID}}/edit" hx-target="#{{.Kind}}-{{.ID}}" hx-swap="outerHTML">{{t "form.edit"}}</button>
     <button type="button" class="link-btn danger" @click="confirm = true">{{t "form.delete"}}</button>
@@ -177,10 +179,31 @@
     <span>{{t (printf "debt.kind.%s" (str .Kind))}}</span>
     <span>{{t "debts.rate" (pct .AnnualRate)}}</span>
     <span>{{t "debts.payment" (eur2 .MonthlyPayment)}}</span>
-    {{if $payoff.IsZero}}<span class="negative">{{t "debts.never"}}</span>{{else}}<span>{{t "debts.payoff" (month $payoff)}}</span>{{end}}
+    {{if $payoff.IsZero}}<span class="negative">{{t "debts.never"}}</span>{{else}}<span>{{t "debts.payoff" (month $payoff)}}{{if $.HasPrepayments}} {{t "debts.without_prepayments"}}{{end}}</span>{{end}}
+    {{with $.AccountName .RedirectAccountID}}<span>{{t "debts.redirect_to" .}}</span>{{end}}
   </span>
 </div>
 <div class="entry-amount"><span class="amount">{{eur .Balance}}</span></div>
+{{end}}{{end}}
+
+{{define "prepayments-cells"}}{{with .Item}}{{$f := str .Frequency}}
+<div class="entry-main">
+  <span class="entry-name">{{$.Debt}}</span>
+  <span class="entry-meta">
+    {{if eq $f "once"}}
+      {{with $.MSName .StartMS}}<span>{{t "prepay.once_ms" .}}</span>{{else}}<span>{{t "prepay.once_date" (month .Start)}}</span>{{end}}
+    {{else}}
+      <span>{{t (printf "prepay.freq.%s" $f)}}</span>
+      {{template "stream-dates" (dict "Start" .Start "End" .End "Now" $.Now "StartName" ($.MSName .StartMS) "EndName" ($.MSName .EndMS))}}
+    {{end}}
+    <span>{{t (printf "prepay.mode.%s" (str .Mode))}}</span>
+    {{if .FeeRate}}<span>{{t "prepay.fee" (pct .FeeRate)}}</span>{{end}}
+    {{with $.AccountName .RedirectAccountID}}<span>{{t "prepay.redirect_to" .}}</span>{{end}}
+  </span>
+</div>
+<div class="entry-amount"><span class="amount">
+  {{- if eq $f "monthly"}}{{t "per_month" (eur2 .Amount)}}{{else if eq $f "yearly"}}{{t "per_year" (eur2 .Amount)}}{{else}}{{eur2 .Amount}}{{end -}}
+</span></div>
 {{end}}{{end}}
 
 {{/* ---------- Forms ---------- */}}
@@ -339,6 +362,38 @@
     {{template "field" (dict "F" . "name" "balance" "label" "field.debt_balance" "type" "money" "required" true "hint" "hint.debt_balance")}}
     {{template "field" (dict "F" . "name" "rate" "label" "field.rate" "type" "percent" "required" true "hint" "hint.rate")}}
     {{template "field" (dict "F" . "name" "payment" "label" "field.payment" "type" "money" "required" true)}}
+    {{template "f-redirect" (dict "F" . "label" "field.debt_redirect" "none" "redirect.unallocated" "hint" "hint.debt_redirect")}}
+  </div>
+  {{template "form-actions" .}}
+</form>
+{{end}}
+
+{{define "prepayments-form"}}
+{{template "form-open" .}}
+  <div class="form-grid" x-data="{ freq: '{{index .V "frequency"}}' }">
+    {{$did := printf "%s-debt" .DOMID}}{{$dcur := index .V "debt"}}{{$derr := index .E "debt"}}
+    <div class="field{{if $derr}} has-error{{end}}">
+      <label for="{{$did}}">{{t "field.debt"}}</label>
+      <select id="{{$did}}" name="debt">
+        {{range .Debts}}<option value="{{.ID}}"{{if eq (str .ID) $dcur}} selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+      {{with $derr}}<small class="field-error">{{t .}}</small>{{end}}
+    </div>
+    {{template "field" (dict "F" . "name" "amount" "label" "field.prepay_amount" "type" "money" "required" true "hint" "hint.prepay_amount")}}
+    {{$fid := printf "%s-frequency" .DOMID}}{{$fcur := index .V "frequency"}}
+    <div class="field">
+      <label for="{{$fid}}">{{t "field.frequency"}}</label>
+      <select id="{{$fid}}" name="frequency" x-model="freq">
+        {{range .Opt.PrepayFrequencies}}<option value="{{.}}"{{if eq (str .) $fcur}} selected{{end}}>{{t (printf "prepay.freq.%s" .)}}</option>{{end}}
+      </select>
+    </div>
+    {{template "f-select" (dict "F" . "name" "mode" "label" "field.prepay_mode" "options" .Opt.PrepayModes "prefix" "prepay.mode_option")}}
+    {{template "f-boundary" (dict "F" . "ms" "start_ms" "month" "start" "label" "field.prepay_when" "hint" "hint.prepay_when")}}
+    <div class="field-group" x-show="freq !== 'once'"{{if eq $fcur "once"}} x-cloak{{end}}>
+      {{template "f-boundary" (dict "F" . "ms" "end_ms" "month" "end" "label" "field.end" "hint" "hint.end")}}
+    </div>
+    {{template "field" (dict "F" . "name" "fee" "label" "field.prepay_fee" "type" "percent" "placeholder" "placeholder.no_fee" "hint" "hint.prepay_fee")}}
+    {{template "f-redirect" (dict "F" . "label" "field.prepay_redirect" "none" "redirect.skip" "hint" "hint.prepay_redirect")}}
   </div>
   {{template "form-actions" .}}
 </form>

@@ -69,6 +69,7 @@ type Input struct {
 	Incomes     []domain.Income
 	Expenses    []domain.Expense
 	Debts       []domain.Debt
+	Prepayments []domain.Prepayment
 	Milestones  []domain.Milestone
 	Assumptions Assumptions
 	Start       domain.Month // first projected month (normally the current month)
@@ -93,10 +94,14 @@ type MonthRow struct {
 	Month    domain.Month
 	Deflator float64 // cumulative inflation since the start (1 in the first month)
 
-	Income        float64 // gross
-	Tax           float64
-	Expenses      float64
-	DebtPayments  float64
+	Income       float64 // gross
+	Tax          float64
+	Expenses     float64
+	DebtPayments float64 // instalments plus early repayments (and their fees)
+	Prepayments  float64 // early repayments and fees, included in DebtPayments
+	// Redirected is early-repayment money sent to an account because its debt
+	// was already paid off. It is part of Contributions.
+	Redirected    float64
 	Contributions float64 // moved into accounts from that month's surplus
 	Withdrawals   float64 // taken from accounts to cover a deficit
 	Shortfall     float64 // deficit nothing could cover this month
@@ -185,8 +190,26 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		balances[i] = acc.Balance.Euros()
 	}
 	debts := make([]float64, len(in.Debts))
+	payment := make([]float64, len(in.Debts)) // current instalment ("reducir cuota" lowers it)
+	lastT := make([]int, len(in.Debts))       // month index of the scheduled last payment, -1 if never
+	debtIdx := make(map[int64]int, len(in.Debts))
+	accIdx := make(map[int64]int, len(in.Accounts))
+	for i, acc := range in.Accounts {
+		accIdx[acc.ID] = i
+	}
+	target := func(id *int64) (int, bool) {
+		if id == nil {
+			return 0, false
+		}
+		i, ok := accIdx[*id]
+		return i, ok
+	}
+	freed := make([]float64, len(in.Debts)) // instalment freed by a paid-off debt, for its redirect account
 	for i, d := range in.Debts {
 		debts[i] = d.Balance.Euros()
+		payment[i] = d.MonthlyPayment.Euros()
+		lastT[i] = d.MonthsToPayoff() - 1
+		debtIdx[d.ID] = i
 	}
 	surplusIdx := surplusAccount(in.Accounts, a.SurplusAccountID)
 	order := drawdownOrder(in.Accounts)
@@ -227,7 +250,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 				continue
 			}
 			interest := debts[i] * d.AnnualRate / 12
-			pay := math.Min(d.MonthlyPayment.Euros(), debts[i]+interest)
+			pay := math.Min(payment[i], debts[i]+interest)
 			debts[i] += interest - pay
 			if debts[i] < 0.005 {
 				debts[i] = 0
@@ -237,12 +260,66 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 			if debts[i] == 0 && !paidOff[i] {
 				paidOff[i] = true
 				res.PaidOff = append(res.PaidOff, DebtPaidOff{Debt: d, Month: m})
+				freed[i] = -payment[i] // negative: starts next month
+			}
+		}
+
+		// 3b. Early repayments (amortizaciones anticipadas). They are optional,
+		// so each is capped to the money available (this month's surplus plus
+		// drawable savings) and never causes a shortfall.
+		available := math.Max(0, row.Savings())
+		for _, i := range order {
+			available += balances[i]
+		}
+		for _, pp := range in.Prepayments {
+			i, ok := debtIdx[pp.DebtID]
+			if !ok || !pp.DueIn(resolved, m, in.Start) {
+				continue
+			}
+			if debts[i] <= 0 {
+				// The debt is gone: send the payment to the chosen account, if any.
+				if to, ok := target(pp.RedirectAccountID); ok {
+					amount := math.Min(pp.Amount.Euros(), available)
+					if amount > 0 {
+						available -= amount
+						balances[to] += amount
+						row.Redirected += amount
+					}
+				}
+				continue
+			}
+			amount := math.Min(pp.Amount.Euros(), debts[i])
+			cost := amount * (1 + pp.FeeRate)
+			if cost > available {
+				amount, cost = available/(1+pp.FeeRate), available
+			}
+			if amount <= 0 {
+				continue
+			}
+			available -= cost
+			debts[i] -= amount
+			row.DebtPayments += cost
+			row.Prepayments += cost
+			if debts[i] < 0.005 {
+				debts[i] = 0
+				if !paidOff[i] {
+					paidOff[i] = true
+					res.PaidOff = append(res.PaidOff, DebtPaidOff{Debt: in.Debts[i], Month: m})
+					freed[i] = -payment[i]
+				}
+				continue
+			}
+			// "Reducir cuota": same end date, recalculated instalment.
+			// "Reducir plazo": same instalment, so the debt simply ends sooner.
+			if pp.Mode == domain.ReducePayment && lastT[i] > t {
+				payment[i] = domain.Annuity(debts[i], in.Debts[i].AnnualRate, lastT[i]-t)
 			}
 		}
 
 		// 4. Surplus funds contributions, then the surplus account; a deficit
 		// draws accounts down in order.
-		cash := row.Savings()
+		cash := row.Savings() - row.Redirected
+		row.Contributions += row.Redirected
 		if cash > 0 {
 			for i, acc := range in.Accounts {
 				if !resolved.ContributingIn(acc, m) {
@@ -253,6 +330,17 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 					continue
 				}
 				balances[i] += c
+				row.Contributions += c
+				cash -= c
+			}
+			// Instalments freed by paid-off debts go to their chosen account.
+			for i, d := range in.Debts {
+				to, ok := target(d.RedirectAccountID)
+				if !ok || freed[i] <= 0 || cash <= 0 {
+					continue
+				}
+				c := math.Min(freed[i], cash)
+				balances[to] += c
 				row.Contributions += c
 				cash -= c
 			}
@@ -287,6 +375,11 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 			}
 		}
 
+		for i := range freed {
+			if freed[i] < 0 {
+				freed[i] = -freed[i]
+			}
+		}
 		row.Balances = append([]float64(nil), balances...)
 		for _, d := range debts {
 			row.DebtBalance += d
@@ -460,7 +553,7 @@ type YearRow struct {
 	Last     MonthRow // last projected month of the year (balances, net worth)
 	Deflator float64  // of the last month
 
-	Income, Tax, Expenses, DebtPayments, Contributions, Withdrawals, Shortfall float64
+	Income, Tax, Expenses, DebtPayments, Prepayments, Contributions, Withdrawals, Shortfall float64
 }
 
 // Savings is income after tax, expenses and debt payments for the year.
@@ -478,6 +571,7 @@ func (r Result) Years() []YearRow {
 		y.Tax += m.Tax
 		y.Expenses += m.Expenses
 		y.DebtPayments += m.DebtPayments
+		y.Prepayments += m.Prepayments
 		y.Contributions += m.Contributions
 		y.Withdrawals += m.Withdrawals
 		y.Shortfall += m.Shortfall

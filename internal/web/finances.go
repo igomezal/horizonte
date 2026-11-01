@@ -16,6 +16,8 @@ const (
 	evFinancesChanged = "finances-changed"   // summary and section totals
 	evPeopleChanged   = "people-changed"     // owner names and selects in other sections
 	evMilestonesChg   = "milestones-changed" // milestone names and selects in other sections
+	evDebtsChanged    = "debts-changed"      // debt names in the early-repayments section
+	evAccountsChanged = "accounts-changed"   // account names in debts and early repayments
 )
 
 // formOptions are the choices offered by the selects in the finance forms.
@@ -28,6 +30,8 @@ type formOptions struct {
 	DebtKinds         []domain.DebtKind
 	MilestoneKinds    []domain.MilestoneKind
 	FIVariants        []domain.FIVariant
+	PrepayFrequencies []domain.PrepaymentFrequency
+	PrepayModes       []domain.PrepaymentMode
 }
 
 var financeOptions = &formOptions{
@@ -39,6 +43,8 @@ var financeOptions = &formOptions{
 	DebtKinds:         domain.DebtKinds,
 	MilestoneKinds:    domain.MilestoneKinds,
 	FIVariants:        domain.FIVariants,
+	PrepayFrequencies: domain.PrepaymentFrequencies,
+	PrepayModes:       domain.PrepaymentModes,
 }
 
 type rowView struct {
@@ -51,6 +57,21 @@ type rowView struct {
 	MS map[int64]string
 	// When is a fixed milestone's month (zero for conditional ones).
 	When domain.Month
+	// Debt is the name of an early repayment's debt.
+	Debt string
+	// Accounts maps account IDs to names, for "the instalment goes to …".
+	Accounts map[int64]string
+	// HasPrepayments marks debts with early repayments (their payoff date
+	// shown in the row ignores them).
+	HasPrepayments bool
+}
+
+// AccountName returns the name of a linked account, or "" when not linked.
+func (r rowView) AccountName(id *int64) string {
+	if id == nil {
+		return ""
+	}
+	return r.Accounts[*id]
 }
 
 // MSName returns the name of a linked milestone, or "" when not linked.
@@ -68,6 +89,7 @@ type sectionView struct {
 	HasTotal bool // the section shows a headline amount
 	People   []domain.Person
 	CanAdd   bool
+	EmptyKey string // i18n key of the empty state
 }
 
 type formView struct {
@@ -77,6 +99,8 @@ type formView struct {
 	E          domain.Errors
 	People     []domain.Person
 	Milestones []domain.Milestone
+	Debts      []domain.Debt
+	Accounts   []domain.Account // destinations for money freed by paid-off debts
 	Opt        *formOptions
 	Now        domain.Month
 }
@@ -153,14 +177,46 @@ func (s *Server) loadSection(ctx context.Context, fc finCtx, res *resource) (sec
 	for _, m := range milestones {
 		msNames[m.ID] = m.Name
 	}
-	sv := sectionView{Kind: res.kind, People: people, CanAdd: true}
+	sv := sectionView{Kind: res.kind, People: people, CanAdd: true, EmptyKey: res.kind + ".empty"}
+	debtNames, prepaid, accNames := map[int64]string{}, map[int64]bool{}, map[int64]string{}
+	if res.kind == "debts" || res.kind == "prepayments" {
+		accounts, err := s.store.ListAccounts(ctx, fc.plan)
+		if err != nil {
+			return sectionView{}, err
+		}
+		for _, a := range accounts {
+			accNames[a.ID] = a.Name
+		}
+		debts, err := s.store.ListDebts(ctx, fc.plan)
+		if err != nil {
+			return sectionView{}, err
+		}
+		for _, d := range debts {
+			debtNames[d.ID] = d.Name
+		}
+		pps, err := s.store.ListPrepayments(ctx, fc.plan)
+		if err != nil {
+			return sectionView{}, err
+		}
+		for _, p := range pps {
+			prepaid[p.DebtID] = true
+		}
+		if res.kind == "prepayments" && len(debts) == 0 {
+			sv.CanAdd, sv.EmptyKey = false, "prepayments.need_debt"
+		}
+	}
 	for _, it := range items {
-		rv := rowView{Kind: res.kind, ID: itemID(it), Item: it, Now: fc.now, MS: msNames}
+		rv := rowView{Kind: res.kind, ID: itemID(it), Item: it, Now: fc.now, MS: msNames, Accounts: accNames}
 		if o := itemOwner(it); o != nil {
 			rv.Owner = names[*o]
 		}
-		if m, ok := it.(domain.Milestone); ok {
-			rv.When, _ = m.FixedMonth(people)
+		switch v := it.(type) {
+		case domain.Milestone:
+			rv.When, _ = v.FixedMonth(people)
+		case domain.Prepayment:
+			rv.Debt = debtNames[v.DebtID]
+		case domain.Debt:
+			rv.HasPrepayments = prepaid[v.ID]
 		}
 		sv.Rows = append(sv.Rows, rv)
 	}
@@ -313,16 +369,31 @@ func (s *Server) renderForm(w http.ResponseWriter, r *http.Request, fc finCtx, r
 		s.serverError(w, r, err)
 		return
 	}
+	debts, err := s.store.ListDebts(r.Context(), fc.plan)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	accounts, err := s.store.ListAccounts(r.Context(), fc.plan)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	// With a single person, new records are theirs by default.
 	if id == 0 && len(people) == 1 && status == http.StatusOK {
 		only := strconv.FormatInt(people[0].ID, 10)
+		if len(debts) == 1 {
+			if _, set := v["debt"]; !set {
+				v["debt"] = strconv.FormatInt(debts[0].ID, 10)
+			}
+		}
 		for _, field := range []string{"owner", "person", "coast_person"} {
 			if _, set := v[field]; !set {
 				v[field] = only
 			}
 		}
 	}
-	fv := formView{Kind: res.kind, ID: id, V: v, E: e, People: people, Milestones: milestones, Opt: financeOptions, Now: fc.now}
+	fv := formView{Kind: res.kind, ID: id, V: v, E: e, People: people, Milestones: milestones, Debts: debts, Accounts: surplusCandidates(accounts), Opt: financeOptions, Now: fc.now}
 	if status == http.StatusUnprocessableEntity {
 		// The form posts with the section as target; errors replace the form instead.
 		w.Header().Set("HX-Retarget", "#"+fv.DOMID())
@@ -450,6 +521,13 @@ func (s *Server) triggerChanged(w http.ResponseWriter, res *resource) {
 		w.Header().Set("HX-Trigger", evFinancesChanged+", "+evPeopleChanged)
 	case "milestones":
 		w.Header().Set("HX-Trigger", evFinancesChanged+", "+evMilestonesChg)
+	case "debts":
+		w.Header().Set("HX-Trigger", evFinancesChanged+", "+evDebtsChanged)
+	case "accounts":
+		w.Header().Set("HX-Trigger", evFinancesChanged+", "+evAccountsChanged)
+	case "prepayments":
+		// The debt rows note whether a debt has early repayments.
+		w.Header().Set("HX-Trigger", evFinancesChanged+", "+evDebtsChanged)
 	default:
 		w.Header().Set("HX-Trigger", evFinancesChanged)
 	}

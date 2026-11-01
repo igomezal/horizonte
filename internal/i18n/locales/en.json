@@ -169,7 +169,29 @@
   "debts.payoff": "Paid off in %s",
   "debts.placeholder": "Mortgage",
   "debts.rate": "Rate %s",
+  "debts.redirect_to": "Then the instalment goes to %s",
   "debts.title": "Debts",
+  "debts.without_prepayments": "(not counting early repayments)",
+
+  "prepayments.add": "Add early repayment",
+  "prepayments.desc": "Extra payments to clear a debt early: once, every month or every year. Choose whether to pay less each month or finish sooner. If there is not enough money that month, whatever is available is paid.",
+  "prepayments.empty": "No early repayments. Add an extra payment to see how much sooner you finish.",
+  "prepayments.need_debt": "Add a debt first to repay it early.",
+  "prepayments.title": "Early repayments",
+
+  "prepay.fee": "Fee %s",
+  "prepay.freq.monthly": "Every month",
+  "prepay.freq.once": "Once",
+  "prepay.freq.yearly": "Every year",
+  "prepay.mode.payment": "Lowers the payment",
+  "prepay.mode.term": "Shortens the term",
+  "prepay.mode_option.payment": "Lower the payment",
+  "prepay.mode_option.term": "Shorten the term",
+  "prepay.once_date": "Once, in %s",
+  "prepay.once_ms": "Once, at %s",
+  "prepay.redirect_to": "Then to %s",
+
+  "per_year": "%s/year",
 
   "account.kind.cash": "Current account",
   "account.kind.deposit": "Savings or deposit",
@@ -223,6 +245,9 @@
 
   "contrib.always": "While there is money left over",
 
+  "redirect.skip": "Skip the payment",
+  "redirect.unallocated": "Unallocated money",
+
   "surplus.default": "First current account",
 
   "field.age": "Age",
@@ -235,7 +260,9 @@
   "field.contrib_until": "Contribute until",
   "field.contribution": "Monthly contribution",
   "field.date": "Month",
+  "field.debt": "Debt",
   "field.debt_balance": "Outstanding balance",
+  "field.debt_redirect": "Once paid off, the instalment goes to",
   "field.end": "Until",
   "field.fi_budget": "Target yearly spending",
   "field.fi_multiple": "Times your yearly spending",
@@ -251,6 +278,11 @@
   "field.payment": "Monthly payment",
   "field.payments": "Payments per year",
   "field.person": "Person",
+  "field.prepay_amount": "Amount of each payment",
+  "field.prepay_fee": "Fee",
+  "field.prepay_mode": "What to reduce",
+  "field.prepay_redirect": "If the debt is already paid off, the payment goes to",
+  "field.prepay_when": "When",
   "field.rate": "Annual interest (nominal)",
   "field.return": "Annual return",
   "field.start": "From",
@@ -263,6 +295,7 @@
   "hint.contrib_until": "Contributions stop when the milestone arrives.",
   "hint.contribution": "What you add to this account each month.",
   "hint.debt_balance": "What you still owe, without future interest.",
+  "hint.debt_redirect": "From the next month, what you paid each month is added to this account if there is money left over.",
   "hint.end": "Empty: no end date.",
   "hint.fi.barista": "Your savings cover what a part-time job does not pay.",
   "hint.fi.coast": "You can stop saving: what you already have, growing at the expected return, reaches FIRE by the target age.",
@@ -274,6 +307,10 @@
   "hint.growth": "Leave empty to rise with inflation.",
   "hint.inflation": "Raises income and expenses that follow inflation, and converts to today's euros.",
   "hint.life_expectancy": "The age you want the plan to reach.",
+  "hint.prepay_amount": "What you repay each time, not counting the fee.",
+  "hint.prepay_fee": "Percentage of the amount repaid. Spanish law caps it, for example at 0.25% on variable-rate mortgages in the first years.",
+  "hint.prepay_redirect": "Payments due after the debt is gone are sent to this account.",
+  "hint.prepay_when": "For a single payment, the month you make it. For regular payments, when they start (empty: now).",
   "hint.rate": "The nominal rate in your contract.",
   "hint.return": "Leave empty to use the default return for this account type.",
   "hint.start": "Empty: already active.",
@@ -282,6 +319,7 @@
 
   "placeholder.default": "Default",
   "placeholder.inflation": "Inflation",
+  "placeholder.no_fee": "No fee",
 
   "form.cancel": "Cancel",
   "form.delete": "Delete",

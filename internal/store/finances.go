@@ -407,12 +407,23 @@ func (s *Store) DeleteExpense(ctx context.Context, planID, id int64) error {
 
 // ---------- Debts ----------
 
-const debtCols = `id, plan_id, name, kind, balance_cents, annual_rate, monthly_payment_cents`
+const debtCols = `id, plan_id, name, kind, balance_cents, annual_rate, monthly_payment_cents, redirect_account_id`
 
 func scanDebt(sc interface{ Scan(...any) error }) (domain.Debt, error) {
 	var d domain.Debt
-	err := sc.Scan(&d.ID, &d.PlanID, &d.Name, &d.Kind, &d.Balance, &d.AnnualRate, &d.MonthlyPayment)
+	var redirect sql.NullInt64
+	err := sc.Scan(&d.ID, &d.PlanID, &d.Name, &d.Kind, &d.Balance, &d.AnnualRate, &d.MonthlyPayment, &redirect)
+	d.RedirectAccountID = intPtr(redirect)
 	return d, err
+}
+
+// checkAccount verifies that an optional account ID belongs to the plan.
+func (s *Store) checkAccount(ctx context.Context, planID int64, id *int64) error {
+	if id == nil {
+		return nil
+	}
+	_, err := s.GetAccount(ctx, planID, *id)
+	return err
 }
 
 // ListDebts returns the plan's debts.
@@ -445,14 +456,17 @@ func (s *Store) GetDebt(ctx context.Context, planID, id int64) (domain.Debt, err
 
 // SaveDebt inserts (ID 0) or updates a debt and returns its ID.
 func (s *Store) SaveDebt(ctx context.Context, d domain.Debt) (int64, error) {
+	if err := s.checkAccount(ctx, d.PlanID, d.RedirectAccountID); err != nil {
+		return 0, err
+	}
 	if d.ID == 0 {
-		return s.insert(ctx, `INSERT INTO debts (plan_id, name, kind, balance_cents, annual_rate, monthly_payment_cents)
-			VALUES (?, ?, ?, ?, ?, ?)`,
-			d.PlanID, d.Name, d.Kind, d.Balance, d.AnnualRate, d.MonthlyPayment)
+		return s.insert(ctx, `INSERT INTO debts (plan_id, name, kind, balance_cents, annual_rate, monthly_payment_cents,
+			redirect_account_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			d.PlanID, d.Name, d.Kind, d.Balance, d.AnnualRate, d.MonthlyPayment, nullInt(d.RedirectAccountID))
 	}
 	return d.ID, s.execOne(ctx, `UPDATE debts SET name = ?, kind = ?, balance_cents = ?, annual_rate = ?,
-		monthly_payment_cents = ? WHERE id = ? AND plan_id = ?`,
-		d.Name, d.Kind, d.Balance, d.AnnualRate, d.MonthlyPayment, d.ID, d.PlanID)
+		monthly_payment_cents = ?, redirect_account_id = ? WHERE id = ? AND plan_id = ?`,
+		d.Name, d.Kind, d.Balance, d.AnnualRate, d.MonthlyPayment, nullInt(d.RedirectAccountID), d.ID, d.PlanID)
 }
 
 // DeleteDebt removes a debt.

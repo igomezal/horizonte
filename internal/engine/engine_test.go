@@ -371,3 +371,124 @@ func TestFIREVariants(t *testing.T) {
 		}
 	}
 }
+
+func TestPrepayments(t *testing.T) {
+	// 150.000 € at 3 % with the 25-year instalment (711,32 €): 300 payments.
+	mortgage := domain.Debt{ID: 1, Name: "Hipoteca", Balance: 15000000, AnnualRate: 0.03, MonthlyPayment: 71132}
+	run := func(pps ...domain.Prepayment) Result {
+		return Simulate(Input{
+			People:      []domain.Person{personFor(320)},
+			Accounts:    []domain.Account{{ID: 1, Kind: domain.AccountCash, Balance: 100000000}},
+			Debts:       []domain.Debt{mortgage},
+			Prepayments: pps,
+			Assumptions: flat(),
+			Start:       start,
+		})
+	}
+	base := run()
+	if base.PaidOff[0].Month != start.AddMonths(299) {
+		t.Fatalf("baseline payoff = %v", base.PaidOff[0].Month)
+	}
+
+	// Reducir plazo: 20.000 € in month 12 keeps the instalment and ends sooner.
+	term := run(domain.Prepayment{DebtID: 1, Amount: 2000000, Frequency: domain.PrepayOnce,
+		Mode: domain.ReduceTerm, Start: start.AddMonths(12)})
+	if !term.PaidOff[0].Month.Before(base.PaidOff[0].Month.AddMonths(-24)) {
+		t.Errorf("reduce term should end years earlier: %v", term.PaidOff[0].Month)
+	}
+	if got := term.Months[13].DebtPayments; !near(got, 711.32, 0.01) {
+		t.Errorf("instalment after reducing term = %v, want unchanged 711,32", got)
+	}
+	if got := term.Months[12].Prepayments; got != 20000 {
+		t.Errorf("prepayment = %v", got)
+	}
+
+	// Reducir cuota: same end month, lower instalment.
+	pay := run(domain.Prepayment{DebtID: 1, Amount: 2000000, Frequency: domain.PrepayOnce,
+		Mode: domain.ReducePayment, Start: start.AddMonths(12)})
+	if pay.PaidOff[0].Month != base.PaidOff[0].Month {
+		t.Errorf("reduce payment should keep the end month: %v vs %v", pay.PaidOff[0].Month, base.PaidOff[0].Month)
+	}
+	if got := pay.Months[13].DebtPayments; got >= 711.32 || got < 600 {
+		t.Errorf("instalment after reducing payment = %v, want lower", got)
+	}
+
+	// Monthly extra payments with a 1 % fee: the fee is paid on top.
+	fee := run(domain.Prepayment{DebtID: 1, Amount: 10000, Frequency: domain.PrepayMonthly,
+		Mode: domain.ReduceTerm, FeeRate: 0.01})
+	if got := fee.Months[0].Prepayments; !near(got, 101, 1e-9) {
+		t.Errorf("monthly prepayment with fee = %v, want 101", got)
+	}
+	if !fee.PaidOff[0].Month.Before(base.PaidOff[0].Month) {
+		t.Error("monthly extra payments should shorten the debt")
+	}
+
+	// A lump sum larger than the debt only pays what is owed.
+	all := run(domain.Prepayment{DebtID: 1, Amount: 99999999, Frequency: domain.PrepayOnce,
+		Mode: domain.ReduceTerm, Start: start})
+	if all.PaidOff[0].Month != start || all.Months[1].DebtPayments != 0 {
+		t.Errorf("lump sum should clear the debt at once: %+v", all.PaidOff)
+	}
+}
+
+func TestPrepaymentCappedToAvailableMoney(t *testing.T) {
+	res := Simulate(Input{
+		People:   []domain.Person{personFor(3)},
+		Accounts: []domain.Account{{ID: 1, Kind: domain.AccountCash, Balance: 50000}}, // 500 €
+		Debts:    []domain.Debt{{ID: 1, Balance: 1000000, MonthlyPayment: 10000}},     // 100 €/month
+		Incomes:  []domain.Income{{Amount: 10000, PaymentsPerYear: 12}},               // covers the instalment
+		Prepayments: []domain.Prepayment{{DebtID: 1, Amount: 500000, Frequency: domain.PrepayOnce,
+			Mode: domain.ReduceTerm, Start: start}},
+		Assumptions: flat(),
+		Start:       start,
+	})
+	if got := res.Months[0].Prepayments; got != 500 {
+		t.Errorf("prepayment = %v, want capped to the 500 € available", got)
+	}
+	if res.Failed() {
+		t.Error("an optional prepayment must never make the plan fail")
+	}
+}
+
+func TestRedirectAfterPayoff(t *testing.T) {
+	fund := int64(2)
+	in := Input{
+		People: []domain.Person{personFor(8)},
+		Accounts: []domain.Account{
+			{ID: 1, Kind: domain.AccountCash, Balance: 100000},
+			{ID: 2, Kind: domain.AccountInvestment},
+		},
+		Incomes: []domain.Income{{Amount: 50000, PaymentsPerYear: 12}}, // 500 €/month
+		// 300 € debt at 0 %, 100 €/month: paid off in month 3, then 100 €/month goes to the fund.
+		Debts: []domain.Debt{{ID: 1, Balance: 30000, MonthlyPayment: 10000, RedirectAccountID: &fund}},
+		// 50 €/month extra repayment, also redirected once the debt is gone.
+		Prepayments: []domain.Prepayment{{DebtID: 1, Amount: 5000, Frequency: domain.PrepayMonthly,
+			Mode: domain.ReduceTerm, RedirectAccountID: &fund}},
+		Assumptions: flat(),
+		Start:       start,
+	}
+	res := Simulate(in)
+	// 100 + 50 per month clears 300 € in month 2 (index 1).
+	if res.PaidOff[0].Month != start.AddMonths(1) {
+		t.Fatalf("payoff = %v", res.PaidOff[0].Month)
+	}
+	m := res.Months[2] // first month after payoff
+	if m.Redirected != 50 {
+		t.Errorf("redirected repayment = %v, want 50", m.Redirected)
+	}
+	if m.Contributions != 150 {
+		t.Errorf("contributions = %v, want 150 (freed instalment 100 + repayment 50)", m.Contributions)
+	}
+	fundGrowth := res.Months[3].Balances[1] - res.Months[2].Balances[1]
+	if fundGrowth != 150 {
+		t.Errorf("fund grows %v a month after payoff, want 150", fundGrowth)
+	}
+
+	// Without redirects the money stays as unallocated surplus in cash.
+	in.Debts[0].RedirectAccountID = nil
+	in.Prepayments[0].RedirectAccountID = nil
+	res = Simulate(in)
+	if res.Months[7].Balances[1] != 0 {
+		t.Errorf("fund should stay empty without redirects: %v", res.Months[7].Balances[1])
+	}
+}
