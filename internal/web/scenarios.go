@@ -414,20 +414,79 @@ func (s *Server) handleImportPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	name, snap, err := backup.Read(file, fc.now)
+	entries, err := backup.Read(file, fc.now)
 	if err != nil {
 		fail(s.importErrorMessage(fc.lang, err))
 		return
 	}
-	id, err := s.store.CreatePlanFromSnapshot(r.Context(), name, nil, snap)
-	if err == nil {
-		err = s.store.SetCurrentPlan(r.Context(), id)
-	}
-	if err != nil {
+	if _, err := s.importEntries(r.Context(), entries); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/scenarios", http.StatusSeeOther)
+}
+
+// importEntries creates every plan of a file in one transaction, keeping the
+// scenario links between them, and activates the plan marked active (or the
+// first one). It returns the new plan IDs in file order.
+func (s *Server) importEntries(ctx context.Context, entries []backup.Entry) ([]int64, error) {
+	var ids []int64
+	err := s.store.InTx(ctx, func(tx *store.Store) error {
+		newID := map[int64]int64{}
+		active := int64(0)
+		for _, e := range entries {
+			var parent *int64
+			if e.ParentID != nil { // parents come first in exported files
+				if id, ok := newID[*e.ParentID]; ok {
+					parent = &id
+				}
+			}
+			id, err := tx.CreatePlanFromSnapshot(ctx, e.Name, parent, e.Snapshot)
+			if err != nil {
+				return err
+			}
+			if e.ID > 0 {
+				newID[e.ID] = id
+			}
+			if e.Active || active == 0 {
+				active = id
+			}
+			ids = append(ids, id)
+		}
+		return tx.SetCurrentPlan(ctx, active)
+	})
+	return ids, err
+}
+
+// GET /scenarios/export: every plan in one JSON file.
+func (s *Server) handleExportAll(w http.ResponseWriter, r *http.Request) {
+	fc, err := s.finCtx(r)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	plans, err := s.store.ListPlans(r.Context())
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	var entries []backup.Entry
+	for _, p := range plans {
+		snap, err := s.store.LoadSnapshot(r.Context(), p.ID)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		entries = append(entries, backup.Entry{ID: p.ID, ParentID: p.ParentID, Active: p.ID == fc.plan, Name: p.Name, Snapshot: snap})
+	}
+	now := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-%s.json"`,
+		slug(s.catalog.T(fc.lang, "scenarios.export_all_file")), now.Format("2006-01-02")))
+	w.Header().Set("Cache-Control", "no-store")
+	if err := backup.Write(w, backup.FromEntries(entries, now)); err != nil {
+		s.log.Error("export plans", "err", err)
+	}
 }
 
 func (s *Server) importErrorMessage(lang i18n.Lang, err error) string {
@@ -441,10 +500,14 @@ func (s *Server) importErrorMessage(lang i18n.Lang, err error) string {
 		return s.catalog.T(lang, "import.error.too_large")
 	case errors.As(err, &ie):
 		section := s.catalog.T(lang, "import.section."+ie.Section)
+		msg := s.catalog.T(lang, "import.error.invalid_named", section, ie.Name, ie.Field)
 		if ie.Name == "" {
-			return s.catalog.T(lang, "import.error.invalid", section, ie.Field)
+			msg = s.catalog.T(lang, "import.error.invalid", section, ie.Field)
 		}
-		return s.catalog.T(lang, "import.error.invalid_named", section, ie.Name, ie.Field)
+		if ie.Plan != "" {
+			msg = s.catalog.T(lang, "import.error.in_plan", ie.Plan) + " " + msg
+		}
+		return msg
 	}
 	return s.catalog.T(lang, "import.error.format")
 }

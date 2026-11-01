@@ -1368,3 +1368,8 @@ table.health-phases td:last-child input {
   font-size: 1.25rem;
   margin: 0 0 0.25rem;
 }
+.export-all {
+  margin: 0.75rem 0 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}

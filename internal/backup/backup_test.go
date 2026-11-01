@@ -63,11 +63,14 @@ func roundTrip(t *testing.T, snap store.Snapshot) (string, store.Snapshot) {
 	if err := Write(&buf, FromSnapshot("Mi plan", snap, time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC))); err != nil {
 		t.Fatal(err)
 	}
-	name, got, err := Read(&buf, now)
-	if err != nil {
-		t.Fatalf("read back: %v\n%s", err, buf.String())
+	entries, err := Read(&buf, now)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("read back: %v %d\n%s", err, len(entries), buf.String())
 	}
-	return name, got
+	if e := entries[0]; e.ID != 0 || e.ParentID != nil || e.Active {
+		t.Errorf("single-plan file carries bundle fields: %+v", e)
+	}
+	return entries[0].Name, entries[0].Snapshot
 }
 
 func TestRoundTripKeepsEverything(t *testing.T) {
@@ -104,10 +107,11 @@ func TestEmptyPlanRoundTrips(t *testing.T) {
 func TestMissingAssumptionsGetDefaults(t *testing.T) {
 	doc := `{"format":"horizonte/plan","version":1,"plan":{"name":"Mano","people":[{"id":1,"name":"Eva","birth":"1980-01","life_expectancy":90}],
 		"assumptions":{"inflation":0.02,"tax_rate":0.2}}}`
-	_, snap, err := Read(strings.NewReader(doc), now)
+	entries, err := Read(strings.NewReader(doc), now)
 	if err != nil {
 		t.Fatal(err)
 	}
+	snap := entries[0].Snapshot
 	def := engine.DefaultAssumptions()
 	if snap.Assumptions.Inflation != 0.02 || snap.Assumptions.TaxModel != def.TaxModel ||
 		snap.Assumptions.Returns[domain.AccountInvestment] != def.Returns[domain.AccountInvestment] {
@@ -148,7 +152,7 @@ func TestReadRejectsBadFiles(t *testing.T) {
 		{"bad inflation", valid(func(f *File) { f.Plan.Assumptions.Inflation = 3 }), nil, "assumptions", "inflation"},
 	}
 	for _, c := range cases {
-		_, _, err := Read(strings.NewReader(c.doc), now)
+		_, err := Read(strings.NewReader(c.doc), now)
 		if c.err != nil {
 			if !errors.Is(err, c.err) {
 				t.Errorf("%s: err = %v, want %v", c.name, err, c.err)
@@ -160,7 +164,61 @@ func TestReadRejectsBadFiles(t *testing.T) {
 			t.Errorf("%s: err = %v, want invalid %s.%s", c.name, err, c.section, c.field)
 		}
 	}
-	if _, _, err := Read(strings.NewReader(strings.Repeat(" ", MaxSize+1)), now); !errors.Is(err, ErrTooLarge) {
+	if _, err := Read(strings.NewReader(strings.Repeat(" ", MaxSize+1)), now); !errors.Is(err, ErrTooLarge) {
 		t.Errorf("huge file: %v", err)
+	}
+}
+
+func TestBundleRoundTrip(t *testing.T) {
+	base := fullSnapshot()
+	copySnap := fullSnapshot()
+	copySnap.Assumptions.Inflation = 0.04
+	in := []Entry{
+		{ID: 1, Name: "Mi plan", Snapshot: base},
+		{ID: 4, ParentID: ptr(int64(1)), Active: true, Name: "Jubilarme a los 60", Snapshot: copySnap},
+	}
+	var buf bytes.Buffer
+	if err := Write(&buf, FromEntries(in, time.Now())); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `"format": "horizonte/plans"`) {
+		t.Fatalf("not a bundle: %.100s", buf.String())
+	}
+	out, err := Read(&buf, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(out, in) {
+		t.Errorf("bundle round trip:\n got %+v\nwant %+v", out, in)
+	}
+}
+
+func TestBundleValidation(t *testing.T) {
+	bundle := func(edit func(*Bundle)) string {
+		b := FromEntries([]Entry{
+			{ID: 1, Name: "A", Snapshot: fullSnapshot()},
+			{ID: 2, ParentID: ptr(int64(1)), Name: "B", Snapshot: fullSnapshot()},
+		}, time.Now())
+		edit(&b)
+		var buf bytes.Buffer
+		_ = Write(&buf, b)
+		return buf.String()
+	}
+	// A record error names the plan it belongs to.
+	_, err := Read(strings.NewReader(bundle(func(b *Bundle) { b.Plans[1].Accounts[0].Balance = -1 })), now)
+	var ie *InvalidError
+	if !errors.As(err, &ie) || ie.Plan != "B" || ie.Section != "accounts" {
+		t.Errorf("bad record: %v", err)
+	}
+	if _, err := Read(strings.NewReader(bundle(func(b *Bundle) { b.Plans[1].ID = 1 })), now); !errors.As(err, &ie) || ie.Field != "id" {
+		t.Errorf("duplicate plan id: %v", err)
+	}
+	if _, err := Read(strings.NewReader(bundle(func(b *Bundle) { b.Plans = nil })), now); !errors.As(err, &ie) || ie.Field != "plans" {
+		t.Errorf("empty bundle: %v", err)
+	}
+	// A parent outside the file is dropped.
+	out, err := Read(strings.NewReader(bundle(func(b *Bundle) { b.Plans[1].ParentID = ptr(int64(9)) })), now)
+	if err != nil || out[1].ParentID != nil {
+		t.Errorf("dangling parent: %v %+v", err, out[1].ParentID)
 	}
 }

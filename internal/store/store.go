@@ -33,8 +33,12 @@ type Store struct {
 }
 
 // InTx runs fn with a Store whose queries all happen in one transaction: it
-// commits if fn returns nil and rolls everything back otherwise.
+// commits if fn returns nil and rolls everything back otherwise. Called on a
+// Store that is already in a transaction, fn joins that transaction.
 func (s *Store) InTx(ctx context.Context, fn func(tx *Store) error) error {
+	if _, ok := s.q.(*sql.Tx); ok {
+		return fn(s)
+	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err

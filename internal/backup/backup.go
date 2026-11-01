@@ -19,11 +19,16 @@ import (
 	"github.com/igomezal/horizonte/internal/store"
 )
 
-// Format identifies a plan file; Version is bumped on incompatible changes.
+// Format identifies a single-plan file and BundleFormat a file with several
+// plans; Version is bumped on incompatible changes.
 const (
-	Format  = "horizonte/plan"
-	Version = 1
+	Format       = "horizonte/plan"
+	BundleFormat = "horizonte/plans"
+	Version      = 1
 )
+
+// maxPlans caps the plans in a bundle.
+const maxPlans = 50
 
 // MaxSize is the largest file accepted on import.
 const MaxSize = 2 << 20
@@ -40,8 +45,20 @@ type File struct {
 	Plan       Plan   `json:"plan"`
 }
 
-// Plan is a plan's records and assumptions.
+// Bundle is the JSON document with every plan.
+type Bundle struct {
+	Format     string `json:"format"`
+	Version    int    `json:"version"`
+	ExportedAt string `json:"exported_at,omitempty"`
+	Plans      []Plan `json:"plans"`
+}
+
+// Plan is a plan's records and assumptions. In a bundle, ID identifies the
+// plan, ParentID the plan it was copied from and Active the plan in use.
 type Plan struct {
+	ID          int64        `json:"id,omitempty"`
+	ParentID    *int64       `json:"parent_id,omitempty"`
+	Active      bool         `json:"active,omitempty"`
 	Name        string       `json:"name"`
 	People      []Person     `json:"people"`
 	Milestones  []Milestone  `json:"milestones"`
@@ -170,8 +187,32 @@ func mkSpan(start, end domain.Month, sms, ems *int64) span {
 	return span{Start: month(start), End: month(end), StartMS: sms, EndMS: ems}
 }
 
+// Entry is one plan of a bundle, on export or import.
+type Entry struct {
+	ID       int64
+	ParentID *int64
+	Active   bool
+	Name     string
+	Snapshot store.Snapshot
+}
+
 // FromSnapshot builds the file for a plan.
 func FromSnapshot(name string, snap store.Snapshot, now time.Time) File {
+	return File{Format: Format, Version: Version, ExportedAt: now.UTC().Format(time.RFC3339), Plan: planFrom(name, snap)}
+}
+
+// FromEntries builds the file with every plan.
+func FromEntries(entries []Entry, now time.Time) Bundle {
+	b := Bundle{Format: BundleFormat, Version: Version, ExportedAt: now.UTC().Format(time.RFC3339), Plans: []Plan{}}
+	for _, e := range entries {
+		p := planFrom(e.Name, e.Snapshot)
+		p.ID, p.ParentID, p.Active = e.ID, e.ParentID, e.Active
+		b.Plans = append(b.Plans, p)
+	}
+	return b
+}
+
+func planFrom(name string, snap store.Snapshot) Plan {
 	p := Plan{Name: name, People: []Person{}, Milestones: []Milestone{}, Accounts: []Account{}, Incomes: []Income{},
 		Expenses: []Expense{}, Debts: []Debt{}, Prepayments: []Prepayment{}}
 	for _, x := range snap.People {
@@ -214,7 +255,7 @@ func FromSnapshot(name string, snap store.Snapshot, now time.Time) File {
 	for _, k := range a.Order {
 		p.Assumptions.Order = append(p.Assumptions.Order, string(k))
 	}
-	return File{Format: Format, Version: Version, ExportedAt: now.UTC().Format(time.RFC3339), Plan: p}
+	return p
 }
 
 func kindMap(m map[domain.AccountKind]float64) map[string]float64 {
@@ -225,8 +266,8 @@ func kindMap(m map[domain.AccountKind]float64) map[string]float64 {
 	return out
 }
 
-// Write encodes the file as indented JSON.
-func Write(w io.Writer, f File) error {
+// Write encodes a File or Bundle as indented JSON.
+func Write(w io.Writer, f any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(f)
@@ -243,6 +284,7 @@ var (
 
 // InvalidError reports a record that does not pass validation.
 type InvalidError struct {
+	Plan    string // in a bundle, the plan the record belongs to
 	Section string // people, milestones, accounts, incomes, expenses, debts, prepayments, assumptions, plan
 	Name    string // the record's name, when it has one
 	Field   string // field that failed
@@ -270,25 +312,86 @@ func parseMonth(section, name, field, s string) (domain.Month, error) {
 	return m, nil
 }
 
-// Read decodes and validates a plan file. now is the current month (birth
-// dates in the future are rejected). The snapshot keeps the file's ids.
-func Read(r io.Reader, now domain.Month) (string, store.Snapshot, error) {
-	var snap store.Snapshot
+// Read decodes and validates a single-plan file or a bundle. now is the
+// current month (birth dates in the future are rejected). Snapshots keep the
+// file's ids. In a bundle, a parent outside the file is dropped.
+func Read(r io.Reader, now domain.Month) ([]Entry, error) {
 	data, err := io.ReadAll(io.LimitReader(r, MaxSize+1))
 	if err != nil {
-		return "", snap, err
+		return nil, err
 	}
 	if len(data) > MaxSize {
-		return "", snap, ErrTooLarge
+		return nil, ErrTooLarge
 	}
-	var f File
-	if err := json.Unmarshal(data, &f); err != nil || f.Format != Format {
-		return "", snap, ErrNotPlan
+	var head struct {
+		Format  string `json:"format"`
+		Version int    `json:"version"`
 	}
-	if f.Version > Version || f.Version < 1 {
-		return "", snap, ErrVersion
+	if err := json.Unmarshal(data, &head); err != nil {
+		return nil, ErrNotPlan
 	}
-	p := f.Plan
+	var plans []Plan
+	bundle := head.Format == BundleFormat
+	switch head.Format {
+	case Format:
+		var f File
+		if err := json.Unmarshal(data, &f); err != nil {
+			return nil, ErrNotPlan
+		}
+		plans = []Plan{f.Plan}
+	case BundleFormat:
+		var b Bundle
+		if err := json.Unmarshal(data, &b); err != nil {
+			return nil, ErrNotPlan
+		}
+		plans = b.Plans
+	default:
+		return nil, ErrNotPlan
+	}
+	if head.Version > Version || head.Version < 1 {
+		return nil, ErrVersion
+	}
+	if len(plans) == 0 {
+		return nil, &InvalidError{Section: "plan", Field: "plans"}
+	}
+	if len(plans) > maxPlans {
+		return nil, ErrTooLarge
+	}
+
+	ids := map[int64]bool{}
+	var out []Entry
+	for _, p := range plans {
+		if bundle {
+			if p.ID <= 0 || ids[p.ID] {
+				return nil, &InvalidError{Plan: p.Name, Section: "plan", Field: "id"}
+			}
+			ids[p.ID] = true
+		}
+		name, snap, err := readPlan(p, now)
+		if err != nil {
+			var ie *InvalidError
+			if bundle && errors.As(err, &ie) {
+				ie.Plan = p.Name
+			}
+			return nil, err
+		}
+		e := Entry{Name: name, Snapshot: snap}
+		if bundle {
+			e.ID, e.ParentID, e.Active = p.ID, p.ParentID, p.Active
+		}
+		out = append(out, e)
+	}
+	for i := range out {
+		if out[i].ParentID != nil && (!ids[*out[i].ParentID] || *out[i].ParentID == out[i].ID) {
+			out[i].ParentID = nil
+		}
+	}
+	return out, nil
+}
+
+// readPlan validates one plan and converts it to a snapshot.
+func readPlan(p Plan, now domain.Month) (string, store.Snapshot, error) {
+	var snap store.Snapshot
 	if n := len([]rune(p.Name)); n == 0 || n > 80 {
 		return "", snap, &InvalidError{Section: "plan", Field: "name"}
 	}

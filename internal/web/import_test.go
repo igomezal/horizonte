@@ -82,3 +82,56 @@ func TestImportRejectsBadFiles(t *testing.T) {
 		t.Errorf("a rejected file must not create plans: %d", len(plans))
 	}
 }
+
+func TestExportAllThenImport(t *testing.T) {
+	s, st := newFinanceServer(t)
+	seedCashflow(t, s)
+	ctx := context.Background()
+	src, _ := st.CurrentPlan(ctx, "x")
+	child, err := st.CopyPlan(ctx, src, "Jubilarme a los 60")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.SetCurrentPlan(ctx, child)
+
+	rec, file := do(s, httptest.NewRequest("GET", "/scenarios/export", nil))
+	if rec.Code != http.StatusOK || !strings.HasPrefix(rec.Header().Get("Content-Disposition"), `attachment; filename="planes-`) {
+		t.Fatalf("export all: %d %q", rec.Code, rec.Header().Get("Content-Disposition"))
+	}
+	if !strings.Contains(file, `"format": "horizonte/plans"`) || strings.Count(file, `"assumptions"`) != 2 {
+		t.Fatalf("bundle: %.300s", file)
+	}
+
+	if rec, body := uploadPlan(s, file); rec.Code != http.StatusSeeOther {
+		t.Fatalf("import: %d %s", rec.Code, body)
+	}
+	plans, _ := st.ListPlans(ctx)
+	if len(plans) != 4 {
+		t.Fatalf("plans = %+v", plans)
+	}
+	imported, importedChild := plans[2], plans[3]
+	if importedChild.ParentID == nil || *importedChild.ParentID != imported.ID || imported.ParentID != nil {
+		t.Errorf("parent link not kept: %+v %+v", imported, importedChild)
+	}
+	if cur, _ := st.CurrentPlan(ctx, "x"); cur != importedChild.ID {
+		t.Errorf("active plan = %d, want the imported copy of the active one (%d)", cur, importedChild.ID)
+	}
+	for i, id := range []int64{src, child} {
+		a, _ := st.PlanCounts(ctx, id)
+		b, _ := st.PlanCounts(ctx, plans[2+i].ID)
+		for table, n := range a {
+			if b[table] != n {
+				t.Errorf("plan %d %s: %d vs %d", i, table, b[table], n)
+			}
+		}
+	}
+
+	// A bad record anywhere rejects the whole file.
+	bad := strings.Replace(file, `"balance": 40000`, `"balance": -1`, 1)
+	if rec, body := uploadPlan(s, bad); rec.Code != http.StatusUnprocessableEntity || !strings.Contains(body, "En el plan «") {
+		t.Errorf("bad bundle: %d", rec.Code)
+	}
+	if after, _ := st.ListPlans(ctx); len(after) != 4 {
+		t.Errorf("a rejected bundle must not create plans: %d", len(after))
+	}
+}

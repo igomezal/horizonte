@@ -109,6 +109,7 @@ func New(cfg Config) (*Server, error) {
 	mux.HandleFunc("POST /scenarios/{id}/activate", s.handleActivatePlan)
 	mux.HandleFunc("POST /scenarios/{id}/rename", s.handleRenamePlan)
 	mux.HandleFunc("POST /scenarios/{id}/delete", s.handleDeletePlan)
+	mux.HandleFunc("GET /scenarios/export", s.handleExportAll)
 	mux.HandleFunc("GET /scenarios/{id}/export", s.handleExportPlan)
 	mux.HandleFunc("POST /scenarios/import", s.handleImportPlan)
 	mux.HandleFunc("POST /plans/switch", s.handleActivatePlan)
