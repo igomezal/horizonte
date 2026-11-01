@@ -264,13 +264,17 @@ h3 {
   outline-color: var(--side-active-mark);
 }
 
+/* !important: Pico's element rules (e.g. full-width buttons) must not undo this. */
 .visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
 }
 
 .main {
@@ -734,6 +738,117 @@ h3 {
   margin: 0;
   padding: 0.45rem 1rem;
   font-size: 0.9375rem;
+}
+
+/* ---------- Plan ---------- */
+.plan-summary .verdict .lead {
+  font-size: 1.3125rem;
+  font-weight: 500;
+  color: var(--app-muted);
+  margin-bottom: 0.75rem;
+  max-width: var(--app-measure);
+}
+.plan-summary .figure {
+  display: block;
+  font-size: clamp(3rem, 7vw, 4rem);
+  margin-bottom: 0.75rem;
+}
+.peak {
+  margin-top: 0.25rem;
+}
+.view-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.5rem 0 0.75rem;
+}
+/* Pico styles [role="group"] as a full-width button bar; keep these compact. */
+.segmented {
+  display: inline-flex;
+  width: auto;
+  margin: 0;
+  border: 1px solid var(--app-rule);
+  border-radius: 6px;
+  box-shadow: none;
+  overflow: hidden;
+}
+.segmented > a {
+  flex: none;
+}
+.segmented a {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--app-muted);
+  text-decoration: none;
+}
+.segmented a + a {
+  border-left: 1px solid var(--app-rule);
+}
+.segmented a:hover {
+  color: var(--app-text);
+}
+.segmented a[aria-current="true"] {
+  background: var(--app-text);
+  color: var(--app-bg);
+}
+.chart-tall {
+  height: 400px;
+}
+
+.form-subhead {
+  font-size: 1rem;
+  margin: 1.75rem 0 0.25rem;
+}
+.form-subhead + .field-hint {
+  margin-bottom: 0.9rem;
+}
+.assumptions .note {
+  margin-top: 1rem;
+}
+
+/* Projection table: tabular figures, hairline rows, sticky header. */
+.table-wrap {
+  overflow: auto;
+  max-height: 34rem;
+  border-top: 1px solid var(--app-rule);
+}
+table.projection {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+table.projection th,
+table.projection td {
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--app-rule);
+  background: transparent;
+  white-space: nowrap;
+  color: var(--app-text);
+}
+table.projection thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--app-bg);
+  font-weight: 600;
+  color: var(--app-muted);
+  border-bottom: 1px solid var(--app-text);
+}
+table.projection tbody th {
+  font-weight: 600;
+}
+table.projection .num {
+  text-align: right;
+}
+table.projection td.negative {
+  color: var(--app-negative);
+}
+table.projection tr.short th,
+table.projection tr.short td {
+  background: color-mix(in srgb, var(--app-negative) 8%, transparent);
 }
 
 /* ---------- Error pages ---------- */

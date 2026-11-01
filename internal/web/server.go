@@ -83,6 +83,10 @@ func New(cfg Config) (*Server, error) {
 	mux.HandleFunc("GET /finances/{kind}/{id}/edit", s.handleEditForm)
 	mux.HandleFunc("PUT /finances/{kind}/{id}", s.handleSave)
 	mux.HandleFunc("DELETE /finances/{kind}/{id}", s.handleDelete)
+
+	mux.HandleFunc("GET /plan", s.handlePlan)
+	mux.HandleFunc("GET /plan/results", s.handlePlanResults)
+	mux.HandleFunc("POST /plan/assumptions", s.handleSaveAssumptions)
 	mux.HandleFunc("/", s.handleNotFound)
 
 	var h http.Handler = mux

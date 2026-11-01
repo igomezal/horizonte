@@ -71,6 +71,24 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
   "Guardar cambios". Errors appear next to their field and the first invalid field gets focus.
 - Each section has a one-line description and an empty state that says what to add first.
 
+## Projections (phase 2)
+
+- **The verdict leads.** A plan page opens with one sentence that answers the question
+  ("Con estas hipótesis, tu dinero llega hasta los 90 años") above the hero figure. When the
+  plan fails, the figure becomes the age the money runs out, in `--app-negative`.
+- **Today's euros by default.** Long horizons are shown deflated; nominal values are one
+  toggle away and every label says which unit is shown.
+- **View toggles** are `.segmented` link groups (`aria-current="true"` marks the active one).
+  They update the URL with `hx-push-url`, so a reload or a shared link keeps the view.
+- **Projection chart:** account balances stack in the non-signal banknote colors
+  (20 € → 50 € → 100 € → 200 €), debt is a red area below zero, net worth is a 2.5px line
+  in the text color, and the month the money runs out is a dashed red marker.
+- **Data tables** (`table.projection`): tabular figures, right-aligned amounts, sticky
+  header, hairline rows, scrolling inside `.table-wrap` (never the page). Negative amounts
+  are red; periods with a shortfall get a faint red row tint.
+- **Settings that drive a result recalculate live** (`hx-trigger="change"`), with a quiet
+  status line ("Guardado. El plan se ha recalculado.") instead of a save button.
+
 ## Motion
 
 - No entrance animations or hover transitions on content.

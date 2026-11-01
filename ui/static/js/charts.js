@@ -82,6 +82,79 @@
     },
   };
 
+  // Projection: stacked account balances, debt below zero, net worth as a line.
+  // Accounts cycle through the non-signal banknote colors (red is reserved for debt).
+  builders.projection = function (spec) {
+    const opt = baseOption();
+    const fmt = moneyFormatter(false);
+    const accountColors = [cssVar("--chart-1"), cssVar("--chart-2"), cssVar("--chart-3"), cssVar("--chart-5")];
+    const text = cssVar("--app-text");
+    const negative = cssVar("--app-negative");
+
+    opt.xAxis.data = spec.categories;
+    opt.xAxis.axisLabel.hideOverlap = true;
+    opt.legend.type = "scroll";
+    opt.tooltip.valueFormatter = (v) => fmt.format(v);
+    opt.tooltip.formatter = function (items) {
+      if (!items.length) return "";
+      const i = items[0].dataIndex;
+      const age = spec.ages && spec.ages[i] ? " · " + spec.ageFormat.replace("%s", spec.ages[i]) : "";
+      const lines = items
+        .filter((it) => it.value !== 0)
+        .map((it) => it.marker + " " + echarts.format.encodeHTML(it.seriesName) +
+          '<span style="float:right;margin-left:1.5em;font-weight:600">' + fmt.format(it.value) + "</span>");
+      return "<strong>" + echarts.format.encodeHTML(spec.categories[i]) + age + "</strong><br>" + lines.join("<br>");
+    };
+
+    const series = (spec.accounts || []).map((s, i) => ({
+      name: s.name,
+      type: "line",
+      stack: "assets",
+      symbol: "none",
+      lineStyle: { width: 1 },
+      areaStyle: { opacity: i < accountColors.length ? 0.8 : 0.45 },
+      color: accountColors[i % accountColors.length],
+      emphasis: { disabled: true },
+      data: s.data,
+    }));
+    if (spec.debt) {
+      series.push({
+        name: spec.debt.name,
+        type: "line",
+        stack: "debt",
+        symbol: "none",
+        lineStyle: { width: 1 },
+        areaStyle: { opacity: 0.5 },
+        color: negative,
+        emphasis: { disabled: true },
+        data: spec.debt.data,
+      });
+    }
+    const net = {
+      name: spec.netWorth.name,
+      type: "line",
+      symbol: "none",
+      z: 5,
+      lineStyle: { width: 2.5, color: text },
+      color: text,
+      emphasis: { disabled: true },
+      data: spec.netWorth.data,
+    };
+    if (spec.failIndex >= 0) {
+      net.markLine = {
+        symbol: "none",
+        silent: true,
+        lineStyle: { color: negative, type: "dashed", width: 1.5 },
+        label: { formatter: spec.failLabel, color: negative, position: "insideEndTop" },
+        data: [{ xAxis: spec.categories[spec.failIndex] }],
+      };
+    }
+    series.push(net);
+    opt.series = series;
+    opt.animation = false;
+    return opt;
+  };
+
   function render(el) {
     const dataEl = document.getElementById(el.dataset.chart);
     if (!dataEl || typeof echarts === "undefined") return;

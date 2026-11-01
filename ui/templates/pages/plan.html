@@ -1,0 +1,128 @@
+{{define "content"}}
+<header class="page-head">
+  <h1>{{t "plan.title"}}</h1>
+  <p class="muted prose">{{t "plan.intro"}}</p>
+</header>
+{{with .Data}}
+{{if not .View.HasPeople}}
+<p class="empty">{{t "plan.no_people"}}</p>
+<p><a href="/finances">{{t "plan.go_finances"}}</a></p>
+{{else}}
+{{template "plan-summary" .View}}
+<section class="section" aria-labelledby="h-assumptions">
+  <h2 id="h-assumptions">{{t "plan.assumptions"}}</h2>
+  <p class="section-desc muted">{{t "plan.assumptions_desc"}}</p>
+  {{template "assumptions-form" .Form}}
+</section>
+{{template "plan-table" .View}}
+{{end}}
+{{end}}
+{{end}}
+
+{{/* Response of GET /plan/results: summary in place, table out of band. */}}
+{{define "plan-results"}}{{template "plan-summary" .}}{{template "plan-table" .}}{{end}}
+
+{{define "plan-toggle"}}
+{{/* dict: opts (target planOpts), on (bool), label (i18n key) */}}
+<a href="/plan?{{.opts.Query}}" hx-get="/plan/results?{{.opts.Query}}" hx-target="#plan-summary" hx-swap="outerHTML"
+   hx-push-url="/plan?{{.opts.Query}}"{{if .on}} aria-current="true"{{end}}>{{t .label}}</a>
+{{end}}
+
+{{define "plan-summary"}}
+<section id="plan-summary" class="plan-summary" aria-label="{{t "plan.result"}}"
+         hx-get="/plan/results?{{.Opts.Query}}" hx-trigger="plan-changed from:body" hx-target="this" hx-swap="outerHTML">
+  <div class="lead-figure verdict">
+    {{if .Failed}}
+    <p class="lead">{{t "plan.fail" (month .FailMonth)}}</p>
+    <span class="figure negative">{{t "plan.age_figure" .FailAge}}</span>
+    <p class="breakdown"><span>{{t "plan.shortfall" (money .Shortfall) .EndAge}}</span></p>
+    {{else}}
+    <p class="lead">{{t "plan.ok" .EndAge}}</p>
+    <span class="figure{{if lt .EndValue 0.0}} negative{{end}}">{{money .EndValue}}</span>
+    <p class="breakdown"><span>{{if .Opts.Real}}{{t "plan.end_value_real"}}{{else}}{{t "plan.end_value_nominal" .EndYear}}{{end}}</span></p>
+    {{end}}
+    {{if .ShowPeak}}<p class="muted peak">{{t "plan.peak" (money .PeakValue) .PeakAge .PeakYear}}</p>{{end}}
+  </div>
+
+  <div class="view-toggles">
+    <div class="segmented" role="group" aria-label="{{t "plan.toggle.units"}}">
+      {{template "plan-toggle" (dict "opts" (.Opts.WithReal true) "on" .Opts.Real "label" "plan.toggle.real")}}
+      {{template "plan-toggle" (dict "opts" (.Opts.WithReal false) "on" (not .Opts.Real) "label" "plan.toggle.nominal")}}
+    </div>
+    <div class="segmented" role="group" aria-label="{{t "plan.toggle.period"}}">
+      {{template "plan-toggle" (dict "opts" (.Opts.WithMonthly false) "on" (not .Opts.Monthly) "label" "plan.toggle.yearly")}}
+      {{template "plan-toggle" (dict "opts" (.Opts.WithMonthly true) "on" .Opts.Monthly "label" "plan.toggle.monthly")}}
+    </div>
+  </div>
+
+  <div class="chart chart-tall" data-chart="plan-chart" role="img" aria-label="{{t "plan.chart.label"}}"></div>
+  <script type="application/json" id="plan-chart">{{json .Chart}}</script>
+  {{if .NoAccounts}}<p class="muted">{{t "plan.no_accounts"}}</p>{{end}}
+</section>
+{{end}}
+
+{{define "plan-table"}}
+<section id="plan-table" class="section" aria-labelledby="h-table"{{if .OOB}} hx-swap-oob="true"{{end}}>
+  <h2 id="h-table">{{if .Opts.Monthly}}{{t "plan.table.monthly"}}{{else}}{{t "plan.table.yearly"}}{{end}}</h2>
+  <p class="section-desc muted">{{if .Opts.Real}}{{t "plan.table.desc_real"}}{{else}}{{t "plan.table.desc_nominal"}}{{end}}</p>
+  <div class="table-wrap" tabindex="0" role="region" aria-labelledby="h-table">
+    <table class="projection">
+      <thead>
+        <tr>
+          <th scope="col">{{if .Opts.Monthly}}{{t "plan.col.month"}}{{else}}{{t "plan.col.year"}}{{end}}</th>
+          <th scope="col">{{t "plan.col.age"}}</th>
+          <th scope="col" class="num">{{t "plan.col.income"}}</th>
+          <th scope="col" class="num">{{t "plan.col.tax"}}</th>
+          <th scope="col" class="num">{{t "plan.col.expenses"}}</th>
+          <th scope="col" class="num">{{t "plan.col.debt"}}</th>
+          <th scope="col" class="num">{{t "plan.col.savings"}}</th>
+          <th scope="col" class="num">{{t "plan.col.net_worth"}}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Rows}}
+        <tr{{if .Short}} class="short"{{end}}>
+          <th scope="row">{{.Label}}</th>
+          <td>{{.Ages}}</td>
+          <td class="num">{{money .Income}}</td>
+          <td class="num">{{money .Tax}}</td>
+          <td class="num">{{money .Expenses}}</td>
+          <td class="num">{{money .DebtPayments}}</td>
+          <td class="num{{if lt .Savings 0.0}} negative{{end}}">{{money .Savings}}</td>
+          <td class="num{{if lt .NetWorth 0.0}} negative{{end}}">{{money .NetWorth}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{end}}
+
+{{define "assumptions-form"}}
+<form id="{{.DOMID}}" class="assumptions" novalidate
+      hx-post="/plan/assumptions" hx-trigger="change, submit" hx-target="this" hx-swap="outerHTML">
+  <div class="form-grid">
+    {{template "field" (dict "F" . "name" "inflation" "label" "field.inflation" "type" "percent" "hint" "hint.inflation")}}
+    {{template "field" (dict "F" . "name" "tax_rate" "label" "field.tax_rate" "type" "percent" "hint" "hint.tax_rate")}}
+    {{$id := printf "%s-surplus" .DOMID}}{{$cur := index .V "surplus"}}{{$err := index .E "surplus"}}
+    <div class="field{{if $err}} has-error{{end}}">
+      <label for="{{$id}}">{{t "field.surplus"}}</label>
+      <select id="{{$id}}" name="surplus" aria-describedby="{{$id}}-msg">
+        <option value="">{{t "surplus.default"}}</option>
+        {{range .Accounts}}<option value="{{.ID}}"{{if eq (str .ID) $cur}} selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+      {{if $err}}<small class="field-error" id="{{$id}}-msg">{{t $err}}</small>
+      {{else}}<small class="field-hint" id="{{$id}}-msg">{{t "hint.surplus"}}</small>{{end}}
+    </div>
+  </div>
+  <h3 class="form-subhead">{{t "plan.returns"}}</h3>
+  <p class="field-hint">{{t "plan.returns_desc"}}</p>
+  <div class="form-grid">
+    {{range .Kinds}}
+    {{template "field" (dict "F" $ "name" (printf "return_%s" .) "label" (printf "account.kind.%s" .) "type" "percent")}}
+    {{end}}
+  </div>
+  <button type="submit" class="visually-hidden">{{t "plan.recalculate"}}</button>
+  <p class="note muted" aria-live="polite">{{if .Saved}}{{t "plan.saved"}}{{else}}{{t "plan.autosave"}}{{end}}</p>
+</form>
+{{end}}

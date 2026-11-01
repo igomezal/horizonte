@@ -1,0 +1,399 @@
+// Package engine projects a plan month by month. It is pure: no I/O, no
+// globals, so the deterministic projection, Monte Carlo (phase 5) and
+// historical backtests (phase 6) can all reuse Simulate.
+package engine
+
+import (
+	"math"
+
+	"github.com/igomezal/horizonte/internal/domain"
+)
+
+// Assumptions are the plan-wide settings the projection depends on.
+type Assumptions struct {
+	Inflation float64 // annual, e.g. 0.025
+	TaxRate   float64 // flat effective rate on gross income (until phase 9)
+	// Returns is the default annual return per account kind, used when an
+	// account has no return of its own.
+	Returns map[domain.AccountKind]float64
+	// SurplusAccountID receives money left over each month. Nil means the
+	// first current account (or the first account that is not property).
+	SurplusAccountID *int64
+}
+
+// DefaultAssumptions are reasonable long-run nominal values for Spain.
+func DefaultAssumptions() Assumptions {
+	return Assumptions{
+		Inflation: 0.025,
+		TaxRate:   0.20,
+		Returns: map[domain.AccountKind]float64{
+			domain.AccountCash:       0,
+			domain.AccountDeposit:    0.02,
+			domain.AccountInvestment: 0.06,
+			domain.AccountPension:    0.05,
+			domain.AccountRealEstate: 0.03,
+			domain.AccountOther:      0.02,
+		},
+	}
+}
+
+// Validate checks ranges. Field names match the assumptions form.
+func (a Assumptions) Validate() domain.Errors {
+	errs := domain.Errors{}
+	if a.Inflation < -0.05 || a.Inflation > 0.2 {
+		errs.Add("inflation", domain.ErrRange)
+	}
+	if a.TaxRate < 0 || a.TaxRate > 0.6 {
+		errs.Add("tax_rate", domain.ErrRange)
+	}
+	for _, k := range domain.AccountKinds {
+		if r := a.Returns[k]; r < -0.5 || r > 0.5 {
+			errs.Add("return_"+string(k), domain.ErrRange)
+		}
+	}
+	return errs
+}
+
+// AnnualReturn returns the expected annual return of an account.
+func (a Assumptions) AnnualReturn(acc domain.Account) float64 {
+	if acc.AnnualReturn != nil {
+		return *acc.AnnualReturn
+	}
+	return a.Returns[acc.Kind]
+}
+
+// Input is everything a projection needs.
+type Input struct {
+	People      []domain.Person
+	Accounts    []domain.Account
+	Incomes     []domain.Income
+	Expenses    []domain.Expense
+	Debts       []domain.Debt
+	Assumptions Assumptions
+	Start       domain.Month // first projected month (normally the current month)
+}
+
+// EndMonth is the last projected month: when the longest-lived person
+// reaches their life expectancy. Zero when there are no people.
+func (in Input) EndMonth() domain.Month {
+	var end domain.Month
+	for _, p := range in.People {
+		m := p.Birth.AddMonths(p.LifeExpectancy * 12)
+		if end.IsZero() || end.Before(m) {
+			end = m
+		}
+	}
+	return end
+}
+
+// MonthRow is the state at the end of one projected month. Amounts are
+// nominal euros; divide by Deflator for today's euros.
+type MonthRow struct {
+	Month    domain.Month
+	Deflator float64 // cumulative inflation since the start (1 in the first month)
+
+	Income        float64 // gross
+	Tax           float64
+	Expenses      float64
+	DebtPayments  float64
+	Contributions float64 // moved into accounts from that month's surplus
+	Withdrawals   float64 // taken from accounts to cover a deficit
+	Shortfall     float64 // deficit nothing could cover this month
+
+	Balances    []float64 // per account, in Result.Accounts order
+	DebtBalance float64
+	NetWorth    float64
+}
+
+// Savings is what was left after tax, expenses and debt payments (negative
+// when the month ran a deficit).
+func (r MonthRow) Savings() float64 { return r.Income - r.Tax - r.Expenses - r.DebtPayments }
+
+// Assets is the sum of all account balances.
+func (r MonthRow) Assets() float64 {
+	var t float64
+	for _, b := range r.Balances {
+		t += b
+	}
+	return t
+}
+
+// Result is a full projection.
+type Result struct {
+	Accounts  []domain.Account
+	Months    []MonthRow
+	FailMonth domain.Month // first month with a shortfall; zero if the money lasts
+	Shortfall float64      // total uncovered deficit, nominal euros
+}
+
+// Failed reports whether the money ran out at some point.
+func (r Result) Failed() bool { return !r.FailMonth.IsZero() }
+
+// withdrawalOrder is the order accounts are drawn down to cover a deficit.
+// Property is never sold automatically.
+var withdrawalOrder = []domain.AccountKind{
+	domain.AccountCash, domain.AccountDeposit, domain.AccountInvestment,
+	domain.AccountOther, domain.AccountPension,
+}
+
+// monthlyRate converts an annual rate into the equivalent compound monthly rate.
+func monthlyRate(annual float64) float64 { return math.Pow(1+annual, 1.0/12) - 1 }
+
+// growth returns the yearly-stepped growth factor after t months.
+func growth(annual float64, t int) float64 { return math.Pow(1+annual, float64(t/12)) }
+
+// Simulate runs the deterministic projection with each account's expected return.
+func Simulate(in Input) Result {
+	rates := make([]float64, len(in.Accounts))
+	for i, a := range in.Accounts {
+		rates[i] = monthlyRate(in.Assumptions.AnnualReturn(a))
+	}
+	return simulate(in, func(t, i int) float64 { return rates[i] })
+}
+
+// simulate runs the projection with rate(t, i) giving account i's return in month t.
+func simulate(in Input, rate func(t, i int) float64) Result {
+	end := in.EndMonth()
+	res := Result{Accounts: in.Accounts}
+	if end.IsZero() || end.Before(in.Start) {
+		return res
+	}
+	n := in.Start.MonthsUntil(end) + 1
+	a := in.Assumptions
+	infl := monthlyRate(a.Inflation)
+
+	balances := make([]float64, len(in.Accounts))
+	for i, acc := range in.Accounts {
+		balances[i] = acc.Balance.Euros()
+	}
+	debts := make([]float64, len(in.Debts))
+	for i, d := range in.Debts {
+		debts[i] = d.Balance.Euros()
+	}
+	surplusIdx := surplusAccount(in.Accounts, a.SurplusAccountID)
+	order := drawdownOrder(in.Accounts)
+
+	res.Months = make([]MonthRow, 0, n)
+	deflator := 1.0
+	for t := 0; t < n; t++ {
+		m := in.Start.AddMonths(t)
+		if t > 0 {
+			deflator *= 1 + infl
+		}
+		row := MonthRow{Month: m, Deflator: deflator}
+
+		// 1. Investment growth on the balances carried in.
+		for i := range balances {
+			balances[i] *= 1 + rate(t, i)
+		}
+
+		// 2. Income, tax and expenses.
+		for _, inc := range in.Incomes {
+			row.Income += incomeThisMonth(inc, m, t, in.Start, a.Inflation)
+		}
+		row.Tax = row.Income * a.TaxRate
+		for _, e := range in.Expenses {
+			row.Expenses += expenseThisMonth(e, m, t, in.Start, a.Inflation)
+		}
+
+		// 3. Debt payments (fixed instalment, French amortisation).
+		for i, d := range in.Debts {
+			if debts[i] <= 0 {
+				continue
+			}
+			interest := debts[i] * d.AnnualRate / 12
+			pay := math.Min(d.MonthlyPayment.Euros(), debts[i]+interest)
+			debts[i] += interest - pay
+			if debts[i] < 0.005 {
+				debts[i] = 0
+			}
+			row.DebtPayments += pay
+		}
+
+		// 4. Surplus funds contributions, then the surplus account; a deficit
+		// draws accounts down in order.
+		cash := row.Savings()
+		if cash > 0 {
+			for i, acc := range in.Accounts {
+				c := math.Min(acc.MonthlyContribution.Euros(), cash)
+				if c <= 0 {
+					continue
+				}
+				balances[i] += c
+				row.Contributions += c
+				cash -= c
+			}
+			if cash > 0 {
+				if surplusIdx >= 0 {
+					balances[surplusIdx] += cash
+				} else {
+					// No account to hold it: the money is spent.
+					cash = 0
+				}
+			}
+		} else if cash < 0 {
+			need := -cash
+			for _, i := range order {
+				take := math.Min(balances[i], need)
+				if take <= 0 {
+					continue
+				}
+				balances[i] -= take
+				row.Withdrawals += take
+				need -= take
+				if need <= 0 {
+					break
+				}
+			}
+			if need > 0.005 {
+				row.Shortfall = need
+				res.Shortfall += need
+				if res.FailMonth.IsZero() {
+					res.FailMonth = m
+				}
+			}
+		}
+
+		row.Balances = append([]float64(nil), balances...)
+		for _, d := range debts {
+			row.DebtBalance += d
+		}
+		row.NetWorth = row.Assets() - row.DebtBalance
+		res.Months = append(res.Months, row)
+	}
+	return res
+}
+
+func incomeThisMonth(inc domain.Income, m domain.Month, t int, start domain.Month, inflation float64) float64 {
+	if !domain.Active(inc.Start, inc.End, m) {
+		return 0
+	}
+	g := inflation
+	if inc.AnnualGrowth != nil {
+		g = *inc.AnnualGrowth
+	}
+	amount := inc.Amount.Euros() * growth(g, t)
+	switch inc.PaymentsPerYear {
+	case 14: // Spanish salaries: two extra payments, in June and December.
+		if m.Month == 6 || m.Month == 12 {
+			return 2 * amount
+		}
+		return amount
+	case 1:
+		if m.Month == anchorMonth(inc.Start, start) {
+			return amount
+		}
+		return 0
+	default:
+		return amount
+	}
+}
+
+func expenseThisMonth(e domain.Expense, m domain.Month, t int, start domain.Month, inflation float64) float64 {
+	if !domain.Active(e.Start, e.End, m) {
+		return 0
+	}
+	g := inflation
+	if e.AnnualGrowth != nil {
+		g = *e.AnnualGrowth
+	}
+	amount := e.Amount.Euros() * growth(g, t)
+	if e.PaymentsPerYear == 1 {
+		if m.Month == anchorMonth(e.Start, start) {
+			return amount
+		}
+		return 0
+	}
+	return amount
+}
+
+// anchorMonth is the calendar month a yearly payment falls in.
+func anchorMonth(streamStart, planStart domain.Month) int {
+	if !streamStart.IsZero() {
+		return streamStart.Month
+	}
+	return planStart.Month
+}
+
+// surplusAccount picks the index of the account that receives surplus cash.
+func surplusAccount(accounts []domain.Account, chosen *int64) int {
+	if chosen != nil {
+		for i, a := range accounts {
+			if a.ID == *chosen {
+				return i
+			}
+		}
+	}
+	for i, a := range accounts {
+		if a.Kind == domain.AccountCash {
+			return i
+		}
+	}
+	for i, a := range accounts {
+		if a.Kind != domain.AccountRealEstate {
+			return i
+		}
+	}
+	return -1
+}
+
+// drawdownOrder lists account indexes in withdrawal order.
+func drawdownOrder(accounts []domain.Account) []int {
+	var order []int
+	for _, k := range withdrawalOrder {
+		for i, a := range accounts {
+			if a.Kind == k {
+				order = append(order, i)
+			}
+		}
+	}
+	return order
+}
+
+// YearRow aggregates one calendar year of a projection: flows are summed,
+// balances are taken from the year's last month.
+type YearRow struct {
+	Year     int
+	Last     MonthRow // last projected month of the year (balances, net worth)
+	Deflator float64  // of the last month
+
+	Income, Tax, Expenses, DebtPayments, Contributions, Withdrawals, Shortfall float64
+}
+
+// Savings is income after tax, expenses and debt payments for the year.
+func (y YearRow) Savings() float64 { return y.Income - y.Tax - y.Expenses - y.DebtPayments }
+
+// Years groups the monthly rows by calendar year.
+func (r Result) Years() []YearRow {
+	var out []YearRow
+	for _, m := range r.Months {
+		if len(out) == 0 || out[len(out)-1].Year != m.Month.Year {
+			out = append(out, YearRow{Year: m.Month.Year})
+		}
+		y := &out[len(out)-1]
+		y.Income += m.Income
+		y.Tax += m.Tax
+		y.Expenses += m.Expenses
+		y.DebtPayments += m.DebtPayments
+		y.Contributions += m.Contributions
+		y.Withdrawals += m.Withdrawals
+		y.Shortfall += m.Shortfall
+		y.Last = m
+		y.Deflator = m.Deflator
+	}
+	return out
+}
+
+// Peak returns the month with the highest net worth in today's euros.
+func (r Result) Peak() (MonthRow, bool) {
+	if len(r.Months) == 0 {
+		return MonthRow{}, false
+	}
+	best := r.Months[0]
+	for _, m := range r.Months[1:] {
+		if m.NetWorth/m.Deflator > best.NetWorth/best.Deflator {
+			best = m
+		}
+	}
+	return best, true
+}
