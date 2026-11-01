@@ -27,7 +27,7 @@ func TestSuccessPage(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Probabilidad de éxito", "tu dinero llega hasta los 90 años", "escenarios simulados",
-		`"type":"fan"`, `"type":"survival"`, "Mejor caso", ">FIRE<", "Volatilidad",
+		`"type":"fan"`, "te queda dinero cada año", "Mejor caso", ">FIRE<", "Volatilidad",
 		`name="vol_investment"`, `value="16"`, `hx-get="/success/results?seed=1"`, `aria-current="page"`,
 	} {
 		if !strings.Contains(body, want) {

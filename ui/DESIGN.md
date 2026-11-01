@@ -21,8 +21,8 @@ Each color has **one fixed meaning**. Never use a color for decoration.
 | `--verde-100` / `--app-positive` | `#3e8e5a` | `#6cc28b` | Positive values, goals reached |
 | `--rojo-10` / `--app-negative` | `#b8433d` | `#e57b74` | Negative values, shortfalls, debt |
 
-- Chart series follow the banknote order `--chart-1` … `--chart-5`: 20 € blue, 50 € orange,
-  100 € green, 10 € red, 200 € ochre.
+- Chart series use the categorical palette `--series-1` … `--series-7` (see **Charts**);
+  green and red stay reserved for good and bad.
 - When a chart has two or three series, explain colors with **swatches inside the sentence**
   (`.swatch`) and hide the ECharts legend (`hideLegend: true`).
 - No gradients, no shadows on content. The only shadow is the mobile drawer.
@@ -86,9 +86,10 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
   toggle away and every label says which unit is shown.
 - **View toggles** are `.segmented` link groups (`aria-current="true"` marks the active one).
   They update the URL with `hx-push-url`, so a reload or a shared link keeps the view.
-- **Projection chart:** account balances stack in the non-signal banknote colors
-  (20 € → 50 € → 100 € → 200 €), debt is a red area below zero, net worth is a 2.5px line
-  in the text color, and the month the money runs out is a dashed red marker.
+- **Projection chart:** account balances stack in the series palette (in account order),
+  debt is a red area below zero with a solid 0 line, net worth is a 2.25px ink line with its
+  final value at the end, and the month the money runs out is a dashed red marker. The
+  tooltip leads with net worth, then each account top-down like the stack.
 - **Data tables** (`table.projection`): tabular figures, right-aligned amounts, sticky
   header, hairline rows, scrolling inside `.table-wrap` (never the page). Negative amounts
   are red; periods with a shortfall get a faint red row tint.
@@ -114,17 +115,20 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
   (200 €), gaps and debts red, money going into accounts blue, tax and spending neutral ink.
   Flows under 2,5 % of the total have no label on the diagram; the ledger below always lists
   every flow with its share.
-- **Yearly bar charts:** savings rate in green/red by sign (no bar when there is no income);
-  spending stacked by category with debts in red.
+- **Yearly bar charts:** savings rate in green/red by sign (no bar when there is no income).
+  Years below −100 % are cut at −100 % (lighter, square end) with a note above the chart, so
+  one extreme year never flattens the rest; the tooltip keeps the real value. Spending is
+  stacked by category, each category in its fixed colour, debts in red on top.
 
 ## Chance of success (phase 5)
 
 - **The hero figure is the share of scenarios where the money lasts**, followed by one sentence
   about a bad scenario (1 in 10): what is left, or the age the money runs out. No traffic-light
   colouring of the percentage; the words carry the judgement.
-- **Uncertainty is drawn in ink, not in signal colours:** the fan uses two ink bands (80 % and
-  50 % of scenarios) and an ink median; the deterministic plan is a dashed accent line for
-  comparison. The survival curve is an ink step line.
+- **Uncertainty is drawn without signal colours:** the fan uses two blue washes (80 % and
+  50 % of scenarios) and an ink median labelled with its final value; "Tu plan" is the dashed
+  orange line. The survival curve is a blue step line; when every scenario lasts every year it
+  is replaced by one sentence (a flat 100 % line says nothing).
 - **Results are reproducible** (fixed seed) until the user asks for "otros escenarios"; the
   refresh URL carries the seed so settings changes keep the same scenarios.
 - State limits plainly under the results (fixed inflation, correlation used).
@@ -142,9 +146,10 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
   Start years whose plan outruns the data are **partial**: paler (half opacity) with a dotted
   muted outline, a tooltip saying how many years were historical, and they are counted on
   their own line, never in the headline percentage.
-- **Replayed scenario chart:** the scenario as an ink line with a light ink area, the fixed-return
-  plan dashed in accent, a dotted marker where historical data ends and a dashed red one where
-  the money runs out.
+- **Replayed scenario chart:** the scenario as an ink line with a light ink area and its final
+  value at the end, "Tu plan" dashed in orange, a dotted marker where historical data ends and
+  a dashed red one where the money runs out. The heat-map is capped at 820px wide so its cells
+  stay close to square.
 
 ## Scenarios (phase 7)
 
@@ -154,8 +159,9 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
   end value, chance of success, historical result and FIRE age; the active row is tinted with
   the accent and carries an "Activo" badge. Row actions (Activar, Renombrar, Eliminar) sit
   under the name so the table never needs horizontal scrolling for them.
-- **The comparison chart** draws each plan's net worth on the same axes, in the categorical
-  order (ink first), with the active plan's line thicker.
+- **The comparison chart** draws each plan's net worth on the same axes, each plan in its
+  series colour by its place in the list, the active plan's line thicker. With up to four
+  plans, each line ends with the plan's name and final value.
 - Creating a scenario is a plain form (name, source plan, assumption preset) and the new
   scenario becomes the active one, so the next step is simply editing it.
 
@@ -168,6 +174,32 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
   screen readers) instead of drag and drop; every move saves.
 - The verdict gains one muted sentence with the strategy's effect: the range of spending as a
   share of the plan and the year of the lowest point.
+
+## Charts
+
+- **One categorical palette**, `--series-1` … `--series-7`: blue, orange, aqua, violet,
+  magenta, yellow, cyan, with its own steps for dark mode. The order was chosen with the dataviz
+  palette checker: neighbours clear the colour-blind (ΔE ≥ 8) and normal-vision (ΔE ≥ 15)
+  floors in both modes. Series take slots in order and never cycle: past seven they are
+  `--series-other` (gray). Re-run the checker if a value changes.
+- **Green and red mean good and bad** (income, savings rate, debt, money running out) and are
+  never used for identity.
+- **Expense categories have fixed colours** wherever they appear (vivienda blue, alimentación
+  orange, transporte magenta, suministros violet, salud yellow, ocio aqua, educación cyan,
+  otros gray), assigned so that categories next to each other in a stack, or with one missing
+  category between them, stay distinct.
+- **"Tu plan"** (the fixed-return projection) is always a dashed orange line.
+- **Marks:** lines 2–2.25px; washes for uncertainty and single-series areas; stacked fills are
+  separated by a thin line in the surface colour, never a border; bars ≤ 18px with a 4px
+  rounded end. Gridlines are solid hairlines; a solid 0 line appears when values go negative.
+- **Legends mirror the mark** (a block for areas and bars, a stroke for lines, dashes for
+  "Tu plan"); a single series has no legend.
+- **Direct labels are selective:** the final value at the end of the headline line (net
+  worth, median, historical scenario) and, with few plans, each plan's name.
+- **Time axes show the age under the year** when the plan knows it.
+- **Tooltips** list every series at the hovered point: a short line key, the name in muted
+  text, the value in bold; totals first, then the parts in the same order as the stack.
+- A chart that would be flat and empty is replaced by a sentence.
 
 ## Motion
 

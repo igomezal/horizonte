@@ -58,18 +58,21 @@ type mcMilestoneRow struct {
 }
 
 type successView struct {
-	HasPeople  bool
-	Seed       uint64
-	Runs       int
-	Rate       float64
-	EndAge     int
-	BadFailed  bool
-	BadMonth   domain.Month
-	BadAge     int
-	BadEnd     float64
-	Fan        fanChart
-	Survival   survivalChart
-	Milestones []mcMilestoneRow
+	HasPeople bool
+	Seed      uint64
+	Runs      int
+	Rate      float64
+	EndAge    int
+	BadFailed bool
+	BadMonth  domain.Month
+	BadAge    int
+	BadEnd    float64
+	Fan       fanChart
+	Survival  survivalChart
+	// AlwaysLasts: every scenario has money every year, so the survival
+	// chart would be a flat 100 % line; the page says so in words instead.
+	AlwaysLasts bool
+	Milestones  []mcMilestoneRow
 }
 
 type mcSettingsForm struct {
@@ -131,6 +134,10 @@ func (s *Server) buildSuccessView(lang i18n.Lang, in engine.Input, seed uint64) 
 		v.Survival.Categories = append(v.Survival.Categories, label)
 		v.Survival.Ages = append(v.Survival.Ages, age)
 		v.Survival.Data = append(v.Survival.Data, round4(mc.Survival[y]))
+	}
+	v.AlwaysLasts = len(v.Survival.Data) > 0
+	for _, x := range v.Survival.Data {
+		v.AlwaysLasts = v.AlwaysLasts && x >= 1
 	}
 
 	for _, m := range mc.Milestone {

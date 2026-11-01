@@ -41,8 +41,12 @@
 
   <h2 class="chart-title">{{t "mc.survival_title"}}</h2>
   <p class="section-desc muted">{{t "mc.survival_desc"}}</p>
+  {{if .AlwaysLasts}}
+  <p class="callout">{{t "mc.survival_always"}}</p>
+  {{else}}
   <div class="chart" data-chart="mc-survival-{{.Seed}}" role="img" aria-label="{{t "mc.survival_title"}}"></div>
   <script type="application/json" id="mc-survival-{{.Seed}}">{{json .Survival}}</script>
+  {{end}}
 
   <h2 class="chart-title">{{t "mc.milestones_title"}}</h2>
   {{if .Milestones}}

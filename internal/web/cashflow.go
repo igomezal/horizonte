@@ -40,11 +40,14 @@ type yearBarsChart struct {
 	Series     []kindedSeries `json:"series"`
 	Percent    bool           `json:"percent,omitempty"`
 	SelectYear bool           `json:"selectYear"` // clicking a bar selects that year
+	TotalLabel string         `json:"totalLabel,omitempty"`
+	ClipNote   string         `json:"clipNote,omitempty"` // shown when extreme bars are cut
 }
 
 type kindedSeries struct {
 	Name string     `json:"name"`
 	Kind string     `json:"kind,omitempty"` // "debt" draws in red
+	Key  string     `json:"key,omitempty"`  // expense category: picks its fixed colour
 	Data []*float64 `json:"data"`           // nil = no value (e.g. no income that year)
 }
 
@@ -269,9 +272,9 @@ func buildIRPF(years []engine.TaxYear, year int, d float64) *irpfView {
 }
 
 func (s *Server) buildCashflowCharts(lang i18n.Lang, in engine.Input, years []engine.YearRow, opts planOpts) (yearBarsChart, yearBarsChart) {
-	rate := yearBarsChart{Type: "savings-rate", Percent: true, SelectYear: true}
+	rate := yearBarsChart{Type: "savings-rate", Percent: true, SelectYear: true, ClipNote: s.catalog.T(lang, "chart.clipped")}
 	rateSeries := kindedSeries{Name: s.catalog.T(lang, "cf.rate")}
-	cat := yearBarsChart{Type: "stacked-bars", SelectYear: true}
+	cat := yearBarsChart{Type: "stacked-bars", SelectYear: true, TotalLabel: s.catalog.T(lang, "chart.total")}
 
 	present := map[domain.ExpenseCategory]bool{}
 	for _, e := range in.Expenses {
@@ -281,7 +284,7 @@ func (s *Server) buildCashflowCharts(lang i18n.Lang, in engine.Input, years []en
 	for _, c := range domain.ExpenseCategories {
 		if present[c] {
 			cats = append(cats, c)
-			cat.Series = append(cat.Series, kindedSeries{Name: s.catalog.T(lang, "expense.category."+string(c))})
+			cat.Series = append(cat.Series, kindedSeries{Name: s.catalog.T(lang, "expense.category."+string(c)), Key: string(c)})
 		}
 	}
 	debtIdx := -1

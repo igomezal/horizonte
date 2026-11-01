@@ -40,6 +40,9 @@
   "demo.growth_amount": "%s in growth",
   "demo.headline": "What %s a month becomes in %d years",
 
+  "chart.clipped": "Years below −100 % are cut short; hover to see their value.",
+  "chart.total": "Total",
+
   "plan.age_figure": "At age %d",
   "plan.assumptions": "Assumptions",
   "plan.assumptions_desc": "What the plan assumes about the future. Each change is saved and the plan recalculates straight away.",
@@ -244,6 +247,7 @@
   "mc.runs": "%s scenarios simulated.",
   "mc.settings": "Volatility",
   "mc.settings_desc": "How much each account type's return varies from year to year. Expected returns are set in",
+  "mc.survival_always": "In every simulated scenario you still have money every year until the end of the plan, so there is nothing to draw here.",
   "mc.survival_desc": "The share of scenarios that still have money at the end of each year.",
   "mc.survival_series": "Scenarios with money",
   "mc.survival_title": "Chance of having money at each age",

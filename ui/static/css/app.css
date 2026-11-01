@@ -44,10 +44,18 @@
   --app-measure: 68ch;
 
   /* Charts: banknote categorical order 20 € → 50 € → 100 € → 10 € → 200 € */
-  --chart-1: var(--azul-20);
-  --chart-2: var(--naranja-50);
-  --chart-3: var(--verde-100);
-  --chart-4: var(--rojo-10);
+  /* Categorical series, in this order (validated with the dataviz palette
+     checker: adjacent pairs clear the CVD and normal-vision floors in both
+     modes). Green and red are left out: they mean good and bad. */
+  --series-1: #2f5da8; /* blue */
+  --series-2: #e39a2d; /* orange */
+  --series-3: #1baf7a; /* aqua */
+  --series-4: #6250d6; /* violet */
+  --series-5: #e87ba4; /* magenta */
+  --series-6: #c98500; /* yellow */
+  --series-7: #1d8ad0; /* cyan */
+  --series-other: #8d97a8; /* "other" and anything past seven */
+  --chart-zero: #b9c1cd; /* the 0 line when values go negative */
   --chart-5: #a88a2e;
   --chart-text: var(--tinta-soft);
   --chart-grid: #e3e7ed;
@@ -86,10 +94,15 @@
     --app-contributed: #6f98e0;
     --app-growth: #f0b357;
     --side-bg: #0a1322;
-    --chart-1: #6f98e0;
-    --chart-2: #f0b357;
-    --chart-3: #6cc28b;
-    --chart-4: #e57b74;
+    --series-1: #5b8ad8;
+    --series-2: #cc7417;
+    --series-3: #199e70;
+    --series-4: #9085e9;
+    --series-5: #d55181;
+    --series-6: #a98400;
+    --series-7: #3592d6;
+    --series-other: #66738a;
+    --chart-zero: #3a4b66;
     --chart-5: #cdb062;
     --chart-text: #9aa7bc;
     --chart-grid: #1f2e45;
@@ -113,10 +126,15 @@
   --app-contributed: #6f98e0;
   --app-growth: #f0b357;
   --side-bg: #0a1322;
-  --chart-1: #6f98e0;
-  --chart-2: #f0b357;
-  --chart-3: #6cc28b;
-  --chart-4: #e57b74;
+  --series-1: #5b8ad8;
+  --series-2: #cc7417;
+  --series-3: #199e70;
+  --series-4: #9085e9;
+  --series-5: #d55181;
+  --series-6: #a98400;
+  --series-7: #3592d6;
+  --series-other: #66738a;
+  --chart-zero: #3a4b66;
   --chart-5: #cdb062;
   --chart-text: #9aa7bc;
   --chart-grid: #1f2e45;
@@ -1094,8 +1112,10 @@ table.mc-milestones th {
   max-width: var(--app-measure);
   margin-bottom: 0.25rem;
 }
+/* Ten columns of years by ~16 decades: capped so the cells stay close to square. */
 .chart-heat {
   height: clamp(360px, 24vw, 460px);
+  max-width: 820px;
   cursor: pointer;
 }
 .heat-legend {

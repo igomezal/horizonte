@@ -40,6 +40,9 @@
   "demo.growth_amount": "%s de rendimiento",
   "demo.headline": "Lo que hacen %s al mes en %d años",
 
+  "chart.clipped": "Los años por debajo de −100 % están recortados; pasa el ratón para ver su valor.",
+  "chart.total": "Total",
+
   "plan.age_figure": "A los %d años",
   "plan.assumptions": "Hipótesis",
   "plan.assumptions_desc": "Lo que el plan supone sobre el futuro. Cada cambio se guarda y recalcula el plan al momento.",
@@ -244,6 +247,7 @@
   "mc.runs": "%s escenarios simulados.",
   "mc.settings": "Volatilidad",
   "mc.settings_desc": "Cuánto varía cada año la rentabilidad de cada tipo de cuenta. Las rentabilidades esperadas se ajustan en",
+  "mc.survival_always": "En todos los escenarios simulados te queda dinero cada año hasta el final del plan, así que aquí no hay nada que dibujar.",
   "mc.survival_desc": "Qué parte de los escenarios todavía tiene dinero al final de cada año.",
   "mc.survival_series": "Escenarios con dinero",
   "mc.survival_title": "Probabilidad de tener dinero a cada edad",
