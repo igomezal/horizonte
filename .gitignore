@@ -16,3 +16,6 @@
 .vscode/
 *.swp
 .DS_Store
+
+# Load test output
+/perf/results/
