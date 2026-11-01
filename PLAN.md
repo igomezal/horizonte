@@ -57,7 +57,7 @@ projection, Monte Carlo and backtests all reuse it.
 | 4 | Cash flow: Sankey per year, savings rate, expense breakdown | ✅ |
 | 5 | Chance of Success: Monte Carlo, fan chart, success %, milestone timing table | ✅ |
 | 6 | Historical backtest: every start year, heat-map, worst sequences | ✅ |
-| 7 | Scenarios: clone plans (conservative/central/optimistic), side-by-side comparison | ☐ |
+| 7 | Scenarios: clone plans (conservative/central/optimistic), side-by-side comparison | ✅ |
 | 8 | Withdrawal strategies: fixed %, 4% rule, guardrails, withdrawal order | ☐ |
 | 9 | Spanish taxes: IRPF general/savings bases, regional scales, pension plan rules | ☐ |
 | 10 | Extras: Spanish public pension, healthcare phases, estate view, JSON import/export | ☐ |

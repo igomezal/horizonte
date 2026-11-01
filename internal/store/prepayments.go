@@ -30,7 +30,7 @@ func scanPrepayment(sc interface{ Scan(...any) error }) (domain.Prepayment, erro
 
 // ListPrepayments returns the plan's early repayments, grouped by debt.
 func (s *Store) ListPrepayments(ctx context.Context, planID int64) ([]domain.Prepayment, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+prepaymentCols+` FROM debt_prepayments
+	rows, err := s.q.QueryContext(ctx, `SELECT `+prepaymentCols+` FROM debt_prepayments
 		WHERE plan_id = ? ORDER BY debt_id, id`, planID)
 	if err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ func (s *Store) ListPrepayments(ctx context.Context, planID int64) ([]domain.Pre
 
 // GetPrepayment returns one early repayment of the plan.
 func (s *Store) GetPrepayment(ctx context.Context, planID, id int64) (domain.Prepayment, error) {
-	p, err := scanPrepayment(s.DB.QueryRowContext(ctx,
+	p, err := scanPrepayment(s.q.QueryRowContext(ctx,
 		`SELECT `+prepaymentCols+` FROM debt_prepayments WHERE id = ? AND plan_id = ?`, id, planID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, ErrNotFound

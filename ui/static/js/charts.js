@@ -456,6 +456,25 @@
     return opt;
   };
 
+  // Net worth of every scenario on one chart; the active scenario is thicker.
+  builders.scenarios = function (spec) {
+    const opt = baseOption();
+    const fmt = moneyFormatter(false);
+    const palette = [cssVar("--app-text"), cssVar("--chart-1"), cssVar("--chart-2"), cssVar("--chart-3"), cssVar("--chart-5"), cssVar("--app-muted")];
+    opt.xAxis.data = spec.categories;
+    opt.xAxis.axisLabel.hideOverlap = true;
+    opt.legend.type = "scroll";
+    opt.tooltip.valueFormatter = (v) => (v == null ? "—" : fmt.format(v));
+    opt.series = spec.series.map((s, i) => ({
+      name: s.name, type: "line", data: s.data, symbol: "none", connectNulls: false,
+      color: palette[i % palette.length],
+      lineStyle: { width: s.active ? 3 : 1.75, color: palette[i % palette.length] },
+      z: s.active ? 5 : 2,
+    }));
+    opt.animation = false;
+    return opt;
+  };
+
   // Charts that select a year: clicking a bar moves the year picker.
   function wireYearSelect(chart, spec) {
     chart.off("click");

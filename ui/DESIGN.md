@@ -140,6 +140,19 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
   plan dashed in accent, a dotted marker where historical data ends and a dashed red one where
   the money runs out.
 
+## Scenarios (phase 7)
+
+- **One active plan drives every page.** When there is more than one plan, the top bar shows a
+  compact "Escenario" select that switches the active plan and stays on the current page.
+- **The comparison is a table first** (`table.scenarios`): one row per plan with its outcome,
+  end value, chance of success, historical result and FIRE age; the active row is tinted with
+  the accent and carries an "Activo" badge. Row actions (Activar, Renombrar, Eliminar) sit
+  under the name so the table never needs horizontal scrolling for them.
+- **The comparison chart** draws each plan's net worth on the same axes, in the categorical
+  order (ink first), with the active plan's line thicker.
+- Creating a scenario is a plain form (name, source plan, assumption preset) and the new
+  scenario becomes the active one, so the next step is simply editing it.
+
 ## Motion
 
 - No entrance animations or hover transitions on content.

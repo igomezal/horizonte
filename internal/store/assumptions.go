@@ -15,7 +15,7 @@ func (s *Store) GetAssumptions(ctx context.Context, planID int64) (engine.Assump
 	var surplus sql.NullInt64
 	var cash, deposit, investment, pension, realestate, other float64
 	var vCash, vDeposit, vInvestment, vPension, vRealestate, vOther float64
-	err := s.DB.QueryRowContext(ctx, `SELECT inflation, tax_rate, return_cash, return_deposit,
+	err := s.q.QueryRowContext(ctx, `SELECT inflation, tax_rate, return_cash, return_deposit,
 		return_investment, return_pension, return_realestate, return_other, surplus_account_id,
 		vol_cash, vol_deposit, vol_investment, vol_pension, vol_realestate, vol_other, mc_runs
 		FROM plan_assumptions WHERE plan_id = ?`, planID).
@@ -48,7 +48,7 @@ func (s *Store) SaveAssumptions(ctx context.Context, planID int64, a engine.Assu
 		}
 	}
 	r, v := a.Returns, a.Volatility
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO plan_assumptions (plan_id, inflation, tax_rate, return_cash,
+	_, err := s.q.ExecContext(ctx, `INSERT INTO plan_assumptions (plan_id, inflation, tax_rate, return_cash,
 		return_deposit, return_investment, return_pension, return_realestate, return_other, surplus_account_id,
 		vol_cash, vol_deposit, vol_investment, vol_pension, vol_realestate, vol_other, mc_runs)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

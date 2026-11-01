@@ -18,9 +18,32 @@ import (
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
+// querier is what both *sql.DB and *sql.Tx provide, so the same store methods
+// work inside a transaction (see InTx).
+type querier interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
 // Store wraps the SQLite connection.
 type Store struct {
 	DB *sql.DB
+	q  querier // DB, or the transaction of an InTx call
+}
+
+// InTx runs fn with a Store whose queries all happen in one transaction: it
+// commits if fn returns nil and rolls everything back otherwise.
+func (s *Store) InTx(ctx context.Context, fn func(tx *Store) error) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if err := fn(&Store{DB: s.DB, q: tx}); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 // Open opens (creating if needed) the database at path and applies pending migrations.
@@ -40,7 +63,7 @@ func Open(ctx context.Context, dbPath string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("store: ping %s: %w", dbPath, err)
 	}
-	s := &Store{DB: db}
+	s := &Store{DB: db, q: db}
 	if err := s.migrate(ctx); err != nil {
 		db.Close()
 		return nil, err
@@ -136,14 +159,14 @@ func (s *Store) migrate(ctx context.Context) error {
 // SchemaVersion returns the latest applied migration version.
 func (s *Store) SchemaVersion(ctx context.Context) (int, error) {
 	var v int
-	err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&v)
+	err := s.q.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&v)
 	return v, err
 }
 
 // GetSetting returns the value for key, or def when it is not set.
 func (s *Store) GetSetting(ctx context.Context, key, def string) (string, error) {
 	var v string
-	err := s.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
+	err := s.q.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
 	if err == sql.ErrNoRows {
 		return def, nil
 	}
@@ -152,7 +175,7 @@ func (s *Store) GetSetting(ctx context.Context, key, def string) (string, error)
 
 // SetSetting stores value under key.
 func (s *Store) SetSetting(ctx context.Context, key, value string) error {
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES (?, ?)
+	_, err := s.q.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES (?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 	return err
 }

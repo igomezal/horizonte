@@ -26,7 +26,7 @@ func scanMilestone(sc interface{ Scan(...any) error }) (domain.Milestone, error)
 
 // ListMilestones returns the plan's milestones in creation order.
 func (s *Store) ListMilestones(ctx context.Context, planID int64) ([]domain.Milestone, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+milestoneCols+` FROM milestones WHERE plan_id = ? ORDER BY id`, planID)
+	rows, err := s.q.QueryContext(ctx, `SELECT `+milestoneCols+` FROM milestones WHERE plan_id = ? ORDER BY id`, planID)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (s *Store) ListMilestones(ctx context.Context, planID int64) ([]domain.Mile
 
 // GetMilestone returns one milestone of the plan.
 func (s *Store) GetMilestone(ctx context.Context, planID, id int64) (domain.Milestone, error) {
-	m, err := scanMilestone(s.DB.QueryRowContext(ctx,
+	m, err := scanMilestone(s.q.QueryRowContext(ctx,
 		`SELECT `+milestoneCols+` FROM milestones WHERE id = ? AND plan_id = ?`, id, planID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return m, ErrNotFound
@@ -101,7 +101,7 @@ func (s *Store) checkMilestones(ctx context.Context, planID int64, ids ...*int64
 			continue
 		}
 		var n int
-		if err := s.DB.QueryRowContext(ctx,
+		if err := s.q.QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM milestones WHERE id = ? AND plan_id = ?`, *id, planID).Scan(&n); err != nil {
 			return err
 		}

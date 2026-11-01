@@ -97,6 +97,13 @@ func New(cfg Config) (*Server, error) {
 
 	mux.HandleFunc("GET /backtest", s.handleBacktest)
 	mux.HandleFunc("GET /backtest/scenario", s.handleBacktestScenario)
+
+	mux.HandleFunc("GET /scenarios", s.handleScenarios)
+	mux.HandleFunc("POST /scenarios", s.handleCreateScenario)
+	mux.HandleFunc("POST /scenarios/{id}/activate", s.handleActivatePlan)
+	mux.HandleFunc("POST /scenarios/{id}/rename", s.handleRenamePlan)
+	mux.HandleFunc("POST /scenarios/{id}/delete", s.handleDeletePlan)
+	mux.HandleFunc("POST /plans/switch", s.handleActivatePlan)
 	mux.HandleFunc("/", s.handleNotFound)
 
 	var h http.Handler = mux
@@ -118,6 +125,14 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request, status int, page, 
 		block = "content"
 	}
 	pd := pageData{TitleKey: titleKey, Data: data}
+	if block == "layout" {
+		// The top bar lists the plans; a failure here should not break the page.
+		lang := i18n.FromContext(r.Context())
+		if cur, err := s.store.CurrentPlan(r.Context(), s.catalog.T(lang, "plan.default_name")); err == nil {
+			pd.CurrentPlan = cur
+			pd.Plans, _ = s.store.ListPlans(r.Context())
+		}
+	}
 	if err := s.render.render(w, r, status, page, block, pd); err != nil {
 		s.serverError(w, r, err)
 	}

@@ -1,0 +1,112 @@
+{{define "content"}}
+<header class="page-head">
+  <h1>{{t "scenarios.title"}}</h1>
+  <p class="muted prose">{{t "scenarios.intro"}}</p>
+</header>
+{{with .Data}}
+<section aria-labelledby="h-compare">
+  <h2 id="h-compare" class="visually-hidden">{{t "scenarios.compare"}}</h2>
+  <div class="table-wrap scen-wrap" tabindex="0" role="region" aria-labelledby="h-compare">
+    <table class="projection scenarios">
+      <thead><tr>
+        <th scope="col">{{t "scenarios.col.name"}}</th>
+        <th scope="col">{{t "scenarios.col.result"}}</th>
+        <th scope="col" class="num">{{t "scenarios.col.end"}}</th>
+        <th scope="col" class="num">{{t "scenarios.col.mc"}}</th>
+        <th scope="col" class="num">{{t "scenarios.col.hist"}}</th>
+        <th scope="col">{{t "scenarios.col.fi"}}</th>
+      </tr></thead>
+      <tbody>
+        {{range .Rows}}
+        <tr{{if .Active}} class="active"{{end}} x-data="{ renaming: false, confirm: false }">
+          <th scope="row">
+            <div x-show="!renaming">
+              <span class="scen-name">{{.Name}}</span>
+              {{if .Active}}<span class="badge badge-active">{{t "scenarios.active"}}</span>{{end}}
+              {{with .ParentName}}<small class="muted scen-parent">{{t "scenarios.copy_of" .}}</small>{{end}}
+            </div>
+            <div class="scen-actions" x-show="!renaming">
+            <div x-show="!confirm">
+              {{if not .Active}}
+              <form method="post" action="/scenarios/{{.ID}}/activate" class="inline-form">
+                <button type="submit" class="link-btn">{{t "scenarios.activate"}}</button>
+              </form>
+              {{end}}
+              <button type="button" class="link-btn" @click="renaming = true">{{t "scenarios.rename"}}</button>
+              {{if gt (len $.Data.Plans) 1}}<button type="button" class="link-btn danger" @click="confirm = true">{{t "form.delete"}}</button>{{end}}
+            </div>
+            {{if gt (len $.Data.Plans) 1}}
+            <div x-show="confirm" x-cloak>
+              <span class="confirm-text">{{t "scenarios.delete_confirm"}}</span>
+              <form method="post" action="/scenarios/{{.ID}}/delete" class="inline-form">
+                <button type="submit" class="link-btn danger">{{t "form.delete_yes"}}</button>
+              </form>
+              <button type="button" class="link-btn" @click="confirm = false">{{t "form.keep"}}</button>
+            </div>
+            {{end}}
+            </div>
+            <form method="post" action="/scenarios/{{.ID}}/rename" class="scen-rename" x-show="renaming" x-cloak>
+              <input type="text" name="name" value="{{.Name}}" maxlength="80" aria-label="{{t "scenarios.rename"}}" required>
+              <button type="submit" class="link-btn">{{t "form.save"}}</button>
+              <button type="button" class="link-btn" @click="renaming = false">{{t "form.cancel"}}</button>
+            </form>
+          </th>
+          {{if .NoPeople}}
+          <td colspan="5" class="muted">{{t "scenarios.no_people"}}</td>
+          {{else}}
+          <td>{{if .Failed}}<span class="negative">{{t "scenarios.fails" .FailAge}}</span>{{else}}{{t "scenarios.lasts" .EndAge}}{{end}}</td>
+          <td class="num">{{money .EndReal}}</td>
+          <td class="num">{{percent .MCRate 0}}</td>
+          <td class="num">{{if .HasHist}}{{percent .HistRate 0}}{{else}}—{{end}}</td>
+          <td>{{if .HasFI}}{{if .FIReached}}{{t "scenarios.fi_at" .FIAge}}{{else}}<span class="muted">{{t "scenarios.fi_never"}}</span>{{end}}{{else}}<span class="muted">—</span>{{end}}</td>
+          {{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="note muted">{{t "scenarios.note"}}</p>
+</section>
+
+{{if gt (len .Chart.Series) 1}}
+<section class="section" aria-labelledby="h-scen-chart">
+  <h2 id="h-scen-chart">{{t "scenarios.chart_title"}}</h2>
+  <p class="section-desc muted">{{t "scenarios.chart_desc"}}</p>
+  <div class="chart chart-tall" data-chart="scen-chart" role="img" aria-label="{{t "scenarios.chart_title"}}"></div>
+  <script type="application/json" id="scen-chart">{{json .Chart}}</script>
+</section>
+{{end}}
+
+<section class="section" aria-labelledby="h-new-scen">
+  <h2 id="h-new-scen">{{t "scenarios.new_title"}}</h2>
+  <p class="section-desc muted">{{t "scenarios.new_desc"}}</p>
+  <form method="post" action="/scenarios" class="entry-form scen-form">
+    <div class="form-grid">
+      <div class="field{{if eq .Error "scenarios.error.name"}} has-error{{end}}">
+        <label for="scen-name">{{t "field.name"}}</label>
+        <input id="scen-name" name="name" type="text" maxlength="80" value="{{index .Form "name"}}"
+               placeholder="{{t "scenarios.placeholder"}}" required{{if eq .Error "scenarios.error.name"}} aria-invalid="true"{{end}}>
+        {{if eq .Error "scenarios.error.name"}}<small class="field-error">{{t .Error}}</small>{{end}}
+      </div>
+      <div class="field">
+        <label for="scen-source">{{t "scenarios.source"}}</label>
+        <select id="scen-source" name="source">
+          {{$src := index .Form "source"}}
+          {{range .Plans}}<option value="{{.ID}}"{{if eq (str .ID) $src}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </div>
+      <div class="field">
+        <label for="scen-preset">{{t "scenarios.preset"}}</label>
+        <select id="scen-preset" name="preset" aria-describedby="scen-preset-hint">
+          {{$pre := index .Form "preset"}}
+          {{range .Presets}}<option value="{{.}}"{{if eq . $pre}} selected{{end}}>{{t (printf "scenarios.preset.%s" .)}}</option>{{end}}
+        </select>
+        <small class="field-hint" id="scen-preset-hint">{{t "scenarios.preset_hint"}}</small>
+      </div>
+    </div>
+    {{if and .Error (ne .Error "scenarios.error.name")}}<p class="field-error form-error" role="alert">{{t .Error}}</p>{{end}}
+    <div class="form-actions"><button type="submit">{{t "scenarios.create"}}</button></div>
+  </form>
+</section>
+{{end}}
+{{end}}

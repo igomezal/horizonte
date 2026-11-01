@@ -13,6 +13,7 @@ import (
 
 	"github.com/igomezal/horizonte/internal/domain"
 	"github.com/igomezal/horizonte/internal/i18n"
+	"github.com/igomezal/horizonte/internal/store"
 )
 
 // renderer parses one template set per page: the layout, all partials and the page.
@@ -139,6 +140,9 @@ type pageData struct {
 	Path     string // current request path, for nav highlighting
 	TitleKey string // i18n key of the page title
 	Data     any    // page-specific data
+	// Plans and CurrentPlan feed the plan switcher in the top bar.
+	Plans       []store.Plan
+	CurrentPlan int64
 }
 
 // render executes block of page into a buffer first, so a template error never

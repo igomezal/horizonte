@@ -23,14 +23,14 @@ func (s *Store) CurrentPlan(ctx context.Context, defaultName string) (int64, err
 	}
 	if id, err := strconv.ParseInt(v, 10, 64); err == nil {
 		var exists int
-		if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM plans WHERE id = ?`, id).Scan(&exists); err != nil {
+		if err := s.q.QueryRowContext(ctx, `SELECT COUNT(*) FROM plans WHERE id = ?`, id).Scan(&exists); err != nil {
 			return 0, err
 		}
 		if exists == 1 {
 			return id, nil
 		}
 	}
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO plans (name) VALUES (?)`, defaultName)
+	res, err := s.q.ExecContext(ctx, `INSERT INTO plans (name) VALUES (?)`, defaultName)
 	if err != nil {
 		return 0, fmt.Errorf("store: create default plan: %w", err)
 	}
@@ -89,7 +89,7 @@ func scanMonth(n sql.NullString) (domain.Month, error) {
 
 // exec runs a write scoped to a plan and maps "no rows affected" to ErrNotFound.
 func (s *Store) execOne(ctx context.Context, query string, args ...any) error {
-	res, err := s.DB.ExecContext(ctx, query, args...)
+	res, err := s.q.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func (s *Store) execOne(ctx context.Context, query string, args ...any) error {
 }
 
 func (s *Store) insert(ctx context.Context, query string, args ...any) (int64, error) {
-	res, err := s.DB.ExecContext(ctx, query, args...)
+	res, err := s.q.ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -117,7 +117,7 @@ func (s *Store) checkOwner(ctx context.Context, planID int64, ownerID *int64) er
 		return nil
 	}
 	var n int
-	if err := s.DB.QueryRowContext(ctx,
+	if err := s.q.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM people WHERE id = ? AND plan_id = ?`, *ownerID, planID).Scan(&n); err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func scanPerson(sc interface{ Scan(...any) error }) (domain.Person, error) {
 
 // ListPeople returns the plan's people, oldest record first.
 func (s *Store) ListPeople(ctx context.Context, planID int64) ([]domain.Person, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+personCols+` FROM people WHERE plan_id = ? ORDER BY id`, planID)
+	rows, err := s.q.QueryContext(ctx, `SELECT `+personCols+` FROM people WHERE plan_id = ? ORDER BY id`, planID)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (s *Store) ListPeople(ctx context.Context, planID int64) ([]domain.Person, 
 
 // GetPerson returns one person of the plan.
 func (s *Store) GetPerson(ctx context.Context, planID, id int64) (domain.Person, error) {
-	p, err := scanPerson(s.DB.QueryRowContext(ctx,
+	p, err := scanPerson(s.q.QueryRowContext(ctx,
 		`SELECT `+personCols+` FROM people WHERE id = ? AND plan_id = ?`, id, planID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, ErrNotFound
@@ -201,7 +201,7 @@ func scanAccount(sc interface{ Scan(...any) error }) (domain.Account, error) {
 
 // ListAccounts returns the plan's accounts.
 func (s *Store) ListAccounts(ctx context.Context, planID int64) ([]domain.Account, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+accountCols+` FROM accounts WHERE plan_id = ? ORDER BY id`, planID)
+	rows, err := s.q.QueryContext(ctx, `SELECT `+accountCols+` FROM accounts WHERE plan_id = ? ORDER BY id`, planID)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func (s *Store) ListAccounts(ctx context.Context, planID int64) ([]domain.Accoun
 
 // GetAccount returns one account of the plan.
 func (s *Store) GetAccount(ctx context.Context, planID, id int64) (domain.Account, error) {
-	a, err := scanAccount(s.DB.QueryRowContext(ctx,
+	a, err := scanAccount(s.q.QueryRowContext(ctx,
 		`SELECT `+accountCols+` FROM accounts WHERE id = ? AND plan_id = ?`, id, planID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrNotFound
@@ -278,7 +278,7 @@ func scanIncome(sc interface{ Scan(...any) error }) (domain.Income, error) {
 
 // ListIncomes returns the plan's income streams.
 func (s *Store) ListIncomes(ctx context.Context, planID int64) ([]domain.Income, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+incomeCols+` FROM incomes WHERE plan_id = ? ORDER BY id`, planID)
+	rows, err := s.q.QueryContext(ctx, `SELECT `+incomeCols+` FROM incomes WHERE plan_id = ? ORDER BY id`, planID)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +296,7 @@ func (s *Store) ListIncomes(ctx context.Context, planID int64) ([]domain.Income,
 
 // GetIncome returns one income stream of the plan.
 func (s *Store) GetIncome(ctx context.Context, planID, id int64) (domain.Income, error) {
-	i, err := scanIncome(s.DB.QueryRowContext(ctx,
+	i, err := scanIncome(s.q.QueryRowContext(ctx,
 		`SELECT `+incomeCols+` FROM incomes WHERE id = ? AND plan_id = ?`, id, planID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return i, ErrNotFound
@@ -356,7 +356,7 @@ func scanExpense(sc interface{ Scan(...any) error }) (domain.Expense, error) {
 
 // ListExpenses returns the plan's expenses.
 func (s *Store) ListExpenses(ctx context.Context, planID int64) ([]domain.Expense, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+expenseCols+` FROM expenses WHERE plan_id = ? ORDER BY id`, planID)
+	rows, err := s.q.QueryContext(ctx, `SELECT `+expenseCols+` FROM expenses WHERE plan_id = ? ORDER BY id`, planID)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +374,7 @@ func (s *Store) ListExpenses(ctx context.Context, planID int64) ([]domain.Expens
 
 // GetExpense returns one expense of the plan.
 func (s *Store) GetExpense(ctx context.Context, planID, id int64) (domain.Expense, error) {
-	e, err := scanExpense(s.DB.QueryRowContext(ctx,
+	e, err := scanExpense(s.q.QueryRowContext(ctx,
 		`SELECT `+expenseCols+` FROM expenses WHERE id = ? AND plan_id = ?`, id, planID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return e, ErrNotFound
@@ -428,7 +428,7 @@ func (s *Store) checkAccount(ctx context.Context, planID int64, id *int64) error
 
 // ListDebts returns the plan's debts.
 func (s *Store) ListDebts(ctx context.Context, planID int64) ([]domain.Debt, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+debtCols+` FROM debts WHERE plan_id = ? ORDER BY id`, planID)
+	rows, err := s.q.QueryContext(ctx, `SELECT `+debtCols+` FROM debts WHERE plan_id = ? ORDER BY id`, planID)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +446,7 @@ func (s *Store) ListDebts(ctx context.Context, planID int64) ([]domain.Debt, err
 
 // GetDebt returns one debt of the plan.
 func (s *Store) GetDebt(ctx context.Context, planID, id int64) (domain.Debt, error) {
-	d, err := scanDebt(s.DB.QueryRowContext(ctx,
+	d, err := scanDebt(s.q.QueryRowContext(ctx,
 		`SELECT `+debtCols+` FROM debts WHERE id = ? AND plan_id = ?`, id, planID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, ErrNotFound
