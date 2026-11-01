@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+
 	"github.com/igomezal/horizonte/internal/i18n"
 	"github.com/igomezal/horizonte/internal/store"
 	"github.com/igomezal/horizonte/internal/web"
@@ -26,13 +28,24 @@ func main() {
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	if err := run(*addr, *dbPath, *dev, log); err != nil {
+	snt, err := initSentry(*dev)
+	if err != nil {
+		log.Error("sentry init failed; continuing without error reporting", "err", err)
+	} else if snt.DSN != "" {
+		log.Info("sentry error reporting enabled", "environment", snt.Environment, "release", snt.Release)
+	}
+	err = run(*addr, *dbPath, *dev, snt, log)
+	if err != nil {
 		log.Error("fatal", "err", err)
+		sentry.CaptureException(err)
+	}
+	sentry.Flush(2 * time.Second)
+	if err != nil {
 		os.Exit(1)
 	}
 }
 
-func run(addr, dbPath string, dev bool, log *slog.Logger) error {
+func run(addr, dbPath string, dev bool, snt sentrySettings, log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -55,6 +68,7 @@ func run(addr, dbPath string, dev bool, log *slog.Logger) error {
 
 	srv, err := web.New(web.Config{
 		Store: st, Catalog: catalog, Logger: log, Assets: assets, Dev: dev,
+		Sentry: web.BrowserSentry{DSN: snt.DSN, Environment: snt.Environment, Release: snt.Release},
 	})
 	if err != nil {
 		return err

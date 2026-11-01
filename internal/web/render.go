@@ -21,13 +21,14 @@ type renderer struct {
 	fsys    fs.FS
 	catalog *i18n.Catalog
 	dev     bool // re-parse on every render so template edits apply immediately
+	sentry  BrowserSentry
 
 	mu    sync.Mutex
 	pages map[string]*template.Template
 }
 
-func newRenderer(fsys fs.FS, catalog *i18n.Catalog, dev bool) (*renderer, error) {
-	r := &renderer{fsys: fsys, catalog: catalog, dev: dev}
+func newRenderer(fsys fs.FS, catalog *i18n.Catalog, dev bool, snt BrowserSentry) (*renderer, error) {
+	r := &renderer{fsys: fsys, catalog: catalog, dev: dev, sentry: snt}
 	if err := r.parseAll(); err != nil {
 		return nil, err
 	}
@@ -144,6 +145,8 @@ type pageData struct {
 	// Plans and CurrentPlan feed the plan switcher in the top bar.
 	Plans       []store.Plan
 	CurrentPlan int64
+	// Sentry configures the browser SDK; the script is omitted when DSN is empty.
+	Sentry BrowserSentry
 }
 
 // render executes block of page into a buffer first, so a template error never
@@ -163,6 +166,7 @@ func (r *renderer) render(w http.ResponseWriter, req *http.Request, status int, 
 		pd.Lang = lang
 		pd.Langs = i18n.Supported
 		pd.Path = req.URL.Path
+		pd.Sentry = r.sentry
 		data = pd
 	}
 

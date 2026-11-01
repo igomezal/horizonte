@@ -8,7 +8,7 @@ See [PLAN.md](PLAN.md) for the roadmap and phase status.
 
 ## Requirements
 
-- Go 1.22+
+- Go 1.25+
 
 ## Run
 
@@ -32,6 +32,24 @@ go build -o bin/server ./cmd/server
 ```
 
 All templates, CSS, JS and vendored libraries (htmx, Alpine.js, ECharts, Pico.css) are embedded in the binary.
+
+## Error reporting (optional)
+
+Horizonte can report errors and performance data to [Sentry](https://sentry.io), from both the server and the browser.
+It is **off by default**: nothing is sent unless `SENTRY_DSN` is set.
+
+```sh
+SENTRY_DSN=https://<key>@<org>.ingest.de.sentry.io/<project> go run ./cmd/server
+```
+
+| Variable | Default | Description |
+|---|---|---|
+| `SENTRY_DSN` | empty (disabled) | Sentry project DSN |
+| `SENTRY_ENVIRONMENT` | `production` (`development` with `-dev`) | Environment tag |
+| `SENTRY_RELEASE` | git revision | Release tag; can also be set with `-ldflags "-X main.release=horizonte@1.2.3"` |
+
+Because the app holds personal financial data, collection is restricted: no IP addresses, cookies, request bodies or query strings, no browser console output, and only a few harmless request headers.
+Stack traces, route names and timings are sent.
 
 ## Test
 

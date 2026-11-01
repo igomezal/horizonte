@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
+
 	"github.com/igomezal/horizonte/internal/i18n"
 	"github.com/igomezal/horizonte/internal/store"
 )
@@ -23,6 +26,14 @@ type Config struct {
 	Dev bool
 	// Now returns the current time (defaults to time.Now; tests pin it).
 	Now func() time.Time
+	// Sentry configures browser error reporting; empty DSN disables it.
+	Sentry BrowserSentry
+}
+
+// BrowserSentry is passed to the page so the browser SDK reports to the same
+// Sentry project, environment and release as the server.
+type BrowserSentry struct {
+	DSN, Environment, Release string
 }
 
 // Server serves the web UI.
@@ -38,7 +49,7 @@ type Server struct {
 
 // New builds the server and its routes.
 func New(cfg Config) (*Server, error) {
-	r, err := newRenderer(cfg.Assets, cfg.Catalog, cfg.Dev)
+	r, err := newRenderer(cfg.Assets, cfg.Catalog, cfg.Dev, cfg.Sentry)
 	if err != nil {
 		return nil, fmt.Errorf("web: %w", err)
 	}
@@ -119,6 +130,9 @@ func New(cfg Config) (*Server, error) {
 	h = i18n.Middleware(h)
 	h = sameOriginWrites(h)
 	h = securityHeaders(h)
+	// Sentry sits inside recoverPanics: it reports the panic and re-panics so
+	// recoverPanics still renders the 500 page. It is a no-op without a DSN.
+	h = sentryhttp.New(sentryhttp.Options{Repanic: true}).Handle(h)
 	h = s.recoverPanics(h)
 	h = logRequests(cfg.Logger, h)
 	s.handler = h
@@ -150,6 +164,11 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request, status int, page, 
 func (s *Server) serverError(w http.ResponseWriter, r *http.Request, err error) {
 	if err != nil {
 		s.log.Error("server error", "path", r.URL.Path, "err", err)
+		hub := sentry.GetHubFromContext(r.Context())
+		if hub == nil {
+			hub = sentry.CurrentHub()
+		}
+		hub.CaptureException(err)
 	}
 	pd := pageData{TitleKey: "error.server.title", Data: errorData{
 		TitleKey: "error.server.title", BodyKey: "error.server.body",
