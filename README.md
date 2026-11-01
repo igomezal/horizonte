@@ -73,3 +73,14 @@ replacing the CSV, and `go test ./internal/history` checks it against well-known
 
 Add the key to **both** `internal/i18n/locales/es.json` and `en.json`. A test fails if the catalogs differ.
 In templates use `{{t "key"}}`, plus `{{money v}}`, `{{percent v 1}}` and `{{number v 2}}` for locale-aware formatting.
+
+## Acknowledgements
+
+Horizonte is an independent project. Its ideas come from personal finance tools on the
+market such as ProjectionLab, Monarch, Spendee and getquin, among other commercial and
+open-source tools. It is not affiliated with or endorsed by any of them, and all product
+names are trademarks of their respective owners.
+
+The project was also built as a hands-on way to learn Claude Code: how to plan and build
+software together with AI agents, how to get the most out of the different Claude models,
+and how these new ways of working change the day-to-day development workflow.
