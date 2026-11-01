@@ -215,6 +215,8 @@ func (s *Store) CopyPlan(ctx context.Context, src int64, name string) (int64, er
 			return err
 		}
 		a.SurplusAccountID = remap(a.SurplusAccountID, accMap)
+		a.Withdrawal.StartMS = remap(a.Withdrawal.StartMS, msMap)
+		a.PensionAvailableMS = remap(a.PensionAvailableMS, msMap)
 		return tx.SaveAssumptions(ctx, id, a)
 	})
 	return newID, err

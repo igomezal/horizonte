@@ -558,3 +558,104 @@ func TestFlowBalancesEveryMonth(t *testing.T) {
 		t.Error("Flow should be nil without Detail")
 	}
 }
+
+// retiree: 60 years old, 500.000 € in investments, spending 25.000 €/year,
+// strategy from the start of the plan.
+func retiree(strategy WithdrawalStrategy, returns float64) Input {
+	a := flat()
+	a.Returns[domain.AccountInvestment] = returns
+	a.Withdrawal = WithdrawalSettings{Strategy: strategy, StartMS: ptr(int64(1)), Rate: 0.04, Floor: 0.5, Ceiling: 2}
+	return Input{
+		People:      []domain.Person{{ID: 1, Birth: start.AddMonths(-60 * 12), LifeExpectancy: 90}},
+		Milestones:  []domain.Milestone{{ID: 1, Name: "Ya", Kind: domain.MilestoneDate, Date: start}},
+		Accounts:    []domain.Account{{ID: 1, Kind: domain.AccountInvestment, Balance: 50000000}},
+		Expenses:    []domain.Expense{{Amount: 2500000, PaymentsPerYear: 1}},
+		Assumptions: a,
+		Start:       start,
+	}
+}
+
+func yearSpend(res Result, y int) float64 {
+	var s float64
+	for _, m := range res.Months[12*y : 12*y+12] {
+		s += m.Expenses
+	}
+	return s
+}
+
+func TestWithdrawalStrategies(t *testing.T) {
+	// Fixed: spends exactly the plan.
+	fixed := Simulate(retiree(WithdrawFixed, 0))
+	if got := yearSpend(fixed, 0); got != 25000 {
+		t.Errorf("fixed spends %v, want 25000", got)
+	}
+	if !fixed.WithdrawalFrom.IsZero() {
+		t.Error("fixed strategy should not start")
+	}
+
+	// 4 %: 4 % of 500.000 € = 20.000 € a year (factor 0,8), kept constant with no inflation.
+	r4 := Simulate(retiree(WithdrawRule4, 0))
+	if got := yearSpend(r4, 0); math.Abs(got-20000) > 1e-6 {
+		t.Errorf("4%% rule first year = %v, want 20000", got)
+	}
+	if got := yearSpend(r4, 5); math.Abs(got-20000) > 1e-6 {
+		t.Errorf("4%% rule year 6 = %v, want 20000 (no inflation)", got)
+	}
+	if r4.WithdrawalFrom != start || r4.Months[0].SpendFactor != 0.8 {
+		t.Errorf("start %v, factor %v", r4.WithdrawalFrom, r4.Months[0].SpendFactor)
+	}
+
+	// Fixed percentage: with 0 % returns savings shrink, so spending falls every year.
+	pct := Simulate(retiree(WithdrawPercent, 0))
+	if !(yearSpend(pct, 1) < yearSpend(pct, 0) && yearSpend(pct, 10) < yearSpend(pct, 1)) {
+		t.Errorf("percent rule should spend less as savings fall: %v %v %v",
+			yearSpend(pct, 0), yearSpend(pct, 1), yearSpend(pct, 10))
+	}
+	if pct.Failed() {
+		t.Error("a percentage rule never runs out of money")
+	}
+
+	// Guardrails with falling savings cut spending, but never below the floor (50 %).
+	g := Simulate(retiree(WithdrawGuardrails, -0.05))
+	minF := 1.0
+	for _, m := range g.Months {
+		minF = math.Min(minF, m.SpendFactor)
+	}
+	if minF < 0.5-1e-12 || yearSpend(g, 15) >= yearSpend(g, 0) {
+		t.Errorf("guardrails: min factor %v, year16 %v vs year1 %v", minF, yearSpend(g, 15), yearSpend(g, 0))
+	}
+}
+
+func TestWithdrawalOrderAndPensionLock(t *testing.T) {
+	in := Input{
+		People:     []domain.Person{personFor(24)},
+		Milestones: []domain.Milestone{{ID: 9, Name: "Jubilación", Kind: domain.MilestoneDate, Date: start.AddMonths(12)}},
+		Accounts: []domain.Account{
+			{ID: 1, Kind: domain.AccountCash, Balance: 100000},
+			{ID: 2, Kind: domain.AccountPension, Balance: 100000},
+			{ID: 3, Kind: domain.AccountInvestment, Balance: 100000},
+		},
+		Expenses:    []domain.Expense{{Amount: 50000, PaymentsPerYear: 12}},
+		Assumptions: flat(),
+		Start:       start,
+	}
+	// Custom order: investments first.
+	in.Assumptions.Order = ParseOrder("investment,cash,deposit,other,pension")
+	res := Simulate(in)
+	if b := res.Months[1].Balances; b[2] != 0 || b[0] != 1000 {
+		t.Errorf("investments should go first: %v", b)
+	}
+	// Pension plan locked until retirement (month 12): months 4..11 run short.
+	in.Assumptions.Order = nil
+	in.Assumptions.PensionAvailableMS = ptr(int64(9))
+	res = Simulate(in)
+	if !res.Failed() || res.FailMonth != start.AddMonths(4) {
+		t.Errorf("locked pension: fail month %v", res.FailMonth)
+	}
+	if res.Months[11].Balances[1] != 1000 || res.Months[12].Balances[1] >= 1000 {
+		t.Errorf("pension should be untouched until month 12: %v / %v", res.Months[11].Balances[1], res.Months[12].Balances[1])
+	}
+	if ParseOrder("cash,cash,deposit,other,pension") != nil || ParseOrder("cash,deposit") != nil {
+		t.Error("invalid orders must be rejected")
+	}
+}

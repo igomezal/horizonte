@@ -23,6 +23,13 @@ type Assumptions struct {
 	Volatility map[domain.AccountKind]float64
 	// MCRuns is the number of Monte Carlo scenarios.
 	MCRuns int
+	// Withdrawal is the retirement withdrawal strategy.
+	Withdrawal WithdrawalSettings
+	// Order is the order accounts are drawn down in (DefaultOrder when nil).
+	Order []domain.AccountKind
+	// PensionAvailableMS: pension plans cannot be drawn before this milestone
+	// (nil = always available).
+	PensionAvailableMS *int64
 }
 
 // DefaultAssumptions are reasonable long-run nominal values for Spain.
@@ -40,6 +47,8 @@ func DefaultAssumptions() Assumptions {
 		},
 		Volatility: DefaultVolatility(),
 		MCRuns:     1000,
+		Withdrawal: DefaultWithdrawal(),
+		Order:      append([]domain.AccountKind(nil), DefaultOrder...),
 	}
 }
 
@@ -59,6 +68,10 @@ func (a Assumptions) Validate() domain.Errors {
 		if v := a.Volatility[k]; v < 0 || v > 0.6 {
 			errs.Add("vol_"+string(k), domain.ErrRange)
 		}
+	}
+	a.Withdrawal.validate(errs)
+	if a.Order != nil && ParseOrder(FormatOrder(a.Order)) == nil {
+		errs.Add("wd_order", domain.ErrChoice)
 	}
 	runsOK := false
 	for _, r := range MCRunsOptions {
@@ -124,7 +137,10 @@ type MonthRow struct {
 	Prepayments  float64 // early repayments and fees, included in DebtPayments
 	// Redirected is early-repayment money sent to an account because its debt
 	// was already paid off. It is part of Contributions.
-	Redirected    float64
+	Redirected float64
+	// SpendFactor is the share of planned expenses actually spent this month
+	// under the withdrawal strategy (1 before it starts or with "fixed").
+	SpendFactor   float64
 	Contributions float64 // moved into accounts from that month's surplus
 	Withdrawals   float64 // taken from accounts to cover a deficit
 	Shortfall     float64 // deficit nothing could cover this month
@@ -212,19 +228,13 @@ type Result struct {
 	Milestones     []MilestoneHit // in the order given in Input
 	PaidOff        []DebtPaidOff  // in payoff order
 	SurplusAccount int            // index of the account receiving surplus money, -1 if none
+	WithdrawalFrom domain.Month   // month the withdrawal strategy started (zero if never)
 	FailMonth      domain.Month   // first month with a shortfall; zero if the money lasts
 	Shortfall      float64        // total uncovered deficit, nominal euros
 }
 
 // Failed reports whether the money ran out at some point.
 func (r Result) Failed() bool { return !r.FailMonth.IsZero() }
-
-// withdrawalOrder is the order accounts are drawn down to cover a deficit.
-// Property is never sold automatically.
-var withdrawalOrder = []domain.AccountKind{
-	domain.AccountCash, domain.AccountDeposit, domain.AccountInvestment,
-	domain.AccountOther, domain.AccountPension,
-}
 
 // monthlyRate converts an annual rate into the equivalent compound monthly rate.
 func monthlyRate(annual float64) float64 { return math.Pow(1+annual, 1.0/12) - 1 }
@@ -292,11 +302,23 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 	}
 	surplusIdx := surplusAccount(in.Accounts, a.SurplusAccountID)
 	res.SurplusAccount = surplusIdx
-	order := drawdownOrder(in.Accounts)
+	order := drawdownOrder(in.Accounts, a.Order)
 	// Age and date milestones are known up front; financial independence is
 	// added the month the projection reaches it.
 	resolved := domain.ResolveFixed(in.Milestones, in.People)
 	paidOff := make([]bool, len(in.Debts))
+	// Pension plans may only be drawn from a milestone on.
+	pensionLocked := func(m domain.Month) bool {
+		if a.PensionAvailableMS == nil {
+			return false
+		}
+		from, ok := resolved[*a.PensionAvailableMS]
+		return !ok || m.Before(from)
+	}
+	policy := &spendPolicy{s: a.Withdrawal, factor: 1}
+	if policy.s.Strategy == "" {
+		policy.s = DefaultWithdrawal()
+	}
 
 	res.Months = make([]MonthRow, 0, n)
 	deflator := 1.0
@@ -327,8 +349,42 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 			}
 		}
 		row.Tax = row.Income * a.TaxRate
+
+		// Withdrawal strategy: scale planned expenses to what it allows.
+		savings := 0.0
+		for i, acc := range in.Accounts {
+			if acc.Kind != domain.AccountRealEstate {
+				savings += balances[i]
+			}
+		}
+		factor := policy.update(t, m, resolved, savings, priceIndex, func() yearInputs {
+			var y yearInputs
+			infl := priceIndex[12*(t/12)]
+			for _, inc := range in.Incomes {
+				if resolved.ActiveIn(inc.Start, inc.End, inc.StartMS, inc.EndMS, m) {
+					y.netIncome += inc.Annual().Euros() * streamGrowth(inc.AnnualGrowth, t, infl) * (1 - a.TaxRate)
+				}
+			}
+			for _, e := range in.Expenses {
+				if resolved.ActiveIn(e.Start, e.End, e.StartMS, e.EndMS, m) {
+					y.expenses += e.Annual().Euros() * streamGrowth(e.AnnualGrowth, t, infl)
+				}
+			}
+			for i := range in.Debts {
+				if debts[i] > 0 {
+					y.debt += payment[i] * 12
+				}
+			}
+			return y
+		})
+		row.SpendFactor = factor
+		if policy.started && res.WithdrawalFrom.IsZero() {
+			res.WithdrawalFrom = m
+		}
+
 		for k, e := range in.Expenses {
 			amount, avg := expenseThisMonth(e, resolved, m, t, in.Start, priceIndex[12*(t/12)])
+			amount *= factor
 			row.Expenses += amount
 			spendingRate += avg
 			if flow != nil {
@@ -363,7 +419,11 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		// so each is capped to the money available (this month's surplus plus
 		// drawable savings) and never causes a shortfall.
 		available := math.Max(0, row.Savings())
+		locked := pensionLocked(m)
 		for _, i := range order {
+			if locked && in.Accounts[i].Kind == domain.AccountPension {
+				continue
+			}
 			available += balances[i]
 		}
 		for _, pp := range in.Prepayments {
@@ -463,6 +523,9 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		} else if cash < 0 {
 			need := -cash
 			for _, i := range order {
+				if locked && in.Accounts[i].Kind == domain.AccountPension {
+					continue
+				}
 				take := math.Min(balances[i], need)
 				if take <= 0 {
 					continue
@@ -645,10 +708,14 @@ func surplusAccount(accounts []domain.Account, chosen *int64) int {
 	return -1
 }
 
-// drawdownOrder lists account indexes in withdrawal order.
-func drawdownOrder(accounts []domain.Account) []int {
+// drawdownOrder lists account indexes in withdrawal order (kinds in the given
+// order, DefaultOrder when it is not a valid permutation).
+func drawdownOrder(accounts []domain.Account, kinds []domain.AccountKind) []int {
+	if ParseOrder(FormatOrder(kinds)) == nil {
+		kinds = DefaultOrder
+	}
 	var order []int
-	for _, k := range withdrawalOrder {
+	for _, k := range kinds {
 		for i, a := range accounts {
 			if a.Kind == k {
 				order = append(order, i)

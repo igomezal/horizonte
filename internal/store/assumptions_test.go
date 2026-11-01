@@ -51,3 +51,46 @@ func TestAssumptionsRoundTrip(t *testing.T) {
 		t.Errorf("foreign surplus account err = %v", err)
 	}
 }
+
+func TestWithdrawalSettingsRoundTrip(t *testing.T) {
+	s, plan := openTest(t)
+	ctx := context.Background()
+	pid, _ := s.SavePerson(ctx, domain.Person{PlanID: plan, Name: "Ana", Birth: domain.Month{Year: 1990, Month: 4}, LifeExpectancy: 90})
+	ret, _ := s.SaveMilestone(ctx, domain.Milestone{PlanID: plan, Name: "Jubilación", Kind: domain.MilestoneAge, PersonID: &pid, Age: 65})
+
+	got, _ := s.GetAssumptions(ctx, plan)
+	if got.Withdrawal.Strategy != engine.WithdrawFixed || len(got.Order) != 5 {
+		t.Fatalf("defaults = %+v / %v", got.Withdrawal, got.Order)
+	}
+	a := got
+	a.Withdrawal = engine.WithdrawalSettings{Strategy: engine.WithdrawGuardrails, StartMS: &ret, Rate: 0.05, Floor: 0.8, Ceiling: 1.2}
+	a.Order = engine.ParseOrder("investment,cash,deposit,other,pension")
+	a.PensionAvailableMS = &ret
+	if err := s.SaveAssumptions(ctx, plan, a); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.GetAssumptions(ctx, plan)
+	if got.Withdrawal.Strategy != engine.WithdrawGuardrails || *got.Withdrawal.StartMS != ret || got.Withdrawal.Rate != 0.05 ||
+		got.Order[0] != domain.AccountInvestment || got.PensionAvailableMS == nil {
+		t.Errorf("saved = %+v / %v", got.Withdrawal, got.Order)
+	}
+
+	// A copy points at its own milestones.
+	cp, err := s.CopyPlan(ctx, plan, "Copia")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca, _ := s.GetAssumptions(ctx, cp)
+	ms, _ := s.ListMilestones(ctx, cp)
+	if ca.Withdrawal.StartMS == nil || *ca.Withdrawal.StartMS != ms[0].ID || *ca.PensionAvailableMS != ms[0].ID {
+		t.Errorf("copy withdrawal links = %v / %v, want %d", ca.Withdrawal.StartMS, ca.PensionAvailableMS, ms[0].ID)
+	}
+
+	// Deleting the milestone clears both links.
+	if err := s.DeleteMilestone(ctx, plan, ret); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.GetAssumptions(ctx, plan); got.Withdrawal.StartMS != nil || got.PensionAvailableMS != nil {
+		t.Error("links to a deleted milestone remain")
+	}
+}

@@ -110,3 +110,39 @@ func TestSaveAssumptions(t *testing.T) {
 		t.Errorf("errors missing: %s", body)
 	}
 }
+
+func TestWithdrawalStrategyFromPlanForm(t *testing.T) {
+	s, st := newFinanceServer(t)
+	seedMC(t, s) // milestone 1 = Jubilación at 65
+	form := url.Values{"inflation": {"2,5"}, "tax_rate": {"20"}, "surplus": {""}, "return_cash": {"0"},
+		"return_deposit": {"2"}, "return_investment": {"6"}, "return_pension": {"5"}, "return_realestate": {"3"}, "return_other": {"2"},
+		"wd_strategy": {"guardrails"}, "wd_start": {"1"}, "wd_rate": {"4,5"}, "wd_floor": {"75"}, "wd_ceiling": {"130"},
+		"wd_order": {"investment,cash,deposit,other,pension"}, "pension_from": {"1"}}
+	rec, body := do(s, htmxReq("POST", "/plan/assumptions", form))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", rec.Code, body)
+	}
+	plan, _ := st.CurrentPlan(context.Background(), "x")
+	a, _ := st.GetAssumptions(context.Background(), plan)
+	if a.Withdrawal.Strategy != "guardrails" || a.Withdrawal.Rate != 0.045 || a.Withdrawal.Floor != 0.75 ||
+		a.Order[0] != "investment" || a.PensionAvailableMS == nil {
+		t.Errorf("stored = %+v / %v / %v", a.Withdrawal, a.Order, a.PensionAvailableMS)
+	}
+	// The plan explains how much spending varies.
+	_, res := do(s, htmxReq("GET", "/plan/results", nil))
+	if !strings.Contains(res, "Con «Guardarraíles»") {
+		t.Errorf("plan should describe the strategy's effect")
+	}
+	// A strategy without a start milestone is rejected.
+	form.Set("wd_start", "")
+	if rec, body := do(s, htmxReq("POST", "/plan/assumptions", form)); rec.Code != http.StatusUnprocessableEntity ||
+		!strings.Contains(body, "Elige desde qué hito") {
+		t.Errorf("missing start milestone: %d", rec.Code)
+	}
+	// An invalid order is rejected.
+	form.Set("wd_start", "1")
+	form.Set("wd_order", "cash,cash,deposit,other,pension")
+	if rec, _ := do(s, htmxReq("POST", "/plan/assumptions", form)); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("invalid order: %d", rec.Code)
+	}
+}

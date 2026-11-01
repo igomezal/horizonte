@@ -1204,3 +1204,51 @@ table.scenarios th {
     max-width: 10rem;
   }
 }
+
+/* ---------- Withdrawal order ---------- */
+.label-like {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.order-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--app-rule);
+}
+.order-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--app-rule);
+  list-style: none;
+  font-size: 0.9375rem;
+  counter-increment: wd;
+}
+.order-list li > span:first-child::before {
+  content: counter(wd) ". ";
+  color: var(--app-muted);
+  font-variant-numeric: tabular-nums;
+}
+.order-list {
+  counter-reset: wd;
+}
+.order-btns {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+.icon-btn.small {
+  width: 1.9rem;
+  height: 1.9rem;
+  font-size: 0.875rem;
+}
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.wd-order-row {
+  margin-top: 1rem;
+}

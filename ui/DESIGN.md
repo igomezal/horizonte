@@ -153,6 +153,16 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
 - Creating a scenario is a plain form (name, source plan, assumption preset) and the new
   scenario becomes the active one, so the next step is simply editing it.
 
+## Withdrawals (phase 8)
+
+- The strategy lives with the other assumptions on the Plan page and recalculates live; fields
+  that only matter for some strategies appear with them (Alpine `x-show`), each strategy has a
+  one-line plain explanation under the select.
+- **Reordering** uses a numbered list with ↑ ↓ icon buttons (disabled at the ends, labelled for
+  screen readers) instead of drag and drop; every move saves.
+- The verdict gains one muted sentence with the strategy's effect: the range of spending as a
+  share of the plan and the year of the lowest point.
+
 ## Motion
 
 - No entrance animations or hover transitions on content.

@@ -42,6 +42,7 @@
     <p class="breakdown"><span>{{if .Opts.Real}}{{t "plan.end_value_real"}}{{else}}{{t "plan.end_value_nominal" .EndYear}}{{end}}</span></p>
     {{end}}
     {{if .ShowPeak}}<p class="muted peak">{{t "plan.peak" (money .PeakValue) .PeakAge .PeakYear}}</p>{{end}}
+    {{if .WdActive}}<p class="muted">{{if eq .WdMin .WdMax}}{{t "plan.wd_constant" (t (printf "wd.strategy.%s" .WdStrategy)) (percent .WdMin 0)}}{{else}}{{t "plan.wd_range" (t (printf "wd.strategy.%s" .WdStrategy)) (percent .WdMin 0) (percent .WdMax 0) .WdMinYear}}{{end}}</p>{{end}}
   </div>
 
   {{if .Timeline}}
@@ -138,6 +139,64 @@
     {{template "field" (dict "F" $ "name" (printf "return_%s" .) "label" (printf "account.kind.%s" .) "type" "percent")}}
     {{end}}
   </div>
+  <h3 class="form-subhead">{{t "wd.title"}}</h3>
+  <p class="field-hint">{{t "wd.desc"}}</p>
+  <div class="form-grid" x-data="{ strategy: '{{index .V "wd_strategy"}}' }">
+    {{$sid := printf "%s-wd_strategy" .DOMID}}{{$scur := index .V "wd_strategy"}}
+    <div class="field">
+      <label for="{{$sid}}">{{t "field.wd_strategy"}}</label>
+      <select id="{{$sid}}" name="wd_strategy" x-model="strategy">
+        {{range .Strategies}}<option value="{{.}}"{{if eq (str .) $scur}} selected{{end}}>{{t (printf "wd.strategy.%s" .)}}</option>{{end}}
+      </select>
+      {{range .Strategies}}<small class="field-hint" x-show="strategy === '{{.}}'"{{if ne (str .) $scur}} x-cloak{{end}}>{{t (printf "wd.hint.%s" .)}}</small>{{end}}
+    </div>
+    <div class="field-group" x-show="strategy !== 'fixed'"{{if eq $scur "fixed"}} x-cloak{{end}}>
+      {{$mid := printf "%s-wd_start" .DOMID}}{{$mcur := index .V "wd_start"}}{{$merr := index .E "wd_start"}}
+      <div class="field{{if $merr}} has-error{{end}}">
+        <label for="{{$mid}}">{{t "field.wd_start"}}</label>
+        <select id="{{$mid}}" name="wd_start">
+          <option value="">{{t "wd.choose_milestone"}}</option>
+          {{range .Milestones}}<option value="{{.ID}}"{{if eq (str .ID) $mcur}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+        {{if $merr}}<small class="field-error">{{t "wd.need_milestone"}}</small>{{else if not .Milestones}}<small class="field-hint">{{t "wd.no_milestones"}}</small>{{end}}
+      </div>
+      {{template "field" (dict "F" . "name" "wd_rate" "label" "field.wd_rate" "type" "percent" "hint" "hint.wd_rate")}}
+      {{template "field" (dict "F" . "name" "wd_floor" "label" "field.wd_floor" "type" "percent" "hint" "hint.wd_floor")}}
+      {{template "field" (dict "F" . "name" "wd_ceiling" "label" "field.wd_ceiling" "type" "percent" "hint" "hint.wd_ceiling")}}
+    </div>
+  </div>
+
+  <div class="form-grid wd-order-row">
+    <div class="field" x-data="{ order: '{{index .V "wd_order"}}'.split(','), labels: {{json .OrderLabels}},
+         move(i, d) { const j = i + d; if (j < 0 || j >= this.order.length) return;
+           [this.order[i], this.order[j]] = [this.order[j], this.order[i]];
+           this.$nextTick(() => this.$el.closest('form').requestSubmit()); } }">
+      <span class="label-like" id="wd-order-label">{{t "field.wd_order"}}</span>
+      <ol class="order-list" aria-labelledby="wd-order-label">
+        <template x-for="(k, i) in order" :key="k">
+          <li>
+            <span x-text="labels[k]"></span>
+            <span class="order-btns">
+              <button type="button" class="icon-btn small" @click="move(i, -1)" :disabled="i === 0" :aria-label="'{{t "wd.move_up"}} ' + labels[k]">↑</button>
+              <button type="button" class="icon-btn small" @click="move(i, 1)" :disabled="i === order.length - 1" :aria-label="'{{t "wd.move_down"}} ' + labels[k]">↓</button>
+            </span>
+          </li>
+        </template>
+      </ol>
+      <input type="hidden" name="wd_order" :value="order.join(',')" value="{{index .V "wd_order"}}">
+      <small class="field-hint">{{t "hint.wd_order"}}</small>
+    </div>
+    {{$pid := printf "%s-pension_from" .DOMID}}{{$pcur := index .V "pension_from"}}
+    <div class="field">
+      <label for="{{$pid}}">{{t "field.pension_from"}}</label>
+      <select id="{{$pid}}" name="pension_from" aria-describedby="{{$pid}}-msg">
+        <option value="">{{t "wd.always_available"}}</option>
+        {{range .Milestones}}<option value="{{.ID}}"{{if eq (str .ID) $pcur}} selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+      <small class="field-hint" id="{{$pid}}-msg">{{t "hint.pension_from"}}</small>
+    </div>
+  </div>
+  {{with index .E "_form"}}<p class="field-error form-error" role="alert">{{t .}}</p>{{end}}
   <button type="submit" class="visually-hidden">{{t "plan.recalculate"}}</button>
   <p class="note muted" aria-live="polite">{{if .Saved}}{{t "plan.saved"}}{{else}}{{t "plan.autosave"}}{{end}}</p>
 </form>

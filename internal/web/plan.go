@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -109,14 +110,23 @@ type planView struct {
 	Rows       []planRow
 	NoAccounts bool
 	Timeline   []timelineItem
+	// Withdrawal strategy outcome: spending as a share of the plan once it starts.
+	WdActive     bool
+	WdStrategy   string
+	WdMin, WdMax float64
+	WdMinYear    int
 }
 
 type assumptionsForm struct {
-	V        map[string]string
-	E        domain.Errors
-	Kinds    []domain.AccountKind
-	Accounts []domain.Account // candidates for the surplus account
-	Saved    bool
+	V          map[string]string
+	E          domain.Errors
+	Kinds      []domain.AccountKind
+	Accounts   []domain.Account // candidates for the surplus account
+	Milestones []domain.Milestone
+	Strategies []engine.WithdrawalStrategy
+	// OrderLabels names the account kinds for the withdrawal-order list.
+	OrderLabels map[string]string
+	Saved       bool
 }
 
 type planPage struct {
@@ -194,6 +204,19 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 		v.FailAge = main.AgeAt(res.FailMonth)
 		for _, m := range res.Months {
 			v.Shortfall += unit(m.Shortfall, m.Deflator)
+		}
+	}
+
+	if !res.WithdrawalFrom.IsZero() {
+		v.WdActive, v.WdStrategy, v.WdMin, v.WdMax = true, string(in.Assumptions.Withdrawal.Strategy), math.Inf(1), math.Inf(-1)
+		for _, m := range res.Months {
+			if m.Month.Before(res.WithdrawalFrom) {
+				continue
+			}
+			if m.SpendFactor < v.WdMin {
+				v.WdMin, v.WdMinYear = m.SpendFactor, m.Month.Year
+			}
+			v.WdMax = math.Max(v.WdMax, m.SpendFactor)
 		}
 	}
 
@@ -317,7 +340,32 @@ func (s *Server) assumptionsValues(lang i18n.Lang, a engine.Assumptions) map[str
 	for _, k := range domain.AccountKinds {
 		v["return_"+string(k)] = inPercent(lang, a.Returns[k])
 	}
+	w := a.Withdrawal
+	if w.Strategy == "" {
+		w = engine.DefaultWithdrawal()
+	}
+	v["wd_strategy"] = string(w.Strategy)
+	v["wd_start"] = inOwner(w.StartMS)
+	v["wd_rate"] = inPercent(lang, w.Rate)
+	v["wd_floor"] = inPercent(lang, w.Floor)
+	v["wd_ceiling"] = inPercent(lang, w.Ceiling)
+	order := a.Order
+	if engine.ParseOrder(engine.FormatOrder(order)) == nil {
+		order = engine.DefaultOrder
+	}
+	v["wd_order"] = engine.FormatOrder(order)
+	v["pension_from"] = inOwner(a.PensionAvailableMS)
 	return v
+}
+
+// newAssumptionsForm fills the choices the form needs.
+func (s *Server) newAssumptionsForm(lang i18n.Lang, v map[string]string, e domain.Errors, accounts []domain.Account, ms []domain.Milestone) assumptionsForm {
+	labels := map[string]string{}
+	for _, k := range engine.DefaultOrder {
+		labels[string(k)] = s.catalog.T(lang, "account.kind."+string(k))
+	}
+	return assumptionsForm{V: v, E: e, Kinds: domain.AccountKinds, Accounts: surplusCandidates(accounts),
+		Milestones: ms, Strategies: engine.WithdrawalStrategies, OrderLabels: labels}
 }
 
 func surplusCandidates(accounts []domain.Account) []domain.Account {
@@ -339,6 +387,23 @@ func parseAssumptions(p *formParser) (engine.Assumptions, domain.Errors) {
 	}
 	for _, k := range domain.AccountKinds {
 		a.Returns[k] = p.percent("return_" + string(k))
+	}
+	// The withdrawal fields are optional in the request: without them the
+	// handler keeps the plan's current withdrawal settings.
+	if _, ok := p.v["wd_strategy"]; ok {
+		a.Withdrawal = engine.WithdrawalSettings{
+			Strategy: engine.WithdrawalStrategy(p.str("wd_strategy")),
+			StartMS:  p.owner("wd_start"),
+			Rate:     p.percent("wd_rate"),
+			Floor:    p.percent("wd_floor"),
+			Ceiling:  p.percent("wd_ceiling"),
+		}
+		if a.Order = engine.ParseOrder(p.str("wd_order")); a.Order == nil {
+			p.errs.Add("wd_order", domain.ErrChoice)
+		}
+		a.PensionAvailableMS = p.owner("pension_from")
+	} else {
+		a.Withdrawal, a.Order = engine.DefaultWithdrawal(), engine.DefaultOrder
 	}
 	// Validated with the defaults for the settings this form does not edit.
 	check := a
@@ -363,10 +428,8 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	page := planPage{
 		View: s.buildPlanView(fc.lang, in, parsePlanOpts(r.URL.Query())),
-		Form: assumptionsForm{
-			V: s.assumptionsValues(fc.lang, in.Assumptions), E: domain.Errors{},
-			Kinds: domain.AccountKinds, Accounts: surplusCandidates(in.Accounts),
-		},
+		Form: s.newAssumptionsForm(fc.lang, s.assumptionsValues(fc.lang, in.Assumptions), domain.Errors{},
+			in.Accounts, in.Milestones),
 	}
 	s.page(w, r, http.StatusOK, "plan", "plan.title", page)
 }
@@ -407,6 +470,11 @@ func (s *Server) handleSaveAssumptions(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
+	milestones, err := s.store.ListMilestones(r.Context(), fc.plan)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	a, errs := parseAssumptions(newFormParser(fc.lang, r.PostForm))
 	if len(errs) == 0 {
 		// The Plan form does not edit the Monte Carlo settings: keep them.
@@ -416,15 +484,18 @@ func (s *Server) handleSaveAssumptions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.Volatility, a.MCRuns = current.Volatility, current.MCRuns
+		if _, ok := r.PostForm["wd_strategy"]; !ok {
+			a.Withdrawal, a.Order, a.PensionAvailableMS = current.Withdrawal, current.Order, current.PensionAvailableMS
+		}
 		err = s.store.SaveAssumptions(r.Context(), fc.plan, a)
 		if errors.Is(err, store.ErrNotFound) {
-			errs.Add("surplus", domain.ErrChoice)
+			errs.Add("_form", "form.error.stale")
 		} else if err != nil {
 			s.serverError(w, r, err)
 			return
 		}
 	}
-	form := assumptionsForm{E: errs, Kinds: domain.AccountKinds, Accounts: surplusCandidates(accounts)}
+	form := s.newAssumptionsForm(fc.lang, nil, errs, accounts, milestones)
 	status := http.StatusOK
 	if len(errs) > 0 {
 		status = http.StatusUnprocessableEntity
