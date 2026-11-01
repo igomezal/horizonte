@@ -48,7 +48,13 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
 
 ## Layout
 
-- Left-aligned content, max width 1100px, sidebar 232px (drawer below 860px).
+- Left-aligned content, max width 1600px (`--app-max`), sidebar 232px (drawer below 860px).
+  On screens wider than that, content, top bar and footer centre together. Prose still
+  stops at `--app-measure`; charts grow with the width (`clamp()` heights).
+- From 1400px, pages that pair naturally go two columns: Finances sections (`.fin-cols`,
+  which dissolve on narrow screens and restore reading order with CSS `order`), the Plan
+  verdict beside the inheritance, the Sankey beside the year's ledger, and the two
+  Scenarios forms.
 - **No card kit.** Separate sections with space plus one rule (`.section`), not boxes.
 - Lists of named things use ledger rows (`.ledger` / `.ledger-row`): name on the left,
   description or amount on the right, a hairline between rows.

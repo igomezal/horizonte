@@ -4,13 +4,21 @@
   <p class="muted prose">{{t "finances.intro"}}</p>
 </header>
 {{template "summary" .Data.Summary}}
-{{template "fin-section" (index .Data.Sections "people")}}
-{{template "fin-section" (index .Data.Sections "milestones")}}
-{{template "fin-section" (index .Data.Sections "accounts")}}
-{{template "fin-section" (index .Data.Sections "incomes")}}
-{{template "fin-section" (index .Data.Sections "expenses")}}
-{{template "fin-section" (index .Data.Sections "debts")}}
-{{template "fin-section" (index .Data.Sections "prepayments")}}
+{{/* Two columns on wide screens; on narrow ones the columns dissolve and
+     each section's CSS order restores the reading order. */}}
+<div class="fin-cols">
+  <div class="fin-col">
+    {{template "fin-section" (index .Data.Sections "people")}}
+    {{template "fin-section" (index .Data.Sections "accounts")}}
+    {{template "fin-section" (index .Data.Sections "incomes")}}
+    {{template "fin-section" (index .Data.Sections "expenses")}}
+  </div>
+  <div class="fin-col">
+    {{template "fin-section" (index .Data.Sections "milestones")}}
+    {{template "fin-section" (index .Data.Sections "debts")}}
+    {{template "fin-section" (index .Data.Sections "prepayments")}}
+  </div>
+</div>
 {{end}}
 
 {{/* ---------- Summary (refreshes itself after any change) ---------- */}}

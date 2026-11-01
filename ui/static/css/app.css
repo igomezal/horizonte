@@ -369,12 +369,23 @@ h3 {
   color: var(--app-bg);
 }
 
+/* The content, top bar and footer share one column: up to --app-max wide,
+   centred in the space beside the sidebar once the screen is wider than that. */
+:root {
+  --app-max: 1600px;
+}
 #content {
   flex: 1;
   padding: 1.5rem 2.5rem 3rem;
-  max-width: 1100px;
+  max-width: var(--app-max);
   width: 100%;
-  margin: 0;
+  margin: 0 auto;
+}
+.topbar,
+.app-footer {
+  width: 100%;
+  max-width: var(--app-max);
+  margin-inline: auto;
 }
 
 .app-footer {
@@ -445,7 +456,7 @@ h3 {
 
 .chart {
   width: 100%;
-  height: 320px;
+  height: clamp(320px, 24vw, 420px);
   margin-left: -4px;
 }
 
@@ -793,7 +804,7 @@ h3 {
   color: var(--app-bg);
 }
 .chart-tall {
-  height: 440px;
+  height: clamp(440px, 32vw, 600px);
 }
 
 /* Milestone timeline: a chronological row under the verdict. */
@@ -935,7 +946,7 @@ table.projection tr.short td {
   margin-left: 0.5rem;
 }
 .chart-sankey {
-  height: 460px;
+  height: clamp(460px, 30vw, 600px);
   margin: 1rem 0 0.5rem;
 }
 .cf-ledger {
@@ -1084,7 +1095,7 @@ table.mc-milestones th {
   margin-bottom: 0.25rem;
 }
 .chart-heat {
-  height: 360px;
+  height: clamp(360px, 24vw, 460px);
   cursor: pointer;
 }
 .heat-legend {
@@ -1372,4 +1383,94 @@ table.health-phases td:last-child input {
   margin: 0.75rem 0 0;
   font-size: 0.9375rem;
   font-weight: 500;
+}
+
+/* ---------- Wide screens: use the extra width ---------- */
+/* Finances: two columns of sections. Narrow screens dissolve the columns and
+   put the sections back in reading order. */
+.fin-cols {
+  display: flex;
+  flex-direction: column;
+}
+.fin-col {
+  display: contents;
+}
+#section-people { order: 1; }
+#section-milestones { order: 2; }
+#section-accounts { order: 3; }
+#section-incomes { order: 4; }
+#section-expenses { order: 5; }
+#section-debts { order: 6; }
+#section-prepayments { order: 7; }
+
+@media (min-width: 1400px) {
+  .fin-cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 3.5rem;
+    align-items: start;
+  }
+  .fin-col {
+    display: block;
+    min-width: 0;
+  }
+  .fin-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 3.5rem;
+  }
+  .fin-summary .flow {
+    max-width: 30rem;
+  }
+
+  /* Plan: what is left at the end sits beside the verdict. */
+  .plan-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(22rem, 32rem);
+    column-gap: 3.5rem;
+    align-items: start;
+  }
+  .plan-summary > * {
+    grid-column: 1 / -1;
+  }
+  .plan-summary > .verdict {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .plan-summary > .timeline {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .plan-summary > .estate {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin-top: 0;
+    max-width: none;
+  }
+
+  /* Cash flow: the diagram beside the year's ledger. */
+  .cf-year {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(20rem, 1fr);
+    column-gap: 3rem;
+    align-items: start;
+  }
+  .cf-year > * {
+    grid-column: 1 / -1;
+  }
+  .cf-year > .chart-sankey {
+    grid-column: 1;
+  }
+  .cf-year > .cf-ledger {
+    grid-column: 2;
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 1rem;
+  }
+
+  /* Scenarios: creating and importing side by side. */
+  .scen-forms {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 3.5rem;
+    align-items: start;
+  }
 }
