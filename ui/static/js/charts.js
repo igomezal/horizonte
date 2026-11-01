@@ -382,9 +382,94 @@
     return opt;
   };
 
+  // Every historical start year as a cell (rows = decades, columns = year in
+  // the decade): green when the money lasts (stronger = more left at the end),
+  // red when it runs out (stronger = earlier). Clicking a year replays it.
+  builders["start-years"] = function (spec) {
+    const fmt = moneyFormatter(true);
+    const text = cssVar("--chart-text");
+    const pos = cssVar("--app-positive"), neg = cssVar("--app-negative");
+    const ends = spec.cells.filter((c) => !c.failed).map((c) => c.end);
+    const maxEnd = Math.max(1, ...ends);
+    const ages = spec.cells.filter((c) => c.failed).map((c) => c.failAge);
+    const minAge = Math.min(...ages), maxAge = Math.max(...ages);
+    const data = spec.cells.map((c) => {
+      let opacity;
+      if (c.failed) {
+        const span = Math.max(1, maxAge - minAge);
+        opacity = 0.45 + 0.55 * (1 - (c.failAge - minAge) / span);
+      } else {
+        opacity = 0.3 + 0.7 * Math.max(0, c.end) / maxEnd;
+      }
+      if (c.partial) opacity *= 0.5;
+      return {
+        value: [c.col, c.row, c.year], cell: c,
+        itemStyle: c.partial
+          ? { color: c.failed ? neg : pos, opacity: opacity, borderColor: cssVar("--app-muted"), borderWidth: 1, borderType: "dotted" }
+          : { color: c.failed ? neg : pos, opacity: opacity, borderColor: cssVar("--app-bg"), borderWidth: 2 },
+        label: { show: true, formatter: String(c.year).slice(-2), color: cssVar("--app-text"), fontSize: 10 },
+      };
+    });
+    return {
+      textStyle: { fontFamily: getComputedStyle(document.body).fontFamily, color: text },
+      grid: { left: 52, right: 8, top: 8, bottom: 24 },
+      tooltip: {
+        backgroundColor: cssVar("--chart-tooltip-bg"), borderColor: cssVar("--chart-grid"), textStyle: { color: text },
+        formatter: (p) => {
+          const c = p.data.cell;
+          return "<strong>" + c.year + "</strong><br>" + (c.failed ? spec.fail.replace("%s", c.failAge) : spec.ok.replace("%s", fmt.format(c.end))) +
+            (c.partial ? '<br><span style="opacity:.75">' + echarts.format.encodeHTML(spec.partial.replace("%s", c.years)) + "</span>" : "");
+        },
+      },
+      xAxis: { type: "category", data: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: text } },
+      yAxis: { type: "category", data: spec.decades, inverse: true, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: text } },
+      series: [{ type: "heatmap", data: data, emphasis: { itemStyle: { borderColor: cssVar("--app-accent"), borderWidth: 2 } } }],
+    };
+  };
+
+  // One replayed historical scenario against the fixed-return plan.
+  builders.scenario = function (spec) {
+    const opt = baseOption();
+    const fmt = moneyFormatter(false);
+    const ink = cssVar("--app-text"), accent = cssVar("--app-accent"), neg = cssVar("--app-negative"), muted = cssVar("--app-muted");
+    opt.xAxis.data = spec.categories;
+    opt.xAxis.axisLabel.hideOverlap = true;
+    opt.tooltip.formatter = (items) => ageHeader(spec, items[0].dataIndex) + "<br>" + items.map((it) =>
+      it.marker + " " + echarts.format.encodeHTML(it.seriesName) + '<span style="float:right;margin-left:1.5em;font-weight:600">' + fmt.format(it.value) + "</span>").join("<br>");
+    const marks = [];
+    if (spec.dataEndIndex >= 0) {
+      marks.push({ xAxis: spec.categories[spec.dataEndIndex], lineStyle: { color: muted, type: "dotted" },
+        label: { formatter: spec.labels.dataEnd, color: muted, position: "end", fontSize: 11 } });
+    }
+    if (spec.failIndex >= 0) {
+      marks.push({ xAxis: spec.categories[spec.failIndex], lineStyle: { color: neg, type: "dashed", width: 1.5 },
+        label: { formatter: spec.labels.fail, color: neg, position: "end", fontSize: 11, fontWeight: 600, distance: marks.length ? 18 : 4 } });
+    }
+    if (marks.length) opt.grid.top = 70;
+    opt.series = [
+      { name: spec.labels.scenario, type: "line", data: spec.scenario, symbol: "none", color: ink,
+        lineStyle: { width: 2.5, color: ink }, areaStyle: { color: ink, opacity: 0.08 },
+        markLine: marks.length ? { symbol: "none", silent: true, animation: false, data: marks } : undefined },
+      { name: spec.labels.plan, type: "line", data: spec.plan, symbol: "none", color: accent, lineStyle: { width: 1.5, type: "dashed", color: accent } },
+    ];
+    opt.animation = false;
+    return opt;
+  };
+
   // Charts that select a year: clicking a bar moves the year picker.
   function wireYearSelect(chart, spec) {
     chart.off("click");
+    if (spec.type === "start-years" && spec.url) {
+      // Clicking a start year replays it in the scenario section.
+      chart.on("click", (p) => {
+        if (!p.data || !p.data.cell) return;
+        htmx.ajax("GET", spec.url + p.data.cell.year, { target: "#bt-scenario", swap: "outerHTML" }).then(() => {
+          const el = document.getElementById("bt-scenario");
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+      return;
+    }
     if (!spec.selectYear) return;
     chart.on("click", (p) => {
       const slider = document.querySelector("[data-year-slider]");

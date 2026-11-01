@@ -123,6 +123,23 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
   refresh URL carries the seed so settings changes keep the same scenarios.
 - State limits plainly under the results (fixed inflation, correlation used).
 
+## Historical backtest (phase 6)
+
+- **Same verdict pattern:** the share of historical start years that work, then the worst year
+  in words. When history is clearly kinder than the plan's assumptions, say so in a `.callout`
+  (raised paper, accent bar) right under the verdict: it changes how the number should be read.
+- **Crises are a ledger** (`.entry.crisis`): name, start month and a one-line description, the
+  outcome on the right (end value, or "se acaba a los N años" in red) with the lowest point.
+- **Start-year heat-map:** rows are decades, columns the year within the decade, each cell
+  labelled with its two digits. Green = money lasts (stronger = more left), red = money runs
+  out (stronger = earlier). Clicking a cell or "Ver" replays that scenario in place.
+  Start years whose plan outruns the data are **partial**: paler (half opacity) with a dotted
+  muted outline, a tooltip saying how many years were historical, and they are counted on
+  their own line, never in the headline percentage.
+- **Replayed scenario chart:** the scenario as an ink line with a light ink area, the fixed-return
+  plan dashed in accent, a dotted marker where historical data ends and a dashed red one where
+  the money runs out.
+
 ## Motion
 
 - No entrance animations or hover transitions on content.

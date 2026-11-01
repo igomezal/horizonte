@@ -92,6 +92,10 @@ type Input struct {
 	// Detail records a per-stream breakdown of every month (MonthRow.Flow),
 	// used by the cash-flow view. Off for bulk runs such as Monte Carlo.
 	Detail bool
+	// InflationPath, when set, gives the inflation of each projected month
+	// (index t = month Start+t); months beyond it use Assumptions.Inflation.
+	// Historical backtests use it so expenses and income follow real CPI.
+	InflationPath []float64
 }
 
 // EndMonth is the last projected month: when the longest-lived person
@@ -246,7 +250,19 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 	}
 	n := in.Start.MonthsUntil(end) + 1
 	a := in.Assumptions
-	infl := monthlyRate(a.Inflation)
+	// priceIndex[t] is the cumulative inflation from the start to month t.
+	// Inflation-linked streams step up once a year (priceIndex[12·⌊t/12⌋]);
+	// the deflator to today's euros follows it monthly.
+	fixedInfl := monthlyRate(a.Inflation)
+	priceIndex := make([]float64, n+1)
+	priceIndex[0] = 1
+	for t := 0; t < n; t++ {
+		mi := fixedInfl
+		if t < len(in.InflationPath) {
+			mi = in.InflationPath[t]
+		}
+		priceIndex[t+1] = priceIndex[t] * (1 + mi)
+	}
 
 	balances := make([]float64, len(in.Accounts))
 	for i, acc := range in.Accounts {
@@ -287,7 +303,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 	for t := 0; t < n; t++ {
 		m := in.Start.AddMonths(t)
 		if t > 0 {
-			deflator *= 1 + infl
+			deflator = priceIndex[t]
 		}
 		row := MonthRow{Month: m, Deflator: deflator}
 		var flow *Flow
@@ -304,7 +320,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		// 2. Income, tax and expenses.
 		var spendingRate float64 // average monthly spending, for financial independence
 		for k, inc := range in.Incomes {
-			v := incomeThisMonth(inc, resolved, m, t, in.Start, a.Inflation)
+			v := incomeThisMonth(inc, resolved, m, t, in.Start, priceIndex[12*(t/12)])
 			row.Income += v
 			if flow != nil {
 				flow.Income[k] = v
@@ -312,7 +328,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		}
 		row.Tax = row.Income * a.TaxRate
 		for k, e := range in.Expenses {
-			amount, avg := expenseThisMonth(e, resolved, m, t, in.Start, a.Inflation)
+			amount, avg := expenseThisMonth(e, resolved, m, t, in.Start, priceIndex[12*(t/12)])
 			row.Expenses += amount
 			spendingRate += avg
 			if flow != nil {
@@ -551,16 +567,21 @@ func fiReached(ms domain.Milestone, people []domain.Person, m domain.Month,
 	}
 }
 
-func incomeThisMonth(inc domain.Income, r domain.Resolved, m domain.Month, t int, start domain.Month, inflation float64) float64 {
+// streamGrowth is how much a stream has grown by month t: its own yearly rate,
+// or the year-stepped price index when it follows inflation.
+func streamGrowth(own *float64, t int, inflationIndex float64) float64 {
+	if own != nil {
+		return growth(*own, t)
+	}
+	return inflationIndex
+}
+
+func incomeThisMonth(inc domain.Income, r domain.Resolved, m domain.Month, t int, start domain.Month, inflationIndex float64) float64 {
 	from, to, ok := r.Window(inc.Start, inc.End, inc.StartMS, inc.EndMS)
 	if !ok || !domain.Active(from, to, m) {
 		return 0
 	}
-	g := inflation
-	if inc.AnnualGrowth != nil {
-		g = *inc.AnnualGrowth
-	}
-	amount := inc.Amount.Euros() * growth(g, t)
+	amount := inc.Amount.Euros() * streamGrowth(inc.AnnualGrowth, t, inflationIndex)
 	switch inc.PaymentsPerYear {
 	case 14: // Spanish salaries: two extra payments, in June and December.
 		if m.Month == 6 || m.Month == 12 {
@@ -579,16 +600,12 @@ func incomeThisMonth(inc domain.Income, r domain.Resolved, m domain.Month, t int
 
 // expenseThisMonth returns the amount paid in month m and the stream's average
 // monthly cost while active (yearly payments spread over 12 months).
-func expenseThisMonth(e domain.Expense, r domain.Resolved, m domain.Month, t int, start domain.Month, inflation float64) (amount, monthlyAvg float64) {
+func expenseThisMonth(e domain.Expense, r domain.Resolved, m domain.Month, t int, start domain.Month, inflationIndex float64) (amount, monthlyAvg float64) {
 	from, to, ok := r.Window(e.Start, e.End, e.StartMS, e.EndMS)
 	if !ok || !domain.Active(from, to, m) {
 		return 0, 0
 	}
-	g := inflation
-	if e.AnnualGrowth != nil {
-		g = *e.AnnualGrowth
-	}
-	payment := e.Amount.Euros() * growth(g, t)
+	payment := e.Amount.Euros() * streamGrowth(e.AnnualGrowth, t, inflationIndex)
 	if e.PaymentsPerYear == 1 {
 		if m.Month == anchorMonth(from, start) {
 			return payment, payment / 12

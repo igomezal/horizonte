@@ -1068,3 +1068,46 @@ table.mc-milestones td,
 table.mc-milestones th {
   white-space: nowrap;
 }
+
+/* ---------- Historical backtest ---------- */
+.entry.crisis .entry-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+}
+.entry.crisis .entry-amount small {
+  font-size: 0.8125rem;
+}
+.bt-scenario .lead-line {
+  max-width: var(--app-measure);
+  margin-bottom: 0.25rem;
+}
+.chart-heat {
+  height: 360px;
+  cursor: pointer;
+}
+.heat-legend {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.875rem;
+}
+.heat-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* A short explanatory note that matters for reading the result. */
+.callout {
+  max-width: var(--app-measure);
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  background: var(--papel-raised);
+  box-shadow: inset 3px 0 0 var(--app-accent);
+}
+.dot-partial {
+  background: transparent;
+  border: 1px dotted var(--app-muted);
+}

@@ -3,7 +3,9 @@ package i18n
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -93,5 +95,41 @@ func TestMiddleware(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), req)
 	if seen != ES {
 		t.Errorf("unsupported lang = %q, want es", seen)
+	}
+}
+
+// Strings that take arguments go through fmt.Sprintf, so a literal percent
+// sign must be written "%%" (otherwise "60 % bolsa" renders as "60 %!b(MISSING)olsa"),
+// and both languages must use the same placeholders in the same order.
+func TestFormatVerbs(t *testing.T) {
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	verbs := regexp.MustCompile(`%[ +#0-]*[a-zA-Z%]`)
+	placeholders := func(s string) []string {
+		var out []string
+		for _, v := range verbs.FindAllString(s, -1) {
+			if v != "%%" {
+				out = append(out, v)
+			}
+		}
+		return out
+	}
+	for _, key := range c.Keys(ES) {
+		es, en := c.messages[ES][key], c.messages[EN][key]
+		pe, pn := placeholders(es), placeholders(en)
+		usesArgs := strings.Contains(es, "%s") || strings.Contains(es, "%d")
+		if !usesArgs {
+			continue
+		}
+		for _, v := range append(append([]string{}, pe...), pn...) {
+			if v != "%s" && v != "%d" {
+				t.Errorf("%s: stray %q (write a literal percent as %%%%)", key, v)
+			}
+		}
+		if strings.Join(pe, ",") != strings.Join(pn, ",") {
+			t.Errorf("%s: placeholders differ: es %v, en %v", key, pe, pn)
+		}
 	}
 }

@@ -50,6 +50,25 @@ ui/templates/        layout, partials and pages
 ui/static/           CSS, JS and vendored libraries
 ```
 
+## Historical market data
+
+Backtests use Robert Shiller's U.S. stock market data (S&P Composite total returns, 10-year
+Treasury returns and CPI, monthly since 1871), converted into
+`internal/history/shiller_monthly.csv` and embedded in the binary. The app never downloads it
+at runtime.
+
+To refresh it with the latest published data:
+
+```sh
+go run ./cmd/dataset update                       # downloads ie_data.xls from Shiller's Yale page
+go run ./cmd/dataset update -url <url>            # another copy (e.g. Shiller's newer site)
+go run ./cmd/dataset update -in ie_data.xls -source <url>   # a file you downloaded yourself
+```
+
+Then rebuild. The command checks the converted data (no gaps, plausible values) before
+replacing the CSV, and `go test ./internal/history` checks it against well-known years
+(1931, 1974, 2008…).
+
 ## Adding translations
 
 Add the key to **both** `internal/i18n/locales/es.json` and `en.json`. A test fails if the catalogs differ.

@@ -1,0 +1,80 @@
+{{define "content"}}
+<header class="page-head">
+  <h1>{{t "backtest.title"}}</h1>
+  <p class="muted prose">{{t "backtest.intro"}}</p>
+</header>
+{{with .Data}}
+{{if not .HasPeople}}
+<p class="empty">{{t "plan.no_people"}}</p>
+<p><a href="/finances">{{t "plan.go_finances"}}</a></p>
+{{else}}
+<section class="lead-figure verdict" aria-label="{{t "backtest.title"}}">
+  <p class="lead">{{t "bt.verdict" .FirstYear .LastYear .EndAge}}</p>
+  <span class="figure">{{percent .Rate 0}}</span>
+  <p class="breakdown"><span>
+    {{if .Worst.Failed}}{{t "bt.worst_fail" .Worst.Year .WorstFailAge}}{{else}}{{t "bt.worst_ok" .Worst.Year (money .Worst.EndReal)}}{{end}}
+  </span></p>
+  <p class="muted">{{t "bt.starts" .Successes .Starts}}
+    {{if .PartialStarts}}<br>{{t "bt.partial_starts" .PartialFirst .PartialLast .PartialSuccesses .PartialStarts}}{{end}}</p>
+  {{if .ShowHistNote}}<p class="callout">{{t "bt.history_beats_plan" (percent .HistReal 1) (percent .PlanReal 1)}}</p>{{end}}
+</section>
+
+<section class="section" aria-labelledby="h-crises">
+  <h2 id="h-crises">{{t "bt.crises_title"}}</h2>
+  <p class="section-desc muted">{{t "bt.crises_desc"}}</p>
+  <div class="entries">
+    {{range .Crises}}
+    <div class="entry crisis">
+      <div class="entry-main">
+        <span class="entry-name">{{.Label}}</span>
+        <span class="entry-meta">
+          <span>{{t "bt.starts_in" (month .Start)}}</span>
+          <span>{{.Desc}}</span>
+        </span>
+      </div>
+      <div class="entry-amount">
+        {{if .Failed}}<span class="amount negative">{{t "bt.fails_at" .FailAge}}</span>
+        {{else}}<span class="amount">{{money .EndReal}}</span>{{end}}
+        <small class="muted">{{t "bt.lowest" (money .MinReal)}}</small>
+      </div>
+      <div class="entry-actions">
+        <button type="button" class="link-btn" hx-get="/backtest/scenario?crisis={{.Key}}" hx-target="#bt-scenario" hx-swap="outerHTML">{{t "bt.see"}}</button>
+      </div>
+    </div>
+    {{end}}
+  </div>
+</section>
+
+{{template "bt-scenario" .Scenario}}
+
+<section class="section" aria-labelledby="h-heat">
+  <h2 id="h-heat">{{t "bt.heat_title"}}</h2>
+  <p class="section-desc muted">{{t "bt.heat_desc"}}</p>
+  <div class="chart chart-heat" data-chart="bt-heat" role="img" aria-label="{{t "bt.heat_title"}}"></div>
+  <script type="application/json" id="bt-heat">{{json .Heat}}</script>
+  <p class="heat-legend muted">
+    <span><span class="dot dot-income" aria-hidden="true"></span>{{t "bt.legend_ok"}}</span>
+    <span><span class="dot dot-debt" aria-hidden="true"></span>{{t "bt.legend_fail"}}</span>
+    <span><span class="dot dot-partial" aria-hidden="true"></span>{{t "bt.legend_partial"}}</span>
+  </p>
+</section>
+
+<p class="note muted">{{t "bt.method" (month .DataFrom) (month .DataTo)}}</p>
+{{end}}
+{{end}}
+{{end}}
+
+{{/* One replayed scenario (a crisis or a start year). */}}
+{{define "bt-scenario"}}
+<section id="bt-scenario" class="section bt-scenario" aria-live="polite" aria-labelledby="h-scenario">
+  <h2 id="h-scenario">{{t "bt.scenario_title" .Title (month .Start)}}</h2>
+  <p class="lead-line">
+    {{if .Failed}}<strong class="negative">{{t "bt.sc_fail" .FailAge (month .FailMonth)}}</strong>
+    {{else}}<strong>{{t "bt.sc_ok" .EndAge (money .EndReal)}}</strong>{{end}}
+    {{t "bt.sc_lowest" (money .MinReal) (month .MinMonth)}}
+  </p>
+  <p class="section-desc muted">{{if .Partial}}{{t "bt.sc_partial" .HistoryYears}}{{else}}{{t "bt.sc_full"}}{{end}}</p>
+  <div class="chart chart-tall" data-chart="bt-sc-{{.ID}}" role="img" aria-label="{{t "bt.scenario_title" .Title (month .Start)}}"></div>
+  <script type="application/json" id="bt-sc-{{.ID}}">{{json .Chart}}</script>
+</section>
+{{end}}

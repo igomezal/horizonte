@@ -94,6 +94,9 @@ func New(cfg Config) (*Server, error) {
 	mux.HandleFunc("GET /success", s.handleSuccess)
 	mux.HandleFunc("GET /success/results", s.handleSuccessResults)
 	mux.HandleFunc("POST /success/settings", s.handleSaveMCSettings)
+
+	mux.HandleFunc("GET /backtest", s.handleBacktest)
+	mux.HandleFunc("GET /backtest/scenario", s.handleBacktestScenario)
 	mux.HandleFunc("/", s.handleNotFound)
 
 	var h http.Handler = mux
