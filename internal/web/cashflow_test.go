@@ -72,7 +72,7 @@ func TestCashflowYearWithoutIncome(t *testing.T) {
 	// 2056: retired at 65 (Apr 2055), pension from 67 (Apr 2057): no income at all.
 	rec, body := do(s, htmxReq("GET", "/cashflow/year?y=2056&real=1", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d", rec.Code)
+		t.Fatalf("status = %d %s", rec.Code, body)
 	}
 	if got := rec.Header().Get("HX-Push-Url"); got != "/cashflow?real=1&y=2056" {
 		t.Errorf("HX-Push-Url = %q", got)
@@ -99,5 +99,16 @@ func TestCashflowWithoutPeople(t *testing.T) {
 	}
 	if rec, _ := do(s, htmxReq("GET", "/cashflow/year", nil)); rec.Code != http.StatusNotFound {
 		t.Errorf("year without people = %d", rec.Code)
+	}
+}
+
+func TestCashflowShowsIRPF(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	seedCashflow(t, s)
+	_, body := do(s, httptest.NewRequest("GET", "/cashflow", nil))
+	for _, want := range []string{"IRPF y Seguridad Social", "simulación aproximada", "Base imponible general", "Retenido durante el año", "renta de junio"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("cash flow page missing %q", want)
+		}
 	}
 }

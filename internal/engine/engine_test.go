@@ -15,7 +15,7 @@ func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
 // so tests can reason about exact cash flows.
 func flat() Assumptions {
 	a := DefaultAssumptions()
-	a.Inflation, a.TaxRate = 0, 0
+	a.Inflation, a.TaxRate, a.TaxModel = 0, 0, TaxFlat
 	for k := range a.Returns {
 		a.Returns[k] = 0
 	}
@@ -657,5 +657,87 @@ func TestWithdrawalOrderAndPensionLock(t *testing.T) {
 	}
 	if ParseOrder("cash,cash,deposit,other,pension") != nil || ParseOrder("cash,deposit") != nil {
 		t.Error("invalid orders must be rejected")
+	}
+}
+
+func TestIRPFWithholdingAndSettlement(t *testing.T) {
+	// A 30.000 €/year salary (12 payments) from January 2027 for two full years.
+	jan := domain.Month{Year: 2027, Month: 1}
+	a := flat()
+	a.TaxModel, a.TaxRegion = TaxES, "general"
+	in := Input{
+		People:      []domain.Person{{ID: 1, Name: "Ana", Birth: domain.Month{Year: 1990, Month: 1}, LifeExpectancy: 39}},
+		Accounts:    []domain.Account{{ID: 1, Kind: domain.AccountCash}},
+		Incomes:     []domain.Income{{Kind: domain.IncomeSalary, OwnerID: ptr(int64(1)), Amount: 250000, PaymentsPerYear: 12}},
+		Assumptions: a,
+		Start:       jan,
+	}
+	res := Simulate(in)
+	if len(res.TaxYears) < 2 {
+		t.Fatalf("tax years = %d", len(res.TaxYears))
+	}
+	y := res.TaxYears[0]
+	if y.Year != 2027 || y.Partial || math.Abs(y.IRPF()-4927.80) > 0.05 {
+		t.Errorf("2027 IRPF = %.2f, want 4927.80 (%+v)", y.IRPF(), y)
+	}
+	// Withholding estimated from the same salary: settlement ≈ 0.
+	if math.Abs(y.Settlement) > 0.05 {
+		t.Errorf("settlement = %.2f, want ≈ 0", y.Settlement)
+	}
+	// Monthly charge = Social Security 6,48 % + withholding (4.927,80 / 30.000).
+	want := 2500*0.0648 + 2500*4927.80/30000
+	if got := res.Months[0].Tax; math.Abs(got-want) > 0.01 {
+		t.Errorf("monthly tax = %.2f, want %.2f", got, want)
+	}
+}
+
+func TestIRPFSettlementForPensionPlanWithdrawals(t *testing.T) {
+	// Retiree with no income living off a pension plan: nothing is withheld,
+	// so the withdrawals' IRPF is paid in June of the next year.
+	jan := domain.Month{Year: 2027, Month: 1}
+	a := flat()
+	a.TaxModel, a.TaxRegion = TaxES, "general"
+	in := Input{
+		People:      []domain.Person{{ID: 1, Name: "Ana", Birth: domain.Month{Year: 1957, Month: 1}, LifeExpectancy: 72}},
+		Accounts:    []domain.Account{{ID: 1, Kind: domain.AccountPension, OwnerID: ptr(int64(1)), Balance: 50000000}},
+		Expenses:    []domain.Expense{{Amount: 200000, PaymentsPerYear: 12}}, // 24.000 €/year
+		Assumptions: a,
+		Start:       jan,
+	}
+	res := Simulate(in)
+	y := res.TaxYears[0]
+	if y.Withheld != 0 || y.People[0].Income.PlanWithdrawal < 23999 {
+		t.Fatalf("2027 = %+v", y)
+	}
+	if y.Settlement <= 0 {
+		t.Fatalf("withdrawals should owe IRPF, settlement %.2f", y.Settlement)
+	}
+	june := res.Months[17] // June 2028
+	if june.Month != (domain.Month{Year: 2028, Month: 6}) || math.Abs(june.Tax-y.Settlement) > 0.01 {
+		t.Errorf("June 2028 tax = %.2f, want the settlement %.2f", june.Tax, y.Settlement)
+	}
+}
+
+func TestIRPFTaxesOnlyInvestmentGains(t *testing.T) {
+	jan := domain.Month{Year: 2027, Month: 1}
+	a := flat()
+	a.TaxModel, a.TaxRegion = TaxES, "general"
+	a.Returns[domain.AccountInvestment] = 0.10
+	in := Input{
+		People:      []domain.Person{{ID: 1, Name: "Ana", Birth: domain.Month{Year: 1980, Month: 1}, LifeExpectancy: 49}},
+		Accounts:    []domain.Account{{ID: 1, Kind: domain.AccountInvestment, OwnerID: ptr(int64(1)), Balance: 10000000}},
+		Expenses:    []domain.Expense{{Amount: 100000, PaymentsPerYear: 12, Start: domain.Month{Year: 2028, Month: 1}}},
+		Assumptions: a,
+		Start:       jan,
+	}
+	res := Simulate(in)
+	// 2027: no withdrawals, so no savings income despite the growth.
+	if got := res.TaxYears[0].People[0].Income.Savings; got != 0 {
+		t.Errorf("2027 savings income = %.2f, want 0 (unrealised)", got)
+	}
+	// 2028: withdrawals of 12.000 € from an account that grew ~10 %: only the gain part is taxed.
+	s28 := res.TaxYears[1].People[0].Income.Savings
+	if s28 <= 0 || s28 > 0.2*12000 {
+		t.Errorf("2028 realised gains = %.2f, want a fraction of the 12.000 € withdrawn", s28)
 	}
 }

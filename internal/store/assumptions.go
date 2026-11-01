@@ -20,11 +20,13 @@ func (s *Store) GetAssumptions(ctx context.Context, planID int64) (engine.Assump
 	err := s.q.QueryRowContext(ctx, `SELECT inflation, tax_rate, return_cash, return_deposit,
 		return_investment, return_pension, return_realestate, return_other, surplus_account_id,
 		vol_cash, vol_deposit, vol_investment, vol_pension, vol_realestate, vol_other, mc_runs,
-		wd_strategy, wd_start_milestone_id, wd_rate, wd_floor, wd_ceiling, wd_order, pension_available_milestone_id
+		wd_strategy, wd_start_milestone_id, wd_rate, wd_floor, wd_ceiling, wd_order, pension_available_milestone_id,
+		tax_model, tax_region
 		FROM plan_assumptions WHERE plan_id = ?`, planID).
 		Scan(&a.Inflation, &a.TaxRate, &cash, &deposit, &investment, &pension, &realestate, &other, &surplus,
 			&vCash, &vDeposit, &vInvestment, &vPension, &vRealestate, &vOther, &a.MCRuns,
-			&strategy, &wdStart, &a.Withdrawal.Rate, &a.Withdrawal.Floor, &a.Withdrawal.Ceiling, &order, &pensionFrom)
+			&strategy, &wdStart, &a.Withdrawal.Rate, &a.Withdrawal.Floor, &a.Withdrawal.Ceiling, &order, &pensionFrom,
+			&a.TaxModel, &a.TaxRegion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, nil
 	}
@@ -68,12 +70,20 @@ func (s *Store) SaveAssumptions(ctx context.Context, planID int64, a engine.Assu
 	if engine.ParseOrder(order) == nil {
 		order = engine.FormatOrder(engine.DefaultOrder)
 	}
+	taxModel, taxRegion := a.TaxModel, a.TaxRegion
+	if taxModel == "" {
+		taxModel = engine.TaxES
+	}
+	if taxRegion == "" {
+		taxRegion = "general"
+	}
 	r, v := a.Returns, a.Volatility
 	_, err := s.q.ExecContext(ctx, `INSERT INTO plan_assumptions (plan_id, inflation, tax_rate, return_cash,
 		return_deposit, return_investment, return_pension, return_realestate, return_other, surplus_account_id,
 		vol_cash, vol_deposit, vol_investment, vol_pension, vol_realestate, vol_other, mc_runs,
-		wd_strategy, wd_start_milestone_id, wd_rate, wd_floor, wd_ceiling, wd_order, pension_available_milestone_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		wd_strategy, wd_start_milestone_id, wd_rate, wd_floor, wd_ceiling, wd_order, pension_available_milestone_id,
+		tax_model, tax_region)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(plan_id) DO UPDATE SET inflation = excluded.inflation, tax_rate = excluded.tax_rate,
 		return_cash = excluded.return_cash, return_deposit = excluded.return_deposit,
 		return_investment = excluded.return_investment, return_pension = excluded.return_pension,
@@ -84,11 +94,13 @@ func (s *Store) SaveAssumptions(ctx context.Context, planID int64, a engine.Assu
 		mc_runs = excluded.mc_runs, wd_strategy = excluded.wd_strategy,
 		wd_start_milestone_id = excluded.wd_start_milestone_id, wd_rate = excluded.wd_rate,
 		wd_floor = excluded.wd_floor, wd_ceiling = excluded.wd_ceiling, wd_order = excluded.wd_order,
-		pension_available_milestone_id = excluded.pension_available_milestone_id`,
+		pension_available_milestone_id = excluded.pension_available_milestone_id,
+		tax_model = excluded.tax_model, tax_region = excluded.tax_region`,
 		planID, a.Inflation, a.TaxRate, r[domain.AccountCash], r[domain.AccountDeposit], r[domain.AccountInvestment],
 		r[domain.AccountPension], r[domain.AccountRealEstate], r[domain.AccountOther], nullInt(a.SurplusAccountID),
 		v[domain.AccountCash], v[domain.AccountDeposit], v[domain.AccountInvestment],
 		v[domain.AccountPension], v[domain.AccountRealEstate], v[domain.AccountOther], a.MCRuns,
-		w.Strategy, nullInt(w.StartMS), w.Rate, w.Floor, w.Ceiling, order, nullInt(a.PensionAvailableMS))
+		w.Strategy, nullInt(w.StartMS), w.Rate, w.Floor, w.Ceiling, order, nullInt(a.PensionAvailableMS),
+		taxModel, taxRegion)
 	return err
 }

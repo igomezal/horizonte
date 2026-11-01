@@ -124,6 +124,7 @@ type assumptionsForm struct {
 	Accounts   []domain.Account // candidates for the surplus account
 	Milestones []domain.Milestone
 	Strategies []engine.WithdrawalStrategy
+	Regions    []string
 	// OrderLabels names the account kinds for the withdrawal-order list.
 	OrderLabels map[string]string
 	Saved       bool
@@ -355,6 +356,13 @@ func (s *Server) assumptionsValues(lang i18n.Lang, a engine.Assumptions) map[str
 	}
 	v["wd_order"] = engine.FormatOrder(order)
 	v["pension_from"] = inOwner(a.PensionAvailableMS)
+	v["tax_model"], v["tax_region"] = a.TaxModel, a.TaxRegion
+	if v["tax_model"] == "" {
+		v["tax_model"] = engine.TaxES
+	}
+	if v["tax_region"] == "" {
+		v["tax_region"] = "general"
+	}
 	return v
 }
 
@@ -365,7 +373,7 @@ func (s *Server) newAssumptionsForm(lang i18n.Lang, v map[string]string, e domai
 		labels[string(k)] = s.catalog.T(lang, "account.kind."+string(k))
 	}
 	return assumptionsForm{V: v, E: e, Kinds: domain.AccountKinds, Accounts: surplusCandidates(accounts),
-		Milestones: ms, Strategies: engine.WithdrawalStrategies, OrderLabels: labels}
+		Milestones: ms, Strategies: engine.WithdrawalStrategies, OrderLabels: labels, Regions: engine.TaxRegions()}
 }
 
 func surplusCandidates(accounts []domain.Account) []domain.Account {
@@ -382,6 +390,8 @@ func parseAssumptions(p *formParser) (engine.Assumptions, domain.Errors) {
 	a := engine.Assumptions{
 		Inflation:        p.percent("inflation"),
 		TaxRate:          p.percent("tax_rate"),
+		TaxModel:         p.str("tax_model"),
+		TaxRegion:        p.str("tax_region"),
 		Returns:          map[domain.AccountKind]float64{},
 		SurplusAccountID: p.owner("surplus"),
 	}
@@ -486,6 +496,9 @@ func (s *Server) handleSaveAssumptions(w http.ResponseWriter, r *http.Request) {
 		a.Volatility, a.MCRuns = current.Volatility, current.MCRuns
 		if _, ok := r.PostForm["wd_strategy"]; !ok {
 			a.Withdrawal, a.Order, a.PensionAvailableMS = current.Withdrawal, current.Order, current.PensionAvailableMS
+		}
+		if _, ok := r.PostForm["tax_model"]; !ok {
+			a.TaxModel, a.TaxRegion = current.TaxModel, current.TaxRegion
 		}
 		err = s.store.SaveAssumptions(r.Context(), fc.plan, a)
 		if errors.Is(err, store.ErrNotFound) {

@@ -1252,3 +1252,29 @@ table.scenarios th {
 .wd-order-row {
   margin-top: 1rem;
 }
+
+/* IRPF of the selected year (cash flow, TaxModel "es"). */
+.irpf {
+  margin-top: 2rem;
+  max-width: 44rem;
+}
+.irpf h3 {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+.irpf .table-wrap {
+  max-height: none;
+}
+table.irpf-table tr.total th,
+table.irpf-table tr.total td {
+  font-weight: 700;
+  border-top: 1px solid var(--app-text);
+}
+.irpf-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+}
+.irpf-note .muted {
+  display: block;
+  margin-top: 0.25rem;
+}

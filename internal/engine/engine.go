@@ -12,7 +12,11 @@ import (
 // Assumptions are the plan-wide settings the projection depends on.
 type Assumptions struct {
 	Inflation float64 // annual, e.g. 0.025
-	TaxRate   float64 // flat effective rate on gross income (until phase 9)
+	TaxRate   float64 // flat effective rate on gross income (TaxModel "flat")
+	// TaxModel is TaxES (Spanish IRPF) or TaxFlat; TaxRegion picks the
+	// regional IRPF scale.
+	TaxModel  string
+	TaxRegion string
 	// Returns is the default annual return per account kind, used when an
 	// account has no return of its own.
 	Returns map[domain.AccountKind]float64
@@ -37,6 +41,8 @@ func DefaultAssumptions() Assumptions {
 	return Assumptions{
 		Inflation: 0.025,
 		TaxRate:   0.20,
+		TaxModel:  TaxES,
+		TaxRegion: "general",
 		Returns: map[domain.AccountKind]float64{
 			domain.AccountCash:       0,
 			domain.AccountDeposit:    0.02,
@@ -57,6 +63,12 @@ func (a Assumptions) Validate() domain.Errors {
 	errs := domain.Errors{}
 	if a.Inflation < -0.05 || a.Inflation > 0.2 {
 		errs.Add("inflation", domain.ErrRange)
+	}
+	if a.TaxModel != "" && a.TaxModel != TaxFlat && a.TaxModel != TaxES {
+		errs.Add("tax_model", domain.ErrChoice)
+	}
+	if a.TaxModel == TaxES && !validTaxRegion(a.TaxRegion) {
+		errs.Add("tax_region", domain.ErrChoice)
 	}
 	if a.TaxRate < 0 || a.TaxRate > 0.6 {
 		errs.Add("tax_rate", domain.ErrRange)
@@ -229,6 +241,7 @@ type Result struct {
 	PaidOff        []DebtPaidOff  // in payoff order
 	SurplusAccount int            // index of the account receiving surplus money, -1 if none
 	WithdrawalFrom domain.Month   // month the withdrawal strategy started (zero if never)
+	TaxYears       []TaxYear      // IRPF per calendar year (TaxModel "es")
 	FailMonth      domain.Month   // first month with a shortfall; zero if the money lasts
 	Shortfall      float64        // total uncovered deficit, nominal euros
 }
@@ -320,6 +333,24 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		policy.s = DefaultWithdrawal()
 	}
 
+	// Purchase cost of each account, to tax only the gains of a withdrawal.
+	// Starting balances count as cost (existing unrealised gains are unknown).
+	basis := append([]float64(nil), balances...)
+	var tx *taxer
+	if a.TaxModel == TaxES && len(in.People) > 0 {
+		tx = newTaxer(in)
+	}
+	// deposit adds money to an account: it raises the cost basis and, for
+	// pension plans, counts as a deductible contribution.
+	deposit := func(i int, amount float64) {
+		balances[i] += amount
+		basis[i] += amount
+		if tx != nil && in.Accounts[i].Kind == domain.AccountPension {
+			tx.addPlanContrib(in.Accounts[i].OwnerID, amount)
+		}
+	}
+	effTax := a.TaxRate // share of gross income lost to tax, for withdrawal strategies
+
 	res.Months = make([]MonthRow, 0, n)
 	deflator := 1.0
 	for t := 0; t < n; t++ {
@@ -334,9 +365,21 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 			row.Flow = flow
 		}
 
-		// 1. Investment growth on the balances carried in.
+		if tx != nil && (t == 0 || m.Month == 1) {
+			tx.beginYear(m, t == 0, deflator, tx.expectedYear(in, resolved, m, t, priceIndex[12*(t/12)]))
+			if tx.rate > 0 {
+				effTax = tx.rate
+			}
+		}
+
+		// 1. Investment growth on the balances carried in. Deposit interest is
+		// savings income every year; other gains are taxed when withdrawn.
 		for i := range balances {
-			balances[i] *= 1 + rate(t, i)
+			g := balances[i] * rate(t, i)
+			if tx != nil && g > 0 && in.Accounts[i].Kind == domain.AccountDeposit {
+				tx.addSavings(in.Accounts[i].OwnerID, g)
+			}
+			balances[i] += g
 		}
 
 		// 2. Income, tax and expenses.
@@ -344,11 +387,18 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		for k, inc := range in.Incomes {
 			v := incomeThisMonth(inc, resolved, m, t, in.Start, priceIndex[12*(t/12)])
 			row.Income += v
+			if tx != nil {
+				tx.addIncome(inc.Kind, inc.OwnerID, v)
+			}
 			if flow != nil {
 				flow.Income[k] = v
 			}
 		}
-		row.Tax = row.Income * a.TaxRate
+		if tx != nil {
+			row.Tax = tx.monthCharge(m)
+		} else {
+			row.Tax = row.Income * a.TaxRate
+		}
 
 		// Withdrawal strategy: scale planned expenses to what it allows.
 		savings := 0.0
@@ -362,7 +412,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 			infl := priceIndex[12*(t/12)]
 			for _, inc := range in.Incomes {
 				if resolved.ActiveIn(inc.Start, inc.End, inc.StartMS, inc.EndMS, m) {
-					y.netIncome += inc.Annual().Euros() * streamGrowth(inc.AnnualGrowth, t, infl) * (1 - a.TaxRate)
+					y.netIncome += inc.Annual().Euros() * streamGrowth(inc.AnnualGrowth, t, infl) * (1 - effTax)
 				}
 			}
 			for _, e := range in.Expenses {
@@ -437,7 +487,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 					amount := math.Min(pp.Amount.Euros(), available)
 					if amount > 0 {
 						available -= amount
-						balances[to] += amount
+						deposit(to, amount)
 						row.Redirected += amount
 						if flow != nil {
 							flow.Contributions[to] += amount
@@ -490,7 +540,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 				if c <= 0 {
 					continue
 				}
-				balances[i] += c
+				deposit(i, c)
 				row.Contributions += c
 				cash -= c
 				if flow != nil {
@@ -504,7 +554,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 					continue
 				}
 				c := math.Min(freed[i], cash)
-				balances[to] += c
+				deposit(to, c)
 				row.Contributions += c
 				cash -= c
 				if flow != nil {
@@ -514,7 +564,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 			if cash > 0 {
 				row.SurplusSaved = cash
 				if surplusIdx >= 0 {
-					balances[surplusIdx] += cash
+					deposit(surplusIdx, cash)
 				} else {
 					// No account to hold it: the money is spent.
 					cash = 0
@@ -529,6 +579,20 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 				take := math.Min(balances[i], need)
 				if take <= 0 {
 					continue
+				}
+				if tx != nil {
+					acc := in.Accounts[i]
+					switch acc.Kind {
+					case domain.AccountPension: // taxed as work income
+						tx.addPlanWithdrawal(acc.OwnerID, take)
+					case domain.AccountInvestment, domain.AccountOther: // only the gain is taxed
+						if gain := take * math.Max(0, 1-basis[i]/balances[i]); gain > 0 {
+							tx.addSavings(acc.OwnerID, gain)
+						}
+					}
+				}
+				if balances[i] > 0 {
+					basis[i] -= take * basis[i] / balances[i]
 				}
 				balances[i] -= take
 				row.Withdrawals += take
@@ -560,6 +624,9 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		}
 		row.NetWorth = row.Assets() - row.DebtBalance
 		res.Months = append(res.Months, row)
+		if tx != nil && (m.Month == 12 || t == n-1) {
+			tx.endYear()
+		}
 
 		// 5. Financial independence (FIRE variants). Streams bound to it change
 		// from next month.
@@ -580,6 +647,9 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		}
 	}
 
+	if tx != nil {
+		res.TaxYears = tx.years
+	}
 	end = res.Months[len(res.Months)-1].Month
 	for _, ms := range in.Milestones {
 		hit := MilestoneHit{Milestone: ms}

@@ -83,5 +83,36 @@
       </dl>
     </div>
   </div>
+
+  {{with .IRPF}}
+  <div class="irpf">
+    <h3>{{t "irpf.title" $.Year}}</h3>
+    <div class="table-wrap">
+      <table class="projection irpf-table">
+        <thead><tr><th scope="col"><span class="visually-hidden">{{t "irpf.concept"}}</span></th>{{range .People}}<th scope="col" class="num">{{.Name}}</th>{{end}}</tr></thead>
+        <tbody>
+          <tr><th scope="row">{{t "irpf.gross"}}</th>{{range .People}}<td class="num">{{money .Gross}}</td>{{end}}</tr>
+          <tr><th scope="row">{{t "irpf.ss"}}</th>{{range .People}}<td class="num">{{money .SocialSecurity}}</td>{{end}}</tr>
+          <tr><th scope="row">{{t "irpf.general_base"}}</th>{{range .People}}<td class="num">{{money .GeneralBase}}</td>{{end}}</tr>
+          <tr><th scope="row">{{t "irpf.savings_base"}}</th>{{range .People}}<td class="num">{{money .SavingsBase}}</td>{{end}}</tr>
+          <tr><th scope="row">{{t "irpf.minimum"}}</th>{{range .People}}<td class="num">{{money .Minimum}}</td>{{end}}</tr>
+          <tr><th scope="row">{{t "irpf.general_tax"}}</th>{{range .People}}<td class="num">{{money .GeneralTax}}</td>{{end}}</tr>
+          <tr><th scope="row">{{t "irpf.savings_tax"}}</th>{{range .People}}<td class="num">{{money .SavingsTax}}</td>{{end}}</tr>
+          <tr class="total"><th scope="row">{{t "irpf.tax"}}</th>{{range .People}}<td class="num">{{money .Tax}}</td>{{end}}</tr>
+          <tr><th scope="row">{{t "irpf.effective"}}</th>{{range .People}}<td class="num">{{percent .Effective 1}}</td>{{end}}</tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="irpf-note">
+      {{t "irpf.withheld" (money .Withheld)}}
+      {{if .Partial}}{{t "irpf.partial"}}
+      {{else if gt .Settlement 0.5}}<strong>{{t "irpf.pay" (money .Settlement) .NextYear}}</strong>
+      {{else if lt .Settlement -0.5}}<strong class="positive">{{t "irpf.refund" (money (sub 0.0 .Settlement)) .NextYear}}</strong>
+      {{else}}{{t "irpf.even" .NextYear}}{{end}}
+      {{if .HasPaidNow}}<span class="muted">{{if lt .PaidNow 0.0}}{{t "irpf.refunded_now" (money (sub 0.0 .PaidNow))}}{{else}}{{t "irpf.paid_now" (money .PaidNow)}}{{end}}</span>{{end}}
+    </p>
+    <p class="callout">{{t "tax.disclaimer"}}</p>
+  </div>
+  {{end}}
 </section>
 {{end}}

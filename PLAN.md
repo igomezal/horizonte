@@ -59,7 +59,7 @@ projection, Monte Carlo and backtests all reuse it.
 | 6 | Historical backtest: every start year, heat-map, worst sequences | ✅ |
 | 7 | Scenarios: clone plans (conservative/central/optimistic), side-by-side comparison | ✅ |
 | 8 | Withdrawal strategies: fixed %, 4% rule, guardrails, withdrawal order | ✅ |
-| 9 | Spanish taxes: IRPF general/savings bases, regional scales, pension plan rules | ☐ |
+| 9 | Spanish taxes: IRPF general/savings bases, regional scales, pension plan rules | ✅ |
 | 10 | Extras: Spanish public pension, healthcare phases, estate view, JSON import/export | ☐ |
 
 Phases 0–5 are the MVP.

@@ -9,7 +9,7 @@ import (
 
 func mcInput() Input {
 	a := DefaultAssumptions()
-	a.TaxRate = 0
+	a.TaxRate, a.TaxModel = 0, TaxFlat
 	return Input{
 		People: []domain.Person{{ID: 1, Birth: start.AddMonths(-60 * 12), LifeExpectancy: 90}},
 		Accounts: []domain.Account{

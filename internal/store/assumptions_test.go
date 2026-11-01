@@ -94,3 +94,19 @@ func TestWithdrawalSettingsRoundTrip(t *testing.T) {
 		t.Error("links to a deleted milestone remain")
 	}
 }
+
+func TestTaxModelRoundTrip(t *testing.T) {
+	s, plan := openTest(t)
+	ctx := context.Background()
+	a, _ := s.GetAssumptions(ctx, plan)
+	if a.TaxModel != engine.TaxES || a.TaxRegion != "general" {
+		t.Fatalf("defaults = %q / %q", a.TaxModel, a.TaxRegion)
+	}
+	a.TaxModel, a.TaxRegion = engine.TaxFlat, "madrid"
+	if err := s.SaveAssumptions(ctx, plan, a); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetAssumptions(ctx, plan); got.TaxModel != engine.TaxFlat || got.TaxRegion != "madrid" {
+		t.Errorf("saved = %q / %q", got.TaxModel, got.TaxRegion)
+	}
+}

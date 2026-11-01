@@ -120,7 +120,29 @@
       hx-post="/plan/assumptions" hx-trigger="change, submit" hx-target="this" hx-swap="outerHTML">
   <div class="form-grid">
     {{template "field" (dict "F" . "name" "inflation" "label" "field.inflation" "type" "percent" "hint" "hint.inflation")}}
+    {{$tid := printf "%s-tax_model" .DOMID}}{{$tcur := index .V "tax_model"}}
+    <div class="field">
+      <label for="{{$tid}}">{{t "field.tax_model"}}</label>
+      <select id="{{$tid}}" name="tax_model">
+        <option value="es"{{if eq $tcur "es"}} selected{{end}}>{{t "tax.model.es"}}</option>
+        <option value="flat"{{if eq $tcur "flat"}} selected{{end}}>{{t "tax.model.flat"}}</option>
+      </select>
+      <small class="field-hint">{{if eq $tcur "flat"}}{{t "hint.tax_flat"}}{{else}}{{t "hint.tax_es"}}{{end}}</small>
+    </div>
+    {{if eq $tcur "flat"}}
     {{template "field" (dict "F" . "name" "tax_rate" "label" "field.tax_rate" "type" "percent" "hint" "hint.tax_rate")}}
+    <input type="hidden" name="tax_region" value="{{index .V "tax_region"}}">
+    {{else}}
+    {{$rid := printf "%s-tax_region" .DOMID}}{{$rcur := index .V "tax_region"}}
+    <div class="field">
+      <label for="{{$rid}}">{{t "field.tax_region"}}</label>
+      <select id="{{$rid}}" name="tax_region">
+        {{range .Regions}}<option value="{{.}}"{{if eq . $rcur}} selected{{end}}>{{t (printf "tax.region.%s" .)}}</option>{{end}}
+      </select>
+      <small class="field-hint">{{t "hint.tax_region"}}</small>
+    </div>
+    <input type="hidden" name="tax_rate" value="{{index .V "tax_rate"}}">
+    {{end}}
     {{$id := printf "%s-surplus" .DOMID}}{{$cur := index .V "surplus"}}{{$err := index .E "surplus"}}
     <div class="field{{if $err}} has-error{{end}}">
       <label for="{{$id}}">{{t "field.surplus"}}</label>
@@ -132,6 +154,7 @@
       {{else}}<small class="field-hint" id="{{$id}}-msg">{{t "hint.surplus"}}</small>{{end}}
     </div>
   </div>
+  <p class="callout tax-disclaimer">{{t "tax.disclaimer"}}</p>
   <h3 class="form-subhead">{{t "plan.returns"}}</h3>
   <p class="field-hint">{{t "plan.returns_desc"}}</p>
   <div class="form-grid">

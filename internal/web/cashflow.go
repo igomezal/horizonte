@@ -69,6 +69,26 @@ type cashflowYear struct {
 	In, Out                               []cfLine
 	InTotal, OutTotal                     float64
 	Sankey                                sankeyChart
+	IRPF                                  *irpfView
+}
+
+// irpfView is the Spanish income tax of the selected year.
+type irpfView struct {
+	People     []irpfPerson
+	Withheld   float64
+	Settlement float64 // paid (refunded if negative) in June of NextYear
+	NextYear   int
+	Partial    bool
+	PaidNow    float64 // last year's settlement, paid in June of this year
+	HasPaidNow bool
+}
+
+type irpfPerson struct {
+	Name                       string
+	Gross, SocialSecurity      float64
+	GeneralBase, SavingsBase   float64
+	Minimum, GeneralTax        float64
+	SavingsTax, Tax, Effective float64
 }
 
 type cashflowPage struct {
@@ -171,10 +191,17 @@ func (s *Server) buildCashflowYear(lang i18n.Lang, in engine.Input, res engine.R
 			Kind: "savings", Value: f.Withdrawals[j]}, true)
 	}
 	add(sankeyNode{Name: "gap", Label: s.catalog.T(lang, "cf.uncovered"), Kind: "shortfall", Value: y.Shortfall}, true)
+	if y.Tax < 0 {
+		add(sankeyNode{Name: "refund", Label: s.catalog.T(lang, "cf.tax_refund"), Kind: "income", Value: -y.Tax}, true)
+	}
 	ch.Nodes = append(ch.Nodes, center)
 
 	// Outflows: tax, expenses by category, debts, money going into accounts.
-	add(sankeyNode{Name: "tax", Label: s.catalog.T(lang, "cf.tax"), Kind: "tax", Value: y.Tax}, false)
+	taxLabel := "cf.tax"
+	if len(res.TaxYears) > 0 {
+		taxLabel = "cf.tax_ss"
+	}
+	add(sankeyNode{Name: "tax", Label: s.catalog.T(lang, taxLabel), Kind: "tax", Value: y.Tax}, false)
 	byCat := map[domain.ExpenseCategory]float64{}
 	for k, e := range in.Expenses {
 		byCat[e.Category] += f.Expenses[k]
@@ -207,7 +234,38 @@ func (s *Server) buildCashflowYear(lang i18n.Lang, in engine.Input, res engine.R
 	sort.SliceStable(cy.Out, func(i, j int) bool { return cy.Out[i].Value > cy.Out[j].Value })
 	sort.SliceStable(cy.In, func(i, j int) bool { return cy.In[i].Value > cy.In[j].Value })
 	cy.Sankey = ch
+	cy.IRPF = buildIRPF(res.TaxYears, y.Year, d)
 	return cy
+}
+
+// buildIRPF summarises the year's IRPF (nil when the plan uses a flat rate).
+func buildIRPF(years []engine.TaxYear, year int, d float64) *irpfView {
+	var v *irpfView
+	for _, ty := range years {
+		if ty.Year != year {
+			continue
+		}
+		v = &irpfView{Withheld: ty.Withheld / d, Settlement: ty.Settlement / d, NextYear: year + 1, Partial: ty.Partial}
+		for _, p := range ty.People {
+			in, b := p.Income, p.Breakdown
+			gross := in.Salary + in.Pension + in.PlanWithdrawal + in.SelfEmployed + in.Rental + in.Other + in.Savings
+			ip := irpfPerson{Name: p.Name, Gross: gross / d, SocialSecurity: b.SocialSecurity / d,
+				GeneralBase: b.GeneralBase / d, SavingsBase: b.SavingsBase / d, Minimum: b.Minimum / d,
+				GeneralTax: b.GeneralTax / d, SavingsTax: b.SavingsTax / d, Tax: b.Tax / d}
+			if gross > 0.5 {
+				ip.Effective = b.Tax / gross
+			}
+			v.People = append(v.People, ip)
+		}
+	}
+	if v != nil {
+		for _, ty := range years {
+			if ty.Year == year-1 && !ty.Partial {
+				v.PaidNow, v.HasPaidNow = ty.Settlement/d, true
+			}
+		}
+	}
+	return v
 }
 
 func (s *Server) buildCashflowCharts(lang i18n.Lang, in engine.Input, years []engine.YearRow, opts planOpts) (yearBarsChart, yearBarsChart) {

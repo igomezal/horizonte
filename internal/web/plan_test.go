@@ -84,7 +84,7 @@ func TestPlanMonthlyAndNominalToggles(t *testing.T) {
 func TestSaveAssumptions(t *testing.T) {
 	s, st := newFinanceServer(t)
 	seedPlan(t, s)
-	form := url.Values{"inflation": {"3"}, "tax_rate": {"25,5"}, "surplus": {""},
+	form := url.Values{"inflation": {"3"}, "tax_model": {"flat"}, "tax_rate": {"25,5"}, "surplus": {""},
 		"return_cash": {"0"}, "return_deposit": {"2"}, "return_investment": {"7"},
 		"return_pension": {"5"}, "return_realestate": {"3"}, "return_other": {"2"}}
 	rec, body := do(s, htmxReq("POST", "/plan/assumptions", form))
@@ -144,5 +144,28 @@ func TestWithdrawalStrategyFromPlanForm(t *testing.T) {
 	form.Set("wd_order", "cash,cash,deposit,other,pension")
 	if rec, _ := do(s, htmxReq("POST", "/plan/assumptions", form)); rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("invalid order: %d", rec.Code)
+	}
+}
+
+func TestTaxModelFromPlanForm(t *testing.T) {
+	s, st := newFinanceServer(t)
+	seedPlan(t, s)
+	_, body := do(s, httptest.NewRequest("GET", "/plan", nil))
+	if !strings.Contains(body, `name="tax_region"`) || !strings.Contains(body, "IRPF (España)") || !strings.Contains(body, "no un cálculo oficial") {
+		t.Fatal("IRPF is the default model and shows the region")
+	}
+	form := url.Values{"inflation": {"2"}, "tax_model": {"es"}, "tax_region": {"madrid"}, "tax_rate": {"20"}, "surplus": {""},
+		"return_cash": {"0"}, "return_deposit": {"2"}, "return_investment": {"7"},
+		"return_pension": {"5"}, "return_realestate": {"3"}, "return_other": {"2"}}
+	if rec, b := do(s, htmxReq("POST", "/plan/assumptions", form)); rec.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", rec.Code, b)
+	}
+	plan, _ := st.CurrentPlan(context.Background(), "x")
+	if a, _ := st.GetAssumptions(context.Background(), plan); a.TaxModel != "es" || a.TaxRegion != "madrid" {
+		t.Errorf("stored %q / %q", a.TaxModel, a.TaxRegion)
+	}
+	form.Set("tax_region", "atlantis")
+	if rec, _ := do(s, htmxReq("POST", "/plan/assumptions", form)); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("unknown region accepted: %d", rec.Code)
 	}
 }
