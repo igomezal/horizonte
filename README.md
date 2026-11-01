@@ -148,3 +148,12 @@ names are trademarks of their respective owners.
 The project was also built as a hands-on way to learn Claude Code: how to plan and build
 software together with AI agents, how to get the most out of the different Claude models,
 and how these new ways of working change the day-to-day development workflow.
+
+## License
+
+Horizonte is released under the [MIT License](LICENSE).
+
+Bundled third-party files keep their own licenses: htmx (0BSD), Alpine.js, Pico.css and
+the Sentry browser SDK (MIT), Apache ECharts (Apache 2.0) in `ui/static/vendor/`, and the
+Instrument Sans font (SIL Open Font License, see `ui/static/fonts/LICENSE-OFL.txt`). The
+historical market data comes from Robert Shiller's published dataset.
