@@ -76,6 +76,12 @@ func New(cfg Config) (*Server, error) {
 
 	mux.HandleFunc("GET /finances", s.handleFinances)
 	mux.HandleFunc("GET /finances/summary", s.handleFinancesSummary)
+	mux.HandleFunc("GET /finances/pension", s.handlePension)
+	mux.HandleFunc("POST /finances/pension", s.handlePensionAdd)
+	mux.HandleFunc("POST /finances/pension/estimate", s.handlePensionEstimate)
+	mux.HandleFunc("GET /finances/health", s.handleHealthTool)
+	mux.HandleFunc("POST /finances/health", s.handleHealthAdd)
+	mux.HandleFunc("POST /finances/health/preview", s.handleHealthPreview)
 	mux.HandleFunc("GET /finances/{kind}", s.handleSection)
 	mux.HandleFunc("POST /finances/{kind}", s.handleSave)
 	mux.HandleFunc("GET /finances/{kind}/new", s.handleNewForm)
@@ -103,6 +109,8 @@ func New(cfg Config) (*Server, error) {
 	mux.HandleFunc("POST /scenarios/{id}/activate", s.handleActivatePlan)
 	mux.HandleFunc("POST /scenarios/{id}/rename", s.handleRenamePlan)
 	mux.HandleFunc("POST /scenarios/{id}/delete", s.handleDeletePlan)
+	mux.HandleFunc("GET /scenarios/{id}/export", s.handleExportPlan)
+	mux.HandleFunc("POST /scenarios/import", s.handleImportPlan)
 	mux.HandleFunc("POST /plans/switch", s.handleActivatePlan)
 	mux.HandleFunc("/", s.handleNotFound)
 

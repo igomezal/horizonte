@@ -1,0 +1,80 @@
+{{define "content"}}
+<header class="page-head">
+  <p class="crumb"><a href="/finances">{{t "nav.finances"}}</a></p>
+  <h1>{{t "health.title"}}</h1>
+  <p class="muted prose">{{t "health.intro"}}</p>
+</header>
+{{with .Data}}
+{{if not .HasPeople}}
+<p class="empty">{{t "plan.no_people"}}</p>
+<p><a href="/finances">{{t "plan.go_finances"}}</a></p>
+{{else}}
+<div id="health-tool" class="tool">
+  {{$F := .Form}}
+  <form method="post" action="/finances/health" class="entry-form tool-form" novalidate
+        hx-post="/finances/health/preview" hx-trigger="input changed delay:400ms, change[target.name!=='person']"
+        hx-target="#health-summary" hx-swap="outerHTML">
+    <div class="field">
+      <label for="health-person">{{t "pension.person"}}</label>
+      <select id="health-person" name="person" hx-get="/finances/health" hx-target="#health-tool" hx-select="#health-tool"
+              hx-swap="outerHTML" hx-include="this" hx-trigger="change">
+        {{$cur := index $F.V "person"}}
+        {{range $F.People}}<option value="{{.ID}}"{{if eq (str .ID) $cur}} selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </div>
+    <div class="table-wrap health-wrap">
+      <table class="projection health-phases">
+        <thead><tr>
+          <th scope="col">{{t "health.col.concept"}}</th>
+          <th scope="col">{{t "health.col.from"}}</th>
+          <th scope="col">{{t "health.col.to"}}</th>
+          <th scope="col">{{t "health.col.amount"}}</th>
+        </tr></thead>
+        <tbody>
+          {{range $i, $c := (list "insurance" "insurance" "insurance" "insurance" "insurance" "outofpocket" "outofpocket" "care")}}
+          {{$k := str $i}}
+          <tr>
+            <th scope="row">{{t (printf "health.concept.%s" $c)}}</th>
+            {{range $name := (list "from" "to" "amount")}}
+            {{$key := printf "%s%s" $name $k}}{{$err := index $F.E $key}}
+            <td{{if $err}} class="has-error"{{end}}>
+              <div class="input-wrap{{if eq $name "amount"}} has-unit{{end}}">
+                <input name="{{$key}}" value="{{index $F.V $key}}" aria-label="{{t (printf "health.concept.%s" $c)}}: {{t (printf "health.col.%s" $name)}}"
+                  {{- if eq $name "amount"}} type="text" inputmode="decimal" autocomplete="off"{{else}} type="number" inputmode="numeric" min="0" max="120" step="1"{{end}}
+                  {{- if eq $name "to"}} placeholder="{{t "health.until_end"}}"{{end}}
+                  {{- if $err}} aria-invalid="true"{{end}}>
+                {{- if eq $name "amount"}}<span class="unit" aria-hidden="true">€</span>{{end}}
+              </div>
+              {{if $err}}<small class="field-error">{{t $err}}</small>{{end}}
+            </td>
+            {{end}}
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <p class="field-hint">{{t "health.hint"}}</p>
+    {{template "health-summary" .}}
+  </form>
+</div>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "health-summary"}}
+<div id="health-summary" class="tool-result" aria-live="polite">
+  {{with index .Form.E "rows"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  {{if .Rows}}
+  <dl class="ledger compact">
+    {{range .Rows}}
+    <div class="ledger-row"><dt>{{t (printf "health.concept.%s" .Concept)}} {{.Ages}}{{if .Past}} <span class="muted">{{t "health.past"}}</span>{{else}} <span class="muted">({{t "health.years" (number .Years 0)}})</span>{{end}}</dt><dd class="amount">{{money .Total}}</dd></div>
+    {{end}}
+    <div class="ledger-row total"><dt>{{t "health.total"}}</dt><dd class="amount">{{money .Total}}</dd></div>
+  </dl>
+  <p class="note muted">{{t "health.total_hint"}}</p>
+  <div class="form-actions"><button type="submit">{{t "health.add"}}</button></div>
+  {{else}}
+  <p class="muted">{{t "health.empty"}}</p>
+  {{end}}
+</div>
+{{end}}

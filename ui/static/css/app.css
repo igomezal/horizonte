@@ -1278,3 +1278,93 @@ table.irpf-table tr.total td {
   display: block;
   margin-top: 0.25rem;
 }
+
+/* ---------- Finance tools (public pension, health costs) ---------- */
+.crumb {
+  margin: 0 0 0.25rem;
+  font-size: 0.875rem;
+}
+.crumb a::before {
+  content: "‹ ";
+}
+.tool-link {
+  display: inline-block;
+  margin: 1rem 0 0 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+/* Inputs on the left, the live result beside them on wide screens. */
+.tool-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .tool-form {
+    grid-template-columns: minmax(16rem, 24rem) minmax(0, 1fr);
+    column-gap: 2.5rem;
+  }
+  .tool-form > * {
+    grid-column: 1;
+  }
+  .tool-form > .tool-result {
+    grid-column: 2;
+    grid-row: 1 / span 12;
+    position: sticky;
+    top: 1rem;
+  }
+  #health-tool .tool-form {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+  }
+}
+.tool-result .lead-figure {
+  margin-bottom: 1rem;
+}
+.tool-result .callout {
+  margin-top: 1.25rem;
+}
+.tool-result .form-actions {
+  margin-top: 1rem;
+}
+.check {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.check input {
+  margin: 0.2rem 0 0;
+  flex: none;
+}
+.check .field-hint {
+  display: block;
+  font-weight: 400;
+  margin-top: 0.2rem;
+}
+table.health-phases td {
+  padding: 0.3rem 0.4rem;
+  vertical-align: top;
+}
+table.health-phases input {
+  margin: 0;
+  min-width: 4.5rem;
+  font-size: 0.9375rem;
+}
+table.health-phases td:last-child input {
+  min-width: 7rem;
+}
+.health-wrap {
+  max-height: none;
+}
+
+/* Inheritance at the end of the plan (Plan page). */
+.estate {
+  margin-top: 2rem;
+  max-width: 40rem;
+}
+.estate-title {
+  font-size: 1.25rem;
+  margin: 0 0 0.25rem;
+}

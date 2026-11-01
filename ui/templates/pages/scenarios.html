@@ -33,6 +33,7 @@
               </form>
               {{end}}
               <button type="button" class="link-btn" @click="renaming = true">{{t "scenarios.rename"}}</button>
+              <a class="link-btn" href="/scenarios/{{.ID}}/export" download hx-boost="false">{{t "scenarios.export"}}</a>
               {{if gt (len $.Data.Plans) 1}}<button type="button" class="link-btn danger" @click="confirm = true">{{t "form.delete"}}</button>{{end}}
             </div>
             {{if gt (len $.Data.Plans) 1}}
@@ -106,6 +107,21 @@
     </div>
     {{if and .Error (ne .Error "scenarios.error.name")}}<p class="field-error form-error" role="alert">{{t .Error}}</p>{{end}}
     <div class="form-actions"><button type="submit">{{t "scenarios.create"}}</button></div>
+  </form>
+</section>
+
+<section class="section" aria-labelledby="h-import">
+  <h2 id="h-import">{{t "import.title"}}</h2>
+  <p class="section-desc muted">{{t "import.desc"}}</p>
+  <form method="post" action="/scenarios/import" enctype="multipart/form-data" class="entry-form scen-form">
+    <div class="field{{if .ImportError}} has-error{{end}}">
+      <label for="import-file">{{t "import.file"}}</label>
+      <input id="import-file" name="file" type="file" accept=".json,application/json" required
+             aria-describedby="import-msg"{{if .ImportError}} aria-invalid="true"{{end}}>
+      {{if .ImportError}}<small class="field-error" id="import-msg" role="alert">{{.ImportError}}</small>
+      {{else}}<small class="field-hint" id="import-msg">{{t "import.hint"}}</small>{{end}}
+    </div>
+    <div class="form-actions"><button type="submit">{{t "import.submit"}}</button></div>
   </form>
 </section>
 {{end}}

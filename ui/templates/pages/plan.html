@@ -75,6 +75,19 @@
   <div class="chart chart-tall" data-chart="plan-chart" role="img" aria-label="{{t "plan.chart.label"}}"></div>
   <script type="application/json" id="plan-chart">{{json .Chart}}</script>
   {{if .NoAccounts}}<p class="muted">{{t "plan.no_accounts"}}</p>{{end}}
+
+  {{with .Estate}}
+  <div class="estate">
+    <h2 class="estate-title">{{t "estate.title"}}</h2>
+    <p class="section-desc muted">{{t "estate.desc" (month .Month) .Age}} {{if $.Opts.Real}}{{t "estate.real"}}{{else}}{{t "estate.nominal"}}{{end}}</p>
+    <dl class="ledger compact">
+      {{range .Lines}}<div class="ledger-row"><dt>{{.Name}} <small class="muted">{{t (printf "account.kind.%s" .Kind)}}</small></dt><dd class="amount">{{money .Value}} <span class="muted share">{{percent .Share 0}}</span></dd></div>{{end}}
+      {{if gt .Debts 0.5}}<div class="ledger-row"><dt>{{t "estate.debts"}}</dt><dd class="amount negative">−{{money .Debts}}</dd></div>{{end}}
+      <div class="ledger-row total"><dt>{{t "estate.total"}}</dt><dd class="amount{{if lt .Total 0.0}} negative{{end}}">{{money .Total}}</dd></div>
+    </dl>
+    <p class="note muted">{{t "estate.tax_note"}}{{if .HasPension}} {{t "estate.pension_note"}}{{end}}{{if .HasProperty}} {{t "estate.property_note"}}{{end}}</p>
+  </div>
+  {{end}}
 </section>
 {{end}}
 

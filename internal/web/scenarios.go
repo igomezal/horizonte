@@ -3,12 +3,15 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	"github.com/igomezal/horizonte/internal/backup"
 	"github.com/igomezal/horizonte/internal/domain"
 	"github.com/igomezal/horizonte/internal/engine"
 	"github.com/igomezal/horizonte/internal/history"
@@ -65,6 +68,8 @@ type scenariosPage struct {
 	Presets []string
 	Form    map[string]string
 	Error   string // i18n key
+	// ImportError is the (translated) reason an imported file was rejected.
+	ImportError string
 }
 
 func (s *Server) summarizePlan(ctx context.Context, lang i18n.Lang, now domain.Month, p store.Plan, hs *history.Series) (scenarioRow, error) {
@@ -349,4 +354,121 @@ func (s *Server) handleDeletePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/scenarios", http.StatusSeeOther)
+}
+
+// GET /scenarios/{id}/export: the plan as a JSON file.
+func (s *Server) handleExportPlan(w http.ResponseWriter, r *http.Request) {
+	id, ok := planIDFromPath(r)
+	if !ok {
+		s.handleNotFound(w, r)
+		return
+	}
+	p, err := s.store.GetPlan(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		s.handleNotFound(w, r)
+		return
+	}
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	snap, err := s.store.LoadSnapshot(r.Context(), id)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	now := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-%s.json"`, slug(p.Name), now.Format("2006-01-02")))
+	w.Header().Set("Cache-Control", "no-store")
+	if err := backup.Write(w, backup.FromSnapshot(p.Name, snap, now)); err != nil {
+		s.log.Error("export plan", "err", err)
+	}
+}
+
+// POST /scenarios/import: create a new plan from a JSON file and make it active.
+func (s *Server) handleImportPlan(w http.ResponseWriter, r *http.Request) {
+	fc, err := s.finCtx(r)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	fail := func(msg string) {
+		page, err := s.buildScenariosPage(r.Context(), fc.lang, fc.now)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		page.ImportError = msg
+		s.page(w, r, http.StatusUnprocessableEntity, "scenarios", "scenarios.title", page)
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, backup.MaxSize+64<<10)
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			fail(s.catalog.T(fc.lang, "import.error.too_large"))
+		} else {
+			fail(s.catalog.T(fc.lang, "import.error.no_file"))
+		}
+		return
+	}
+	defer file.Close()
+	name, snap, err := backup.Read(file, fc.now)
+	if err != nil {
+		fail(s.importErrorMessage(fc.lang, err))
+		return
+	}
+	id, err := s.store.CreatePlanFromSnapshot(r.Context(), name, nil, snap)
+	if err == nil {
+		err = s.store.SetCurrentPlan(r.Context(), id)
+	}
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/scenarios", http.StatusSeeOther)
+}
+
+func (s *Server) importErrorMessage(lang i18n.Lang, err error) string {
+	var ie *backup.InvalidError
+	switch {
+	case errors.Is(err, backup.ErrNotPlan):
+		return s.catalog.T(lang, "import.error.format")
+	case errors.Is(err, backup.ErrVersion):
+		return s.catalog.T(lang, "import.error.version")
+	case errors.Is(err, backup.ErrTooLarge):
+		return s.catalog.T(lang, "import.error.too_large")
+	case errors.As(err, &ie):
+		section := s.catalog.T(lang, "import.section."+ie.Section)
+		if ie.Name == "" {
+			return s.catalog.T(lang, "import.error.invalid", section, ie.Field)
+		}
+		return s.catalog.T(lang, "import.error.invalid_named", section, ie.Name, ie.Field)
+	}
+	return s.catalog.T(lang, "import.error.format")
+}
+
+// slug makes an ASCII file name from a plan name.
+func slug(name string) string {
+	fold := map[rune]string{'á': "a", 'é': "e", 'í': "i", 'ó': "o", 'ú': "u", 'ü': "u", 'ñ': "n", 'ç': "c", 'à': "a", 'è': "e", 'ò': "o", 'ï': "i"}
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(name) {
+		if f, ok := fold[r]; ok {
+			b.WriteString(f)
+			dash = false
+		} else if r < 128 && (r >= 'a' && r <= 'z' || r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			dash = false
+		} else if !dash && b.Len() > 0 {
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	out := strings.TrimSuffix(b.String(), "-")
+	if out == "" {
+		out = "plan"
+	}
+	return out
 }

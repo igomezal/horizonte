@@ -115,6 +115,25 @@ type planView struct {
 	WdStrategy   string
 	WdMin, WdMax float64
 	WdMinYear    int
+	Estate       *estateView
+}
+
+// estateView is what is left when the plan ends: the inheritance.
+type estateView struct {
+	Month       domain.Month
+	Age         int
+	Lines       []estateLine
+	Debts       float64
+	Total       float64
+	HasPension  bool // pension plans: heirs pay income tax on them
+	HasProperty bool
+}
+
+type estateLine struct {
+	Name  string
+	Kind  domain.AccountKind
+	Value float64
+	Share float64
 }
 
 type assumptionsForm struct {
@@ -206,6 +225,27 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 		for _, m := range res.Months {
 			v.Shortfall += unit(m.Shortfall, m.Deflator)
 		}
+	}
+
+	est := &estateView{Month: last.Month, Age: v.EndAge, Debts: unit(last.DebtBalance, last.Deflator),
+		Total: v.EndValue}
+	var gross float64
+	for i, acc := range res.Accounts {
+		val := unit(last.Balances[i], last.Deflator)
+		if val < 0.5 {
+			continue
+		}
+		gross += val
+		est.Lines = append(est.Lines, estateLine{Name: acc.Name, Kind: acc.Kind, Value: val})
+		est.HasPension = est.HasPension || acc.Kind == domain.AccountPension
+		est.HasProperty = est.HasProperty || acc.Kind == domain.AccountRealEstate
+	}
+	sort.SliceStable(est.Lines, func(i, j int) bool { return est.Lines[i].Value > est.Lines[j].Value })
+	for i := range est.Lines {
+		est.Lines[i].Share = est.Lines[i].Value / gross
+	}
+	if len(est.Lines) > 0 || est.Debts > 0.5 {
+		v.Estate = est
 	}
 
 	if !res.WithdrawalFrom.IsZero() {
