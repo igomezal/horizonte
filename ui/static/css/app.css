@@ -1051,3 +1051,20 @@ table.projection tr.short td {
     transition: none;
   }
 }
+
+/* ---------- Chance of success ---------- */
+.mc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+}
+.chart-title {
+  margin: 2.5rem 0 0.25rem;
+}
+table.mc-milestones td,
+table.mc-milestones th {
+  white-space: nowrap;
+}

@@ -48,6 +48,7 @@ func (r *renderer) baseFuncs() template.FuncMap {
 		"pct":     func(r float64) string { return "" },
 		"month":   func(m domain.Month) string { return "" },
 		"neg":     func(c domain.Cents) bool { return c < 0 },
+		"float":   func(n int) float64 { return float64(n) },
 		"str":     func(v any) string { return fmt.Sprint(v) },
 		// dict builds a map from key/value pairs so a template can pass several
 		// named arguments to another template: {{template "field" (dict "F" . "name" "x")}}.

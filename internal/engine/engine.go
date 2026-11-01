@@ -19,6 +19,10 @@ type Assumptions struct {
 	// SurplusAccountID receives money left over each month. Nil means the
 	// first current account (or the first account that is not property).
 	SurplusAccountID *int64
+	// Volatility is the annual volatility per account kind (Monte Carlo).
+	Volatility map[domain.AccountKind]float64
+	// MCRuns is the number of Monte Carlo scenarios.
+	MCRuns int
 }
 
 // DefaultAssumptions are reasonable long-run nominal values for Spain.
@@ -34,6 +38,8 @@ func DefaultAssumptions() Assumptions {
 			domain.AccountRealEstate: 0.03,
 			domain.AccountOther:      0.02,
 		},
+		Volatility: DefaultVolatility(),
+		MCRuns:     1000,
 	}
 }
 
@@ -50,6 +56,16 @@ func (a Assumptions) Validate() domain.Errors {
 		if r := a.Returns[k]; r < -0.5 || r > 0.5 {
 			errs.Add("return_"+string(k), domain.ErrRange)
 		}
+		if v := a.Volatility[k]; v < 0 || v > 0.6 {
+			errs.Add("vol_"+string(k), domain.ErrRange)
+		}
+	}
+	runsOK := false
+	for _, r := range MCRunsOptions {
+		runsOK = runsOK || r == a.MCRuns
+	}
+	if !runsOK {
+		errs.Add("mc_runs", domain.ErrChoice)
 	}
 	return errs
 }

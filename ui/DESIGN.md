@@ -111,6 +111,18 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
 - **Yearly bar charts:** savings rate in green/red by sign (no bar when there is no income);
   spending stacked by category with debts in red.
 
+## Chance of success (phase 5)
+
+- **The hero figure is the share of scenarios where the money lasts**, followed by one sentence
+  about a bad scenario (1 in 10): what is left, or the age the money runs out. No traffic-light
+  colouring of the percentage; the words carry the judgement.
+- **Uncertainty is drawn in ink, not in signal colours:** the fan uses two ink bands (80 % and
+  50 % of scenarios) and an ink median; the deterministic plan is a dashed accent line for
+  comparison. The survival curve is an ink step line.
+- **Results are reproducible** (fixed seed) until the user asks for "otros escenarios"; the
+  refresh URL carries the seed so settings changes keep the same scenarios.
+- State limits plainly under the results (fixed inflation, correlation used).
+
 ## Motion
 
 - No entrance animations or hover transitions on content.

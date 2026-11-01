@@ -1,0 +1,102 @@
+{{define "content"}}
+<header class="page-head">
+  <h1>{{t "success.title"}}</h1>
+  <p class="muted prose">{{t "success.intro"}}</p>
+</header>
+{{with .Data}}
+{{if not .View.HasPeople}}
+<p class="empty">{{t "plan.no_people"}}</p>
+<p><a href="/finances">{{t "plan.go_finances"}}</a></p>
+{{else}}
+{{template "mc-results" .View}}
+<section class="section" aria-labelledby="h-mc-settings">
+  <h2 id="h-mc-settings">{{t "mc.settings"}}</h2>
+  <p class="section-desc muted">{{t "mc.settings_desc"}} <a href="/plan">{{t "mc.returns_link"}}</a></p>
+  {{template "mc-settings" .Form}}
+</section>
+{{end}}
+{{end}}
+{{end}}
+
+{{/* Results: refreshed when the settings change, or with new scenarios. */}}
+{{define "mc-results"}}
+<section id="mc-results" class="mc-results" aria-label="{{t "success.title"}}"
+         hx-get="/success/results?seed={{.Seed}}" hx-trigger="success-changed from:body" hx-target="this" hx-swap="outerHTML">
+  <div class="lead-figure verdict">
+    <p class="lead">{{t "mc.verdict" .EndAge}}</p>
+    <span class="figure">{{percent .Rate 0}}</span>
+    <p class="breakdown"><span>
+      {{if .BadFailed}}{{t "mc.bad_fail" .BadAge (month .BadMonth)}}{{else}}{{t "mc.bad_ok" (money .BadEnd)}}{{end}}
+    </span></p>
+    <p class="muted mc-meta">
+      {{t "mc.runs" (number (float .Runs) 0)}}
+      <button type="button" class="link-btn" hx-get="/success/results?reseed=1" hx-target="#mc-results" hx-swap="outerHTML">{{t "mc.reseed"}}</button>
+    </p>
+  </div>
+
+  <h2 class="chart-title">{{t "mc.fan_title"}}</h2>
+  <p class="section-desc muted">{{t "mc.fan_desc"}}</p>
+  <div class="chart chart-tall" data-chart="mc-fan-{{.Seed}}" role="img" aria-label="{{t "mc.fan_title"}}"></div>
+  <script type="application/json" id="mc-fan-{{.Seed}}">{{json .Fan}}</script>
+
+  <h2 class="chart-title">{{t "mc.survival_title"}}</h2>
+  <p class="section-desc muted">{{t "mc.survival_desc"}}</p>
+  <div class="chart" data-chart="mc-survival-{{.Seed}}" role="img" aria-label="{{t "mc.survival_title"}}"></div>
+  <script type="application/json" id="mc-survival-{{.Seed}}">{{json .Survival}}</script>
+
+  <h2 class="chart-title">{{t "mc.milestones_title"}}</h2>
+  {{if .Milestones}}
+  <p class="section-desc muted">{{t "mc.milestones_desc"}}</p>
+  <div class="table-wrap" tabindex="0" role="region" aria-label="{{t "mc.milestones_title"}}">
+    <table class="projection mc-milestones">
+      <thead><tr>
+        <th scope="col">{{t "mc.col.milestone"}}</th>
+        <th scope="col" class="num">{{t "mc.col.share"}}</th>
+        <th scope="col">{{t "mc.col.best"}}</th>
+        <th scope="col">{{t "mc.col.median"}}</th>
+        <th scope="col">{{t "mc.col.worst"}}</th>
+      </tr></thead>
+      <tbody>
+        {{range .Milestones}}
+        <tr>
+          <th scope="row">{{.Name}}</th>
+          <td class="num">{{percent .Share 0}}</td>
+          {{if .Reached}}
+          <td>{{t "mc.when" (month .Best) .BestAge}}</td>
+          <td>{{t "mc.when" (month .Median) .MedianAge}}</td>
+          <td>{{t "mc.when" (month .Worst) .WorstAge}}</td>
+          {{else}}
+          <td colspan="3" class="muted">{{t "plan.timeline.unreached"}}</td>
+          {{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="muted">{{t "mc.no_conditional"}}</p>
+  {{end}}
+  <p class="note muted">{{t "mc.method"}}</p>
+</section>
+{{end}}
+
+{{define "mc-settings"}}
+<form id="{{.DOMID}}" class="assumptions" novalidate
+      hx-post="/success/settings" hx-trigger="change, submit" hx-target="this" hx-swap="outerHTML">
+  <div class="form-grid">
+    {{range .Kinds}}
+    {{template "field" (dict "F" $ "name" (printf "vol_%s" .) "label" (printf "account.kind.%s" .) "type" "percent")}}
+    {{end}}
+    {{$id := printf "%s-mc_runs" .DOMID}}{{$cur := index .V "mc_runs"}}
+    <div class="field">
+      <label for="{{$id}}">{{t "field.mc_runs"}}</label>
+      <select id="{{$id}}" name="mc_runs">
+        {{range .Runs}}<option value="{{.}}"{{if eq (str .) $cur}} selected{{end}}>{{number (float .) 0}}</option>{{end}}
+      </select>
+      <small class="field-hint">{{t "hint.mc_runs"}}</small>
+    </div>
+  </div>
+  <button type="submit" class="visually-hidden">{{t "plan.recalculate"}}</button>
+  <p class="note muted" aria-live="polite">{{if .Saved}}{{t "plan.saved"}}{{else}}{{t "plan.autosave"}}{{end}}</p>
+</form>
+{{end}}

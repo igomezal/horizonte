@@ -340,7 +340,10 @@ func parseAssumptions(p *formParser) (engine.Assumptions, domain.Errors) {
 	for _, k := range domain.AccountKinds {
 		a.Returns[k] = p.percent("return_" + string(k))
 	}
-	p.merge(a.Validate())
+	// Validated with the defaults for the settings this form does not edit.
+	check := a
+	check.Volatility, check.MCRuns = engine.DefaultVolatility(), 1000
+	p.merge(check.Validate())
 	return a, p.errs
 }
 
@@ -406,6 +409,13 @@ func (s *Server) handleSaveAssumptions(w http.ResponseWriter, r *http.Request) {
 	}
 	a, errs := parseAssumptions(newFormParser(fc.lang, r.PostForm))
 	if len(errs) == 0 {
+		// The Plan form does not edit the Monte Carlo settings: keep them.
+		current, err := s.store.GetAssumptions(r.Context(), fc.plan)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		a.Volatility, a.MCRuns = current.Volatility, current.MCRuns
 		err = s.store.SaveAssumptions(r.Context(), fc.plan, a)
 		if errors.Is(err, store.ErrNotFound) {
 			errs.Add("surplus", domain.ErrChoice)

@@ -22,11 +22,16 @@ func TestAssumptionsRoundTrip(t *testing.T) {
 	a := engine.DefaultAssumptions()
 	a.Inflation, a.TaxRate = 0.03, 0.25
 	a.Returns[domain.AccountInvestment] = 0.07
+	a.Volatility[domain.AccountInvestment] = 0.2
+	a.MCRuns = 500
 	a.SurplusAccountID = &acc
 	if err := s.SaveAssumptions(ctx, plan, a); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = s.GetAssumptions(ctx, plan)
+	if got.Volatility[domain.AccountInvestment] != 0.2 || got.Volatility[domain.AccountPension] != 0.10 || got.MCRuns != 500 {
+		t.Errorf("monte carlo settings = %v / %d", got.Volatility, got.MCRuns)
+	}
 	if got.Inflation != 0.03 || got.TaxRate != 0.25 || got.Returns[domain.AccountInvestment] != 0.07 ||
 		got.SurplusAccountID == nil || *got.SurplusAccountID != acc {
 		t.Errorf("saved = %+v", got)

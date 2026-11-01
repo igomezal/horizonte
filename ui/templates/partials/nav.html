@@ -10,7 +10,7 @@
       <li><a href="/finances" {{if eq .Path "/finances"}}aria-current="page"{{end}}>{{template "icon-wallet"}}{{t "nav.finances"}}</a></li>
       <li><a href="/plan" {{if eq .Path "/plan"}}aria-current="page"{{end}}>{{template "icon-chart"}}{{t "nav.plan"}}</a></li>
       <li><a href="/cashflow" {{if eq .Path "/cashflow"}}aria-current="page"{{end}}>{{template "icon-flow"}}{{t "nav.cashflow"}}</a></li>
-      {{template "nav-soon" "nav.success"}}
+      <li><a href="/success" {{if eq .Path "/success"}}aria-current="page"{{end}}>{{template "icon-dice"}}{{t "nav.success"}}</a></li>
       {{template "nav-soon" "nav.backtest"}}
       {{template "nav-soon" "nav.scenarios"}}
     </ul>
@@ -51,5 +51,7 @@
 {{define "icon-chart"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 19h16M6 15l4-4 3 3 5-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 
 {{define "icon-flow"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 7h6c4 0 4 10 8 10h4M3 17h6c2 0 3-2 4-5M17 7h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>{{end}}
+
+{{define "icon-dice"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="9" r="1.3" fill="currentColor"/><circle cx="15" cy="15" r="1.3" fill="currentColor"/><circle cx="15" cy="9" r="1.3" fill="currentColor"/><circle cx="9" cy="15" r="1.3" fill="currentColor"/></svg>{{end}}
 
 {{define "icon-home"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>{{end}}

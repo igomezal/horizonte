@@ -311,6 +311,77 @@
     return opt;
   };
 
+  function ageHeader(spec, i) {
+    const age = spec.ages && spec.ages[i] ? " · " + spec.ageFormat.replace("%s", spec.ages[i]) : "";
+    return "<strong>" + echarts.format.encodeHTML(spec.categories[i] + age) + "</strong>";
+  }
+
+  // Monte Carlo fan: 10–90 % and 25–75 % bands of net worth, the median, and
+  // the deterministic plan for comparison. Bands are drawn by stacking a
+  // transparent base with the band's height.
+  builders.fan = function (spec) {
+    const opt = baseOption();
+    const fmt = moneyFormatter(false);
+    const ink = cssVar("--app-text");
+    const accent = cssVar("--app-accent");
+    const b = spec.bands;
+    const diff = (hi, lo) => hi.map((v, i) => v - lo[i]);
+    const L = spec.labels;
+    opt.xAxis.data = spec.categories;
+    opt.xAxis.axisLabel.hideOverlap = true;
+    opt.legend.data = [L.wide, L.narrow, L.median, L.plan];
+    opt.tooltip.formatter = (items) => {
+      const i = items[0].dataIndex;
+      const row = (label, v) => label + '<span style="float:right;margin-left:1.5em;font-weight:600">' + fmt.format(v) + "</span>";
+      // Same words as the legend: each band as a range, then the median and the plan.
+      const range = (label, lo, hi) => label + '<span style="float:right;margin-left:1.5em;font-weight:600">' +
+        fmt.format(lo) + " – " + fmt.format(hi) + "</span>";
+      return ageHeader(spec, i) + "<br>" + [
+        range(L.wide, b[0][i], b[4][i]), range(L.narrow, b[1][i], b[3][i]),
+        row(L.median, b[2][i]), row(L.plan, spec.plan[i]),
+      ].join("<br>");
+    };
+    const base = (stack, data) => ({
+      type: "line", stack: stack, data: data, symbol: "none", silent: true,
+      lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 }, tooltip: { show: false },
+    });
+    const band = (name, stack, data, opacity) => ({
+      name: name, type: "line", stack: stack, data: data, symbol: "none", color: ink,
+      itemStyle: { color: ink, opacity: opacity * 2.5 }, // legend swatch shows the band's tone
+      lineStyle: { opacity: 0 }, areaStyle: { color: ink, opacity: opacity }, emphasis: { disabled: true },
+    });
+    opt.series = [
+      base("wide", b[0]), band(L.wide, "wide", diff(b[4], b[0]), 0.12),
+      base("narrow", b[1]), band(L.narrow, "narrow", diff(b[3], b[1]), 0.18),
+      { name: L.median, type: "line", data: b[2], symbol: "none", color: ink, lineStyle: { width: 2.5, color: ink }, z: 5 },
+      { name: L.plan, type: "line", data: spec.plan, symbol: "none", color: accent, lineStyle: { width: 1.5, type: "dashed", color: accent }, z: 4 },
+    ];
+    opt.animation = false;
+    return opt;
+  };
+
+  // Share of scenarios that still have money at each age.
+  builders.survival = function (spec) {
+    const opt = baseOption();
+    const pct = new Intl.NumberFormat(locale(), { style: "percent", maximumFractionDigits: 0 });
+    const ink = cssVar("--app-text");
+    opt.legend.show = false;
+    opt.grid.top = 16;
+    opt.xAxis.data = spec.categories;
+    opt.xAxis.axisLabel.hideOverlap = true;
+    opt.yAxis.min = 0;
+    opt.yAxis.max = 1;
+    opt.yAxis.axisLabel.formatter = (v) => pct.format(v);
+    opt.tooltip.formatter = (items) => ageHeader(spec, items[0].dataIndex) + "<br>" +
+      spec.label + ': <strong>' + pct.format(items[0].value) + "</strong>";
+    opt.series = [{
+      name: spec.label, type: "line", data: spec.data, symbol: "none", step: "end",
+      color: ink, lineStyle: { width: 2, color: ink }, areaStyle: { color: ink, opacity: 0.1 },
+    }];
+    opt.animation = false;
+    return opt;
+  };
+
   // Charts that select a year: clicking a bar moves the year picker.
   function wireYearSelect(chart, spec) {
     chart.off("click");
