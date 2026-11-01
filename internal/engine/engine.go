@@ -69,6 +69,7 @@ type Input struct {
 	Incomes     []domain.Income
 	Expenses    []domain.Expense
 	Debts       []domain.Debt
+	Milestones  []domain.Milestone
 	Assumptions Assumptions
 	Start       domain.Month // first projected month (normally the current month)
 }
@@ -118,12 +119,29 @@ func (r MonthRow) Assets() float64 {
 	return t
 }
 
+// MilestoneHit is when a milestone happens in the projection.
+type MilestoneHit struct {
+	Milestone domain.Milestone
+	Month     domain.Month // zero when it is never reached within the plan
+}
+
+// Reached reports whether the milestone happens within the plan.
+func (h MilestoneHit) Reached() bool { return !h.Month.IsZero() }
+
+// DebtPaidOff is an event the engine detects: a debt's last payment.
+type DebtPaidOff struct {
+	Debt  domain.Debt
+	Month domain.Month
+}
+
 // Result is a full projection.
 type Result struct {
-	Accounts  []domain.Account
-	Months    []MonthRow
-	FailMonth domain.Month // first month with a shortfall; zero if the money lasts
-	Shortfall float64      // total uncovered deficit, nominal euros
+	Accounts   []domain.Account
+	Months     []MonthRow
+	Milestones []MilestoneHit // in the order given in Input
+	PaidOff    []DebtPaidOff  // in payoff order
+	FailMonth  domain.Month   // first month with a shortfall; zero if the money lasts
+	Shortfall  float64        // total uncovered deficit, nominal euros
 }
 
 // Failed reports whether the money ran out at some point.
@@ -172,6 +190,10 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 	}
 	surplusIdx := surplusAccount(in.Accounts, a.SurplusAccountID)
 	order := drawdownOrder(in.Accounts)
+	// Age and date milestones are known up front; financial independence is
+	// added the month the projection reaches it.
+	resolved := domain.ResolveFixed(in.Milestones, in.People)
+	paidOff := make([]bool, len(in.Debts))
 
 	res.Months = make([]MonthRow, 0, n)
 	deflator := 1.0
@@ -188,12 +210,15 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		}
 
 		// 2. Income, tax and expenses.
+		var spendingRate float64 // average monthly spending, for financial independence
 		for _, inc := range in.Incomes {
-			row.Income += incomeThisMonth(inc, m, t, in.Start, a.Inflation)
+			row.Income += incomeThisMonth(inc, resolved, m, t, in.Start, a.Inflation)
 		}
 		row.Tax = row.Income * a.TaxRate
 		for _, e := range in.Expenses {
-			row.Expenses += expenseThisMonth(e, m, t, in.Start, a.Inflation)
+			amount, avg := expenseThisMonth(e, resolved, m, t, in.Start, a.Inflation)
+			row.Expenses += amount
+			spendingRate += avg
 		}
 
 		// 3. Debt payments (fixed instalment, French amortisation).
@@ -208,6 +233,11 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 				debts[i] = 0
 			}
 			row.DebtPayments += pay
+			spendingRate += pay
+			if debts[i] == 0 && !paidOff[i] {
+				paidOff[i] = true
+				res.PaidOff = append(res.PaidOff, DebtPaidOff{Debt: d, Month: m})
+			}
 		}
 
 		// 4. Surplus funds contributions, then the surplus account; a deficit
@@ -215,6 +245,9 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		cash := row.Savings()
 		if cash > 0 {
 			for i, acc := range in.Accounts {
+				if !resolved.ContributingIn(acc, m) {
+					continue
+				}
 				c := math.Min(acc.MonthlyContribution.Euros(), cash)
 				if c <= 0 {
 					continue
@@ -260,12 +293,79 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		}
 		row.NetWorth = row.Assets() - row.DebtBalance
 		res.Months = append(res.Months, row)
+
+		// 5. Financial independence (FIRE variants). Streams bound to it change
+		// from next month.
+		var liquid, weighted float64
+		for i, acc := range in.Accounts {
+			if acc.Kind != domain.AccountRealEstate {
+				liquid += balances[i]
+				weighted += balances[i] * a.AnnualReturn(acc)
+			}
+		}
+		for _, ms := range in.Milestones {
+			if _, done := resolved[ms.ID]; done || !ms.Conditional() {
+				continue
+			}
+			if fiReached(ms, in.People, m, liquid, weighted, spendingRate*12, deflator, a.Inflation) {
+				resolved[ms.ID] = m.AddMonths(1)
+			}
+		}
+	}
+
+	end = res.Months[len(res.Months)-1].Month
+	for _, ms := range in.Milestones {
+		hit := MilestoneHit{Milestone: ms}
+		if month, ok := resolved[ms.ID]; ok && !end.Before(month) {
+			hit.Month = month
+		}
+		res.Milestones = append(res.Milestones, hit)
 	}
 	return res
 }
 
-func incomeThisMonth(inc domain.Income, m domain.Month, t int, start domain.Month, inflation float64) float64 {
-	if !domain.Active(inc.Start, inc.End, m) {
+// fiReached evaluates a financial-independence milestone at the end of month m.
+// liquid is the savings outside property, weighted the sum of balance ×
+// expected return (so weighted/liquid is the portfolio's expected return),
+// yearlySpending the current spending rate (expenses + debt payments, nominal)
+// and deflator the inflation since the start (today's euros → nominal).
+func fiReached(ms domain.Milestone, people []domain.Person, m domain.Month,
+	liquid, weighted, yearlySpending, deflator, inflation float64) bool {
+	if liquid <= 0 {
+		return false
+	}
+	switch ms.FIVariant {
+	case domain.FILean, domain.FIFat:
+		return liquid >= ms.FIMultiple*ms.FIAmount.Euros()*deflator
+	case domain.FIBarista:
+		uncovered := yearlySpending - ms.FIAmount.Euros()*deflator
+		return uncovered <= 0 || liquid >= ms.FIMultiple*uncovered
+	case domain.FICoast:
+		if yearlySpending <= 0 {
+			return false
+		}
+		target := domain.Month{}
+		for _, p := range people {
+			if ms.PersonID != nil && p.ID == *ms.PersonID {
+				target = p.Birth.AddMonths(ms.Age * 12)
+			}
+		}
+		if target.IsZero() {
+			return false
+		}
+		// Grow today's savings, with no more contributions, until the target
+		// age, and compare with the spending then (which rises with inflation).
+		years := math.Max(0, float64(m.MonthsUntil(target))/12)
+		growth := weighted / liquid
+		return liquid*math.Pow(1+growth, years) >= ms.FIMultiple*yearlySpending*math.Pow(1+inflation, years)
+	default: // classic FIRE
+		return yearlySpending > 0 && liquid >= ms.FIMultiple*yearlySpending
+	}
+}
+
+func incomeThisMonth(inc domain.Income, r domain.Resolved, m domain.Month, t int, start domain.Month, inflation float64) float64 {
+	from, to, ok := r.Window(inc.Start, inc.End, inc.StartMS, inc.EndMS)
+	if !ok || !domain.Active(from, to, m) {
 		return 0
 	}
 	g := inflation
@@ -280,7 +380,7 @@ func incomeThisMonth(inc domain.Income, m domain.Month, t int, start domain.Mont
 		}
 		return amount
 	case 1:
-		if m.Month == anchorMonth(inc.Start, start) {
+		if m.Month == anchorMonth(from, start) {
 			return amount
 		}
 		return 0
@@ -289,22 +389,25 @@ func incomeThisMonth(inc domain.Income, m domain.Month, t int, start domain.Mont
 	}
 }
 
-func expenseThisMonth(e domain.Expense, m domain.Month, t int, start domain.Month, inflation float64) float64 {
-	if !domain.Active(e.Start, e.End, m) {
-		return 0
+// expenseThisMonth returns the amount paid in month m and the stream's average
+// monthly cost while active (yearly payments spread over 12 months).
+func expenseThisMonth(e domain.Expense, r domain.Resolved, m domain.Month, t int, start domain.Month, inflation float64) (amount, monthlyAvg float64) {
+	from, to, ok := r.Window(e.Start, e.End, e.StartMS, e.EndMS)
+	if !ok || !domain.Active(from, to, m) {
+		return 0, 0
 	}
 	g := inflation
 	if e.AnnualGrowth != nil {
 		g = *e.AnnualGrowth
 	}
-	amount := e.Amount.Euros() * growth(g, t)
+	payment := e.Amount.Euros() * growth(g, t)
 	if e.PaymentsPerYear == 1 {
-		if m.Month == anchorMonth(e.Start, start) {
-			return amount
+		if m.Month == anchorMonth(from, start) {
+			return payment, payment / 12
 		}
-		return 0
+		return 0, payment / 12
 	}
-	return amount
+	return payment, payment
 }
 
 // anchorMonth is the calendar month a yearly payment falls in.

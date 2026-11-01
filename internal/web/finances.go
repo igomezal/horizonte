@@ -13,8 +13,9 @@ import (
 
 // Event names sent in HX-Trigger so other parts of the page refresh themselves.
 const (
-	evFinancesChanged = "finances-changed" // summary and section totals
-	evPeopleChanged   = "people-changed"   // owner names and selects in other sections
+	evFinancesChanged = "finances-changed"   // summary and section totals
+	evPeopleChanged   = "people-changed"     // owner names and selects in other sections
+	evMilestonesChg   = "milestones-changed" // milestone names and selects in other sections
 )
 
 // formOptions are the choices offered by the selects in the finance forms.
@@ -25,6 +26,8 @@ type formOptions struct {
 	ExpenseCategories []domain.ExpenseCategory
 	ExpensePayments   []int
 	DebtKinds         []domain.DebtKind
+	MilestoneKinds    []domain.MilestoneKind
+	FIVariants        []domain.FIVariant
 }
 
 var financeOptions = &formOptions{
@@ -34,32 +37,48 @@ var financeOptions = &formOptions{
 	ExpenseCategories: domain.ExpenseCategories,
 	ExpensePayments:   domain.ExpensePayments,
 	DebtKinds:         domain.DebtKinds,
+	MilestoneKinds:    domain.MilestoneKinds,
+	FIVariants:        domain.FIVariants,
 }
 
 type rowView struct {
 	Kind  string
 	ID    int64
 	Item  any
-	Owner string // owner's name; empty = joint or not applicable
+	Owner string // owner's (or an age milestone's person's) name
 	Now   domain.Month
+	// MS maps milestone IDs to names, for "Desde Jubilación" labels.
+	MS map[int64]string
+	// When is a fixed milestone's month (zero for conditional ones).
+	When domain.Month
+}
+
+// MSName returns the name of a linked milestone, or "" when not linked.
+func (r rowView) MSName(id *int64) string {
+	if id == nil {
+		return ""
+	}
+	return r.MS[*id]
 }
 
 type sectionView struct {
-	Kind   string
-	Rows   []rowView
-	Total  domain.Cents
-	People []domain.Person
-	CanAdd bool
+	Kind     string
+	Rows     []rowView
+	Total    domain.Cents
+	HasTotal bool // the section shows a headline amount
+	People   []domain.Person
+	CanAdd   bool
 }
 
 type formView struct {
-	Kind   string
-	ID     int64 // 0 for a new record
-	V      map[string]string
-	E      domain.Errors
-	People []domain.Person
-	Opt    *formOptions
-	Now    domain.Month
+	Kind       string
+	ID         int64 // 0 for a new record
+	V          map[string]string
+	E          domain.Errors
+	People     []domain.Person
+	Milestones []domain.Milestone
+	Opt        *formOptions
+	Now        domain.Month
 }
 
 // DOMID is the form element's id, used to re-target validation errors.
@@ -122,20 +141,31 @@ func (s *Server) loadSection(ctx context.Context, fc finCtx, res *resource) (sec
 	if err != nil {
 		return sectionView{}, err
 	}
+	milestones, err := s.store.ListMilestones(ctx, fc.plan)
+	if err != nil {
+		return sectionView{}, err
+	}
 	names := make(map[int64]string, len(people))
 	for _, p := range people {
 		names[p.ID] = p.Name
 	}
+	msNames := make(map[int64]string, len(milestones))
+	for _, m := range milestones {
+		msNames[m.ID] = m.Name
+	}
 	sv := sectionView{Kind: res.kind, People: people, CanAdd: true}
 	for _, it := range items {
-		rv := rowView{Kind: res.kind, ID: itemID(it), Item: it, Now: fc.now}
+		rv := rowView{Kind: res.kind, ID: itemID(it), Item: it, Now: fc.now, MS: msNames}
 		if o := itemOwner(it); o != nil {
 			rv.Owner = names[*o]
+		}
+		if m, ok := it.(domain.Milestone); ok {
+			rv.When, _ = m.FixedMonth(people)
 		}
 		sv.Rows = append(sv.Rows, rv)
 	}
 	if res.total != nil {
-		sv.Total = res.total(items, fc.now)
+		sv.Total, sv.HasTotal = res.total(items, fc.now, domain.ResolveFixed(milestones, people)), true
 	}
 	if res.kind == "people" {
 		sv.CanAdd = len(people) < domain.MaxPeople
@@ -160,8 +190,16 @@ func (s *Server) loadSummary(ctx context.Context, fc finCtx) (summaryView, error
 	if err != nil {
 		return summaryView{}, err
 	}
+	people, err := s.store.ListPeople(ctx, fc.plan)
+	if err != nil {
+		return summaryView{}, err
+	}
+	milestones, err := s.store.ListMilestones(ctx, fc.plan)
+	if err != nil {
+		return summaryView{}, err
+	}
 	return summaryView{
-		Summary: domain.Summarize(fc.now, accounts, incomes, expenses, debts),
+		Summary: domain.Summarize(fc.now, domain.ResolveFixed(milestones, people), accounts, incomes, expenses, debts),
 		Empty:   len(accounts)+len(incomes)+len(expenses)+len(debts) == 0,
 	}, nil
 }
@@ -270,11 +308,21 @@ func (s *Server) renderForm(w http.ResponseWriter, r *http.Request, fc finCtx, r
 		s.serverError(w, r, err)
 		return
 	}
-	// With a single person, new accounts and incomes are theirs by default.
-	if _, set := v["owner"]; id == 0 && !set && len(people) == 1 && status == http.StatusOK {
-		v["owner"] = strconv.FormatInt(people[0].ID, 10)
+	milestones, err := s.store.ListMilestones(r.Context(), fc.plan)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
 	}
-	fv := formView{Kind: res.kind, ID: id, V: v, E: e, People: people, Opt: financeOptions, Now: fc.now}
+	// With a single person, new records are theirs by default.
+	if id == 0 && len(people) == 1 && status == http.StatusOK {
+		only := strconv.FormatInt(people[0].ID, 10)
+		for _, field := range []string{"owner", "person", "coast_person"} {
+			if _, set := v[field]; !set {
+				v[field] = only
+			}
+		}
+	}
+	fv := formView{Kind: res.kind, ID: id, V: v, E: e, People: people, Milestones: milestones, Opt: financeOptions, Now: fc.now}
 	if status == http.StatusUnprocessableEntity {
 		// The form posts with the section as target; errors replace the form instead.
 		w.Header().Set("HX-Retarget", "#"+fv.DOMID())
@@ -347,16 +395,17 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 			errs.Add("_form", "form.error.max_people")
 		}
 	}
+	if id != 0 {
+		// The record itself may be gone (deleted in another tab).
+		if _, err := res.get(r.Context(), fc.plan, id); s.notFoundOrError(w, r, err) {
+			return
+		}
+	}
 	if len(errs) == 0 {
 		err = res.save(r.Context(), fc.plan, id, item)
 		if errors.Is(err, store.ErrNotFound) {
-			if id != 0 {
-				// The record itself is gone (deleted in another tab).
-				s.handleNotFound(w, r)
-				return
-			}
-			// A referenced owner no longer exists.
-			errs.Add("owner", domain.ErrChoice)
+			// A person or milestone chosen in the form no longer exists.
+			errs.Add("_form", "form.error.stale")
 		} else if err != nil {
 			s.serverError(w, r, err)
 			return
@@ -396,11 +445,14 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) triggerChanged(w http.ResponseWriter, res *resource) {
-	if res.kind == "people" {
+	switch res.kind {
+	case "people":
 		w.Header().Set("HX-Trigger", evFinancesChanged+", "+evPeopleChanged)
-		return
+	case "milestones":
+		w.Header().Set("HX-Trigger", evFinancesChanged+", "+evMilestonesChg)
+	default:
+		w.Header().Set("HX-Trigger", evFinancesChanged)
 	}
-	w.Header().Set("HX-Trigger", evFinancesChanged)
 }
 
 // notFoundOrError writes a 404 or 500 for err and reports whether it did.

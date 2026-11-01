@@ -114,7 +114,7 @@ func TestAccountValidate(t *testing.T) {
 
 func TestSummarize(t *testing.T) {
 	now := Month{2026, 11}
-	s := Summarize(now,
+	s := Summarize(now, Resolved{},
 		[]Account{{Balance: 5000000, MonthlyContribution: 30000}, {Balance: 1000000}},
 		[]Income{
 			{Amount: 200000, PaymentsPerYear: 14},                       // 2.333,33 €/month

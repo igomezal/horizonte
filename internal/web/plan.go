@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -68,6 +69,24 @@ type projectionChart struct {
 	NetWorth   chartSeries   `json:"netWorth"`
 	FailIndex  int           `json:"failIndex"`
 	FailLabel  string        `json:"failLabel,omitempty"`
+	Marks      []chartMark   `json:"marks,omitempty"`
+}
+
+// chartMark is a vertical marker on the projection chart.
+type chartMark struct {
+	Index int    `json:"index"`
+	Label string `json:"label"`
+	Kind  string `json:"kind"` // "milestone" or "debt"
+}
+
+// timelineItem is one entry of the milestone timeline under the verdict.
+type timelineItem struct {
+	Label   string
+	Kind    string // "milestone", "debt" or "fail"
+	Month   domain.Month
+	Age     int
+	Reached bool // false: a conditional milestone the plan never reaches
+	Past    bool // happened before the plan starts
 }
 
 type planView struct {
@@ -89,6 +108,7 @@ type planView struct {
 	Chart      projectionChart
 	Rows       []planRow
 	NoAccounts bool
+	Timeline   []timelineItem
 }
 
 type assumptionsForm struct {
@@ -120,6 +140,9 @@ func (s *Server) loadInput(ctx context.Context, fc finCtx) (engine.Input, error)
 		return in, err
 	}
 	if in.Debts, err = s.store.ListDebts(ctx, fc.plan); err != nil {
+		return in, err
+	}
+	if in.Milestones, err = s.store.ListMilestones(ctx, fc.plan); err != nil {
 		return in, err
 	}
 	in.Assumptions, err = s.store.GetAssumptions(ctx, fc.plan)
@@ -236,6 +259,46 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 			Short: p.short > 0,
 		})
 	}
+	// Milestones and detected events: a timeline, and marks on the chart.
+	periodOf := func(m domain.Month) int {
+		for i, p := range periods {
+			if (opts.Monthly && p.last.Month == m) || (!opts.Monthly && p.last.Month.Year == m.Year) {
+				return i
+			}
+		}
+		return -1
+	}
+	addMark := func(m domain.Month, label, kind string) {
+		if i := periodOf(m); i >= 0 {
+			ch.Marks = append(ch.Marks, chartMark{Index: i, Label: label, Kind: kind})
+		}
+	}
+	var unreached []timelineItem
+	for _, h := range res.Milestones {
+		if !h.Reached() {
+			unreached = append(unreached, timelineItem{Label: h.Milestone.Name, Kind: "milestone"})
+			continue
+		}
+		item := timelineItem{Label: h.Milestone.Name, Kind: "milestone", Month: h.Month,
+			Age: main.AgeAt(h.Month), Reached: true, Past: h.Month.Before(in.Start)}
+		v.Timeline = append(v.Timeline, item)
+		if !item.Past {
+			addMark(h.Month, h.Milestone.Name, "milestone")
+		}
+	}
+	for _, d := range res.PaidOff {
+		label := s.catalog.T(lang, "plan.event.paid_off", d.Debt.Name)
+		v.Timeline = append(v.Timeline, timelineItem{Label: label, Kind: "debt", Month: d.Month,
+			Age: main.AgeAt(d.Month), Reached: true})
+		addMark(d.Month, label, "debt")
+	}
+	if res.Failed() {
+		v.Timeline = append(v.Timeline, timelineItem{Label: s.catalog.T(lang, "plan.chart.fail"), Kind: "fail",
+			Month: res.FailMonth, Age: main.AgeAt(res.FailMonth), Reached: true})
+	}
+	sort.SliceStable(v.Timeline, func(i, j int) bool { return v.Timeline[i].Month.Before(v.Timeline[j].Month) })
+	v.Timeline = append(v.Timeline, unreached...)
+
 	v.Chart = ch
 	return v
 }

@@ -793,7 +793,60 @@ h3 {
   color: var(--app-bg);
 }
 .chart-tall {
-  height: 400px;
+  height: 440px;
+}
+
+/* Milestone timeline: a chronological row under the verdict. */
+.timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 2rem;
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0.9rem 0 0;
+  border-top: 1px solid var(--app-rule);
+}
+.timeline li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  margin: 0;
+  padding-left: 0.75rem;
+  list-style: none;
+  box-shadow: inset 2px 0 0 var(--app-muted);
+}
+.timeline .tl-name {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+.timeline .tl-when {
+  font-size: 0.8125rem;
+  color: var(--app-muted);
+  font-variant-numeric: tabular-nums;
+}
+.timeline .tl-debt {
+  box-shadow: inset 2px 0 0 var(--app-positive);
+}
+.timeline .tl-fail {
+  box-shadow: inset 2px 0 0 var(--app-negative);
+}
+.timeline .tl-fail .tl-name {
+  color: var(--app-negative);
+}
+.timeline .tl-unreached {
+  box-shadow: inset 2px 0 0 var(--app-rule);
+}
+.timeline .tl-unreached .tl-name {
+  color: var(--app-muted);
+}
+
+/* Groups of fields shown for one milestone kind; they flow in the form grid. */
+.field-group {
+  display: contents;
+}
+.field-group > .field-hint {
+  grid-column: span 2;
+  align-self: end;
 }
 
 .form-subhead {

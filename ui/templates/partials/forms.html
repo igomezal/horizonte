@@ -79,3 +79,28 @@
   {{end}}
 </div>
 {{end}}
+
+{{/* Stream start or end: a milestone, or a fixed month when no milestone is
+     chosen. dict: F, ms (select name), month (input name), label, hint. */}}
+{{define "f-boundary"}}
+{{$sid := printf "%s-%s" .F.DOMID .ms}}
+{{$mid := printf "%s-%s" .F.DOMID .month}}
+{{$cur := index .F.V .ms}}
+{{$err := index .F.E .month}}
+<div class="field{{if $err}} has-error{{end}}" x-data="{ ms: '{{$cur}}' }">
+  <label for="{{if .F.Milestones}}{{$sid}}{{else}}{{$mid}}{{end}}">{{t .label}}</label>
+  {{if .F.Milestones}}
+  <select id="{{$sid}}" name="{{.ms}}" x-model="ms" aria-label="{{t .label}}">
+    <option value="">{{t "boundary.date"}}</option>
+    {{range .F.Milestones}}<option value="{{.ID}}"{{if eq (str .ID) $cur}} selected{{end}}>{{.Name}}</option>{{end}}
+  </select>
+  {{end}}
+  <div x-show="ms === ''"{{if $cur}} x-cloak{{end}}>
+    <input id="{{$mid}}" name="{{.month}}" type="month" value="{{index .F.V .month}}"
+      {{- if .F.Milestones}} aria-label="{{t .label}}"{{end}}
+      {{- if $err}} aria-invalid="true" aria-describedby="{{$mid}}-msg"{{else}} aria-describedby="{{$mid}}-msg"{{end}}>
+  </div>
+  {{if $err}}<small class="field-error" id="{{$mid}}-msg">{{t $err}}</small>
+  {{- else}}<small class="field-hint" id="{{$mid}}-msg" x-show="ms === ''">{{t .hint}}</small>{{end}}
+</div>
+{{end}}

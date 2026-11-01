@@ -140,6 +140,7 @@ type Account struct {
 	Balance             Cents
 	MonthlyContribution Cents
 	AnnualReturn        *float64 // nil = use the plan's default for this kind
+	ContributionEndMS   *int64   // contributions stop when this milestone happens
 }
 
 // Validate checks the account.
@@ -186,6 +187,7 @@ type Income struct {
 	PaymentsPerYear int
 	AnnualGrowth    *float64 // nil = grows with inflation
 	Start, End      Month    // zero = from now / open-ended
+	StartMS, EndMS  *int64   // milestones that override Start / End
 }
 
 // Annual returns the yearly gross amount.
@@ -208,7 +210,9 @@ func (i Income) Validate() Errors {
 		errs.Add("payments", ErrChoice)
 	}
 	validateRate("growth", i.AnnualGrowth, -0.2, 0.3, errs)
-	validateSpan(i.Start, i.End, errs)
+	if i.StartMS == nil && i.EndMS == nil {
+		validateSpan(i.Start, i.End, errs)
+	}
 	return errs
 }
 
@@ -245,6 +249,7 @@ type Expense struct {
 	PaymentsPerYear int
 	AnnualGrowth    *float64 // nil = grows with inflation
 	Start, End      Month
+	StartMS, EndMS  *int64 // milestones that override Start / End
 }
 
 // Annual returns the yearly amount.
@@ -267,7 +272,9 @@ func (e Expense) Validate() Errors {
 		errs.Add("payments", ErrChoice)
 	}
 	validateRate("growth", e.AnnualGrowth, -0.2, 0.3, errs)
-	validateSpan(e.Start, e.End, errs)
+	if e.StartMS == nil && e.EndMS == nil {
+		validateSpan(e.Start, e.End, errs)
+	}
 	return errs
 }
 
@@ -369,24 +376,27 @@ type Summary struct {
 	MonthlyUnallocated Cents
 }
 
-// Summarize computes the snapshot for month now.
-func Summarize(now Month, accounts []Account, incomes []Income, expenses []Expense, debts []Debt) Summary {
+// Summarize computes the snapshot for month now. r resolves the milestones
+// streams are bound to (conditional milestones count as not reached).
+func Summarize(now Month, r Resolved, accounts []Account, incomes []Income, expenses []Expense, debts []Debt) Summary {
 	var s Summary
 	for _, a := range accounts {
 		s.Assets += a.Balance
-		s.MonthlyContributions += a.MonthlyContribution
+		if r.ContributingIn(a, now) {
+			s.MonthlyContributions += a.MonthlyContribution
+		}
 	}
 	for _, d := range debts {
 		s.Debts += d.Balance
 		s.MonthlyDebtPayments += d.MonthlyPayment
 	}
 	for _, i := range incomes {
-		if Active(i.Start, i.End, now) {
+		if r.ActiveIn(i.Start, i.End, i.StartMS, i.EndMS, now) {
 			s.MonthlyIncome += i.MonthlyAverage()
 		}
 	}
 	for _, e := range expenses {
-		if Active(e.Start, e.End, now) {
+		if r.ActiveIn(e.Start, e.End, e.StartMS, e.EndMS, now) {
 			s.MonthlyExpenses += e.MonthlyAverage()
 		}
 	}

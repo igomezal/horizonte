@@ -175,7 +175,7 @@ func TestPeopleLimitAndOwnerSelect(t *testing.T) {
 	// An owner from nowhere is rejected as a field error, not a 500.
 	acct := url.Values{"name": {"X"}, "kind": {"cash"}, "owner": {"999"}}
 	if rec, body := do(s, htmxReq("POST", "/finances/accounts", acct)); rec.Code != http.StatusUnprocessableEntity ||
-		!strings.Contains(body, "Elige una de las opciones") {
+		!strings.Contains(body, "ya no existe") {
 		t.Errorf("bad owner: %d", rec.Code)
 	}
 }

@@ -187,14 +187,15 @@ func (s *Store) DeletePerson(ctx context.Context, planID, id int64) error {
 
 // ---------- Accounts ----------
 
-const accountCols = `id, plan_id, name, kind, owner_id, balance_cents, monthly_contribution_cents, annual_return`
+const accountCols = `id, plan_id, name, kind, owner_id, balance_cents, monthly_contribution_cents, annual_return,
+	contribution_end_milestone_id`
 
 func scanAccount(sc interface{ Scan(...any) error }) (domain.Account, error) {
 	var a domain.Account
-	var owner sql.NullInt64
+	var owner, contribEnd sql.NullInt64
 	var ret sql.NullFloat64
-	err := sc.Scan(&a.ID, &a.PlanID, &a.Name, &a.Kind, &owner, &a.Balance, &a.MonthlyContribution, &ret)
-	a.OwnerID, a.AnnualReturn = intPtr(owner), floatPtr(ret)
+	err := sc.Scan(&a.ID, &a.PlanID, &a.Name, &a.Kind, &owner, &a.Balance, &a.MonthlyContribution, &ret, &contribEnd)
+	a.OwnerID, a.AnnualReturn, a.ContributionEndMS = intPtr(owner), floatPtr(ret), intPtr(contribEnd)
 	return a, err
 }
 
@@ -231,14 +232,19 @@ func (s *Store) SaveAccount(ctx context.Context, a domain.Account) (int64, error
 	if err := s.checkOwner(ctx, a.PlanID, a.OwnerID); err != nil {
 		return 0, err
 	}
+	if err := s.checkMilestones(ctx, a.PlanID, a.ContributionEndMS); err != nil {
+		return 0, err
+	}
 	if a.ID == 0 {
-		return s.insert(ctx, `INSERT INTO accounts (plan_id, name, kind, owner_id, balance_cents, monthly_contribution_cents, annual_return)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			a.PlanID, a.Name, a.Kind, nullInt(a.OwnerID), a.Balance, a.MonthlyContribution, nullFloat(a.AnnualReturn))
+		return s.insert(ctx, `INSERT INTO accounts (plan_id, name, kind, owner_id, balance_cents, monthly_contribution_cents,
+			annual_return, contribution_end_milestone_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			a.PlanID, a.Name, a.Kind, nullInt(a.OwnerID), a.Balance, a.MonthlyContribution, nullFloat(a.AnnualReturn),
+			nullInt(a.ContributionEndMS))
 	}
 	return a.ID, s.execOne(ctx, `UPDATE accounts SET name = ?, kind = ?, owner_id = ?, balance_cents = ?,
-		monthly_contribution_cents = ?, annual_return = ? WHERE id = ? AND plan_id = ?`,
-		a.Name, a.Kind, nullInt(a.OwnerID), a.Balance, a.MonthlyContribution, nullFloat(a.AnnualReturn), a.ID, a.PlanID)
+		monthly_contribution_cents = ?, annual_return = ?, contribution_end_milestone_id = ? WHERE id = ? AND plan_id = ?`,
+		a.Name, a.Kind, nullInt(a.OwnerID), a.Balance, a.MonthlyContribution, nullFloat(a.AnnualReturn),
+		nullInt(a.ContributionEndMS), a.ID, a.PlanID)
 }
 
 // DeleteAccount removes an account.
@@ -248,17 +254,20 @@ func (s *Store) DeleteAccount(ctx context.Context, planID, id int64) error {
 
 // ---------- Incomes ----------
 
-const incomeCols = `id, plan_id, name, kind, owner_id, amount_cents, payments_per_year, annual_growth, start_month, end_month`
+const incomeCols = `id, plan_id, name, kind, owner_id, amount_cents, payments_per_year, annual_growth, start_month, end_month,
+	start_milestone_id, end_milestone_id`
 
 func scanIncome(sc interface{ Scan(...any) error }) (domain.Income, error) {
 	var i domain.Income
-	var owner sql.NullInt64
+	var owner, startMS, endMS sql.NullInt64
 	var growth sql.NullFloat64
 	var start, end sql.NullString
-	if err := sc.Scan(&i.ID, &i.PlanID, &i.Name, &i.Kind, &owner, &i.Amount, &i.PaymentsPerYear, &growth, &start, &end); err != nil {
+	if err := sc.Scan(&i.ID, &i.PlanID, &i.Name, &i.Kind, &owner, &i.Amount, &i.PaymentsPerYear, &growth, &start, &end,
+		&startMS, &endMS); err != nil {
 		return i, err
 	}
 	i.OwnerID, i.AnnualGrowth = intPtr(owner), floatPtr(growth)
+	i.StartMS, i.EndMS = intPtr(startMS), intPtr(endMS)
 	var err error
 	if i.Start, err = scanMonth(start); err != nil {
 		return i, err
@@ -300,14 +309,20 @@ func (s *Store) SaveIncome(ctx context.Context, i domain.Income) (int64, error) 
 	if err := s.checkOwner(ctx, i.PlanID, i.OwnerID); err != nil {
 		return 0, err
 	}
+	if err := s.checkMilestones(ctx, i.PlanID, i.StartMS, i.EndMS); err != nil {
+		return 0, err
+	}
 	if i.ID == 0 {
-		return s.insert(ctx, `INSERT INTO incomes (plan_id, name, kind, owner_id, amount_cents, payments_per_year, annual_growth, start_month, end_month)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			i.PlanID, i.Name, i.Kind, nullInt(i.OwnerID), i.Amount, i.PaymentsPerYear, nullFloat(i.AnnualGrowth), nullMonth(i.Start), nullMonth(i.End))
+		return s.insert(ctx, `INSERT INTO incomes (plan_id, name, kind, owner_id, amount_cents, payments_per_year, annual_growth,
+			start_month, end_month, start_milestone_id, end_milestone_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			i.PlanID, i.Name, i.Kind, nullInt(i.OwnerID), i.Amount, i.PaymentsPerYear, nullFloat(i.AnnualGrowth),
+			nullMonth(i.Start), nullMonth(i.End), nullInt(i.StartMS), nullInt(i.EndMS))
 	}
 	return i.ID, s.execOne(ctx, `UPDATE incomes SET name = ?, kind = ?, owner_id = ?, amount_cents = ?, payments_per_year = ?,
-		annual_growth = ?, start_month = ?, end_month = ? WHERE id = ? AND plan_id = ?`,
-		i.Name, i.Kind, nullInt(i.OwnerID), i.Amount, i.PaymentsPerYear, nullFloat(i.AnnualGrowth), nullMonth(i.Start), nullMonth(i.End), i.ID, i.PlanID)
+		annual_growth = ?, start_month = ?, end_month = ?, start_milestone_id = ?, end_milestone_id = ?
+		WHERE id = ? AND plan_id = ?`,
+		i.Name, i.Kind, nullInt(i.OwnerID), i.Amount, i.PaymentsPerYear, nullFloat(i.AnnualGrowth),
+		nullMonth(i.Start), nullMonth(i.End), nullInt(i.StartMS), nullInt(i.EndMS), i.ID, i.PlanID)
 }
 
 // DeleteIncome removes an income stream.
@@ -317,16 +332,20 @@ func (s *Store) DeleteIncome(ctx context.Context, planID, id int64) error {
 
 // ---------- Expenses ----------
 
-const expenseCols = `id, plan_id, name, category, amount_cents, payments_per_year, annual_growth, start_month, end_month`
+const expenseCols = `id, plan_id, name, category, amount_cents, payments_per_year, annual_growth, start_month, end_month,
+	start_milestone_id, end_milestone_id`
 
 func scanExpense(sc interface{ Scan(...any) error }) (domain.Expense, error) {
 	var e domain.Expense
 	var growth sql.NullFloat64
 	var start, end sql.NullString
-	if err := sc.Scan(&e.ID, &e.PlanID, &e.Name, &e.Category, &e.Amount, &e.PaymentsPerYear, &growth, &start, &end); err != nil {
+	var startMS, endMS sql.NullInt64
+	if err := sc.Scan(&e.ID, &e.PlanID, &e.Name, &e.Category, &e.Amount, &e.PaymentsPerYear, &growth, &start, &end,
+		&startMS, &endMS); err != nil {
 		return e, err
 	}
 	e.AnnualGrowth = floatPtr(growth)
+	e.StartMS, e.EndMS = intPtr(startMS), intPtr(endMS)
 	var err error
 	if e.Start, err = scanMonth(start); err != nil {
 		return e, err
@@ -365,14 +384,20 @@ func (s *Store) GetExpense(ctx context.Context, planID, id int64) (domain.Expens
 
 // SaveExpense inserts (ID 0) or updates an expense and returns its ID.
 func (s *Store) SaveExpense(ctx context.Context, e domain.Expense) (int64, error) {
+	if err := s.checkMilestones(ctx, e.PlanID, e.StartMS, e.EndMS); err != nil {
+		return 0, err
+	}
 	if e.ID == 0 {
-		return s.insert(ctx, `INSERT INTO expenses (plan_id, name, category, amount_cents, payments_per_year, annual_growth, start_month, end_month)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			e.PlanID, e.Name, e.Category, e.Amount, e.PaymentsPerYear, nullFloat(e.AnnualGrowth), nullMonth(e.Start), nullMonth(e.End))
+		return s.insert(ctx, `INSERT INTO expenses (plan_id, name, category, amount_cents, payments_per_year, annual_growth,
+			start_month, end_month, start_milestone_id, end_milestone_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			e.PlanID, e.Name, e.Category, e.Amount, e.PaymentsPerYear, nullFloat(e.AnnualGrowth),
+			nullMonth(e.Start), nullMonth(e.End), nullInt(e.StartMS), nullInt(e.EndMS))
 	}
 	return e.ID, s.execOne(ctx, `UPDATE expenses SET name = ?, category = ?, amount_cents = ?, payments_per_year = ?,
-		annual_growth = ?, start_month = ?, end_month = ? WHERE id = ? AND plan_id = ?`,
-		e.Name, e.Category, e.Amount, e.PaymentsPerYear, nullFloat(e.AnnualGrowth), nullMonth(e.Start), nullMonth(e.End), e.ID, e.PlanID)
+		annual_growth = ?, start_month = ?, end_month = ?, start_milestone_id = ?, end_milestone_id = ?
+		WHERE id = ? AND plan_id = ?`,
+		e.Name, e.Category, e.Amount, e.PaymentsPerYear, nullFloat(e.AnnualGrowth),
+		nullMonth(e.Start), nullMonth(e.End), nullInt(e.StartMS), nullInt(e.EndMS), e.ID, e.PlanID)
 }
 
 // DeleteExpense removes an expense.

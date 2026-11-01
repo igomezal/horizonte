@@ -53,7 +53,7 @@ projection, Monte Carlo and backtests all reuse it.
 | 0 | Skeleton: module, router, layout, htmx, theme, i18n (es/en), SQLite migrations | ✅ |
 | 1 | Current Finances: CRUD for people, accounts, income, expenses, debts | ✅ |
 | 2 | Monthly engine + Plan view: net worth and per-account charts, monthly/yearly table | ✅ |
-| 3 | Milestones: fixed and conditional, streams tied to milestones, chart timeline | ☐ |
+| 3 | Milestones: fixed and conditional, streams tied to milestones, chart timeline | ✅ |
 | 4 | Cash flow: Sankey per year, savings rate, expense breakdown | ☐ |
 | 5 | Chance of Success: Monte Carlo, fan chart, success %, milestone timing table | ☐ |
 | 6 | Historical backtest: every start year, heat-map, worst sequences | ☐ |

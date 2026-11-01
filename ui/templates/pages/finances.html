@@ -5,6 +5,7 @@
 </header>
 {{template "summary" .Data.Summary}}
 {{template "fin-section" (index .Data.Sections "people")}}
+{{template "fin-section" (index .Data.Sections "milestones")}}
 {{template "fin-section" (index .Data.Sections "accounts")}}
 {{template "fin-section" (index .Data.Sections "incomes")}}
 {{template "fin-section" (index .Data.Sections "expenses")}}
@@ -42,10 +43,11 @@
 {{/* ---------- Section (one per resource kind) ---------- */}}
 {{define "fin-section"}}
 <section class="section fin-section" id="section-{{.Kind}}" aria-labelledby="h-{{.Kind}}"
-  {{- if ne .Kind "people"}} hx-get="/finances/{{.Kind}}" hx-trigger="people-changed from:body" hx-target="this" hx-swap="outerHTML"{{end}}>
+  {{- if ne .Kind "people"}} hx-get="/finances/{{.Kind}}" hx-target="this" hx-swap="outerHTML"
+  hx-trigger="people-changed from:body{{if ne .Kind "milestones"}}, milestones-changed from:body{{end}}"{{end}}>
   <div class="section-head">
     <h2 id="h-{{.Kind}}">{{t (printf "%s.title" .Kind)}}</h2>
-    {{if and .Rows (ne .Kind "people")}}
+    {{if and .Rows .HasTotal}}
     <p class="section-total amount">
       {{- if or (eq .Kind "incomes") (eq .Kind "expenses")}}{{t "per_month" (eur .Total)}}{{else}}{{eur .Total}}{{end -}}
     </p>
@@ -73,6 +75,7 @@
 {{define "fin-row"}}
 <div class="entry" id="{{.Kind}}-{{.ID}}" x-data="{ confirm: false }">
   {{if eq .Kind "people"}}{{template "people-cells" .}}
+  {{else if eq .Kind "milestones"}}{{template "milestones-cells" .}}
   {{else if eq .Kind "accounts"}}{{template "accounts-cells" .}}
   {{else if eq .Kind "incomes"}}{{template "incomes-cells" .}}
   {{else if eq .Kind "expenses"}}{{template "expenses-cells" .}}
@@ -100,13 +103,31 @@
 <div class="entry-amount"><span class="amount">{{t "people.age" (.AgeAt $.Now)}}</span></div>
 {{end}}{{end}}
 
+{{define "milestones-cells"}}{{with .Item}}
+<div class="entry-main">
+  <span class="entry-name">{{.Name}}</span>
+  <span class="entry-meta">
+    {{if eq (str .Kind) "age"}}<span>{{t "milestones.when_age" $.Owner .Age}}</span>
+    {{else if eq (str .Kind) "date"}}<span>{{t "milestones.when_date"}}</span>
+    {{else}}{{$v := str .FIVariant}}
+    <span>{{t (printf "milestone.fi.%s" $v)}}</span>
+    {{if eq $v "lean" "fat"}}<span>{{t "milestones.when_fi_budget" (number .FIMultiple 0) (eur .FIAmount)}}</span>
+    {{else if eq $v "barista"}}<span>{{t "milestones.when_fi_barista" (number .FIMultiple 0) (eur .FIAmount)}}</span>
+    {{else if eq $v "coast"}}<span>{{t "milestones.when_fi_coast" (number .FIMultiple 0) $.Owner .Age}}</span>
+    {{else}}<span>{{t "milestones.when_fi" (number .FIMultiple 0)}}</span>{{end}}
+    {{end}}
+  </span>
+</div>
+<div class="entry-amount">{{if $.When.IsZero}}<span class="muted">{{t "milestones.conditional"}}</span>{{else}}<span class="amount">{{month $.When}}</span>{{end}}</div>
+{{end}}{{end}}
+
 {{define "accounts-cells"}}{{with .Item}}
 <div class="entry-main">
   <span class="entry-name">{{.Name}}</span>
   <span class="entry-meta">
     <span>{{t (printf "account.kind.%s" (str .Kind))}}</span>
     {{with $.Owner}}<span>{{.}}</span>{{end}}
-    {{if .MonthlyContribution}}<span>{{t "accounts.contributes" (eur .MonthlyContribution)}}</span>{{end}}
+    {{if .MonthlyContribution}}{{with $.MSName .ContributionEndMS}}<span>{{t "accounts.contributes_until" (eur $.Item.MonthlyContribution) .}}</span>{{else}}<span>{{t "accounts.contributes" (eur .MonthlyContribution)}}</span>{{end}}{{end}}
     {{with .AnnualReturn}}<span>{{t "accounts.return" (pct .)}}</span>{{end}}
   </span>
 </div>
@@ -114,7 +135,9 @@
 {{end}}{{end}}
 
 {{define "stream-dates"}}
-{{if and (not .Start.IsZero) (.Now.Before .Start)}}<span>{{t "stream.starts" (month .Start)}}</span>
+{{if .StartName}}<span>{{t "stream.from_ms" .StartName}}</span>
+{{else if and (not .Start.IsZero) (.Now.Before .Start)}}<span>{{t "stream.starts" (month .Start)}}</span>{{end}}
+{{if .EndName}}<span>{{t "stream.until_ms" .EndName}}</span>
 {{else if and (not .End.IsZero) (.End.Before .Now)}}<span class="ended">{{t "stream.ended" (month .End)}}</span>
 {{else if not .End.IsZero}}<span>{{t "stream.until" (month .End)}}</span>{{end}}
 {{end}}
@@ -127,7 +150,7 @@
     {{with $.Owner}}<span>{{.}}</span>{{end}}
     {{if ne .PaymentsPerYear 12}}<span>{{t (printf "payments.short.%d" .PaymentsPerYear) (eur2 .Amount)}}</span>{{end}}
     {{with .AnnualGrowth}}<span>{{t "stream.growth" (pct .)}}</span>{{else}}<span>{{t "stream.inflation"}}</span>{{end}}
-    {{template "stream-dates" (dict "Start" .Start "End" .End "Now" $.Now)}}
+    {{template "stream-dates" (dict "Start" .Start "End" .End "Now" $.Now "StartName" ($.MSName .StartMS) "EndName" ($.MSName .EndMS))}}
   </span>
 </div>
 <div class="entry-amount"><span class="amount">{{t "per_month" (eur .MonthlyAverage)}}</span></div>
@@ -140,7 +163,7 @@
     <span>{{t (printf "expense.category.%s" (str .Category))}}</span>
     {{if ne .PaymentsPerYear 12}}<span>{{t (printf "payments.short.%d" .PaymentsPerYear) (eur2 .Amount)}}</span>{{end}}
     {{with .AnnualGrowth}}<span>{{t "stream.growth" (pct .)}}</span>{{else}}<span>{{t "stream.inflation"}}</span>{{end}}
-    {{template "stream-dates" (dict "Start" .Start "End" .End "Now" $.Now)}}
+    {{template "stream-dates" (dict "Start" .Start "End" .End "Now" $.Now "StartName" ($.MSName .StartMS) "EndName" ($.MSName .EndMS))}}
   </span>
 </div>
 <div class="entry-amount"><span class="amount">{{t "per_month" (eur .MonthlyAverage)}}</span></div>
@@ -178,6 +201,80 @@
 </form>
 {{end}}
 
+{{define "milestones-form"}}
+{{template "form-open" .}}
+  <div class="form-grid" x-data="{ kind: '{{index .V "kind"}}', variant: '{{index .V "fi_variant"}}' }">
+    {{template "field" (dict "F" . "name" "name" "label" "field.name" "type" "text" "required" true "placeholder" "milestones.placeholder")}}
+    {{$id := printf "%s-kind" .DOMID}}{{$cur := index .V "kind"}}
+    <div class="field">
+      <label for="{{$id}}">{{t "field.milestone_kind"}}</label>
+      <select id="{{$id}}" name="kind" x-model="kind">
+        {{range .Opt.MilestoneKinds}}<option value="{{.}}"{{if eq (str .) $cur}} selected{{end}}>{{t (printf "milestone.kind.%s" .)}}</option>{{end}}
+      </select>
+    </div>
+    <div class="field-group" x-show="kind === 'age'">
+      {{if .People}}
+      {{$pid := printf "%s-person" .DOMID}}{{$pcur := index .V "person"}}{{$perr := index .E "person"}}
+      <div class="field{{if $perr}} has-error{{end}}">
+        <label for="{{$pid}}">{{t "field.person"}}</label>
+        <select id="{{$pid}}" name="person">
+          {{range .People}}<option value="{{.ID}}"{{if eq (str .ID) $pcur}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+        {{with $perr}}<small class="field-error">{{t .}}</small>{{end}}
+      </div>
+      {{template "field" (dict "F" . "name" "age" "label" "field.age" "type" "int")}}
+      {{else}}
+      <p class="field-hint">{{t "milestones.need_person"}}</p>
+      {{end}}
+    </div>
+    <div class="field-group" x-show="kind === 'date'" x-cloak>
+      {{template "field" (dict "F" . "name" "date" "label" "field.date" "type" "month")}}
+    </div>
+    <div class="field-group" x-show="kind === 'fi'" x-cloak>
+      {{$vid := printf "%s-fi_variant" .DOMID}}{{$vcur := index .V "fi_variant"}}
+      <div class="field">
+        <label for="{{$vid}}">{{t "field.fi_variant"}}</label>
+        <select id="{{$vid}}" name="fi_variant" x-model="variant">
+          {{range .Opt.FIVariants}}<option value="{{.}}"{{if eq (str .) $vcur}} selected{{end}}>{{t (printf "milestone.fi.%s" .)}}</option>{{end}}
+        </select>
+        {{range .Opt.FIVariants}}<small class="field-hint" x-show="variant === '{{.}}'"{{if ne (str .) $vcur}} x-cloak{{end}}>{{t (printf "hint.fi.%s" .)}}</small>{{end}}
+      </div>
+      {{template "field" (dict "F" . "name" "multiple" "label" "field.fi_multiple" "type" "text" "hint" "hint.fi_multiple")}}
+      {{$aid := printf "%s-fi_amount" .DOMID}}{{$aerr := index .E "fi_amount"}}
+      <div class="field{{if $aerr}} has-error{{end}}" x-show="['lean', 'fat', 'barista'].includes(variant)">
+        <label for="{{$aid}}">
+          <span x-show="variant !== 'barista'">{{t "field.fi_budget"}}</span>
+          <span x-show="variant === 'barista'" x-cloak>{{t "field.fi_parttime"}}</span>
+        </label>
+        <div class="input-wrap has-unit">
+          <input id="{{$aid}}" name="fi_amount" type="text" inputmode="decimal" autocomplete="off" value="{{index .V "fi_amount"}}"
+            {{- if $aerr}} aria-invalid="true"{{end}} aria-describedby="{{$aid}}-msg">
+          <span class="unit" aria-hidden="true">€</span>
+        </div>
+        {{if $aerr}}<small class="field-error" id="{{$aid}}-msg">{{t $aerr}}</small>
+        {{else}}<small class="field-hint" id="{{$aid}}-msg">{{t "hint.fi_amount"}}</small>{{end}}
+      </div>
+      {{if .People}}
+      {{$cid := printf "%s-coast_person" .DOMID}}{{$ccur := index .V "coast_person"}}{{$cerr := index .E "coast_person"}}
+      <div class="field{{if $cerr}} has-error{{end}}" x-show="variant === 'coast'" x-cloak>
+        <label for="{{$cid}}">{{t "field.person"}}</label>
+        <select id="{{$cid}}" name="coast_person">
+          {{range .People}}<option value="{{.ID}}"{{if eq (str .ID) $ccur}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+        {{with $cerr}}<small class="field-error">{{t .}}</small>{{end}}
+      </div>
+      <div class="field-group" x-show="variant === 'coast'" x-cloak>
+        {{template "field" (dict "F" . "name" "coast_age" "label" "field.coast_age" "type" "int" "hint" "hint.coast_age")}}
+      </div>
+      {{else}}
+      <p class="field-hint" x-show="variant === 'coast'" x-cloak>{{t "milestones.need_person"}}</p>
+      {{end}}
+    </div>
+  </div>
+  {{template "form-actions" .}}
+</form>
+{{end}}
+
 {{define "accounts-form"}}
 {{template "form-open" .}}
   <div class="form-grid">
@@ -186,6 +283,17 @@
     {{template "f-owner" .}}
     {{template "field" (dict "F" . "name" "balance" "label" "field.balance" "type" "money")}}
     {{template "field" (dict "F" . "name" "contribution" "label" "field.contribution" "type" "money" "hint" "hint.contribution")}}
+    {{if .Milestones}}
+    {{$cid := printf "%s-contrib_end_ms" .DOMID}}{{$ccur := index .V "contrib_end_ms"}}
+    <div class="field">
+      <label for="{{$cid}}">{{t "field.contrib_until"}}</label>
+      <select id="{{$cid}}" name="contrib_end_ms">
+        <option value="">{{t "contrib.always"}}</option>
+        {{range .Milestones}}<option value="{{.ID}}"{{if eq (str .ID) $ccur}} selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+      <small class="field-hint">{{t "hint.contrib_until"}}</small>
+    </div>
+    {{end}}
     {{template "field" (dict "F" . "name" "return" "label" "field.return" "type" "percent" "placeholder" "placeholder.default" "hint" "hint.return")}}
   </div>
   {{template "form-actions" .}}
@@ -201,8 +309,8 @@
     {{template "field" (dict "F" . "name" "amount" "label" "field.amount_gross" "type" "money" "required" true "hint" "hint.amount_payment")}}
     {{template "f-select" (dict "F" . "name" "payments" "label" "field.payments" "options" .Opt.IncomePayments "prefix" "payments")}}
     {{template "field" (dict "F" . "name" "growth" "label" "field.growth" "type" "percent" "placeholder" "placeholder.inflation" "hint" "hint.growth")}}
-    {{template "field" (dict "F" . "name" "start" "label" "field.start" "type" "month" "hint" "hint.start")}}
-    {{template "field" (dict "F" . "name" "end" "label" "field.end" "type" "month" "hint" "hint.end")}}
+    {{template "f-boundary" (dict "F" . "ms" "start_ms" "month" "start" "label" "field.start" "hint" "hint.start")}}
+    {{template "f-boundary" (dict "F" . "ms" "end_ms" "month" "end" "label" "field.end" "hint" "hint.end")}}
   </div>
   {{template "form-actions" .}}
 </form>
@@ -216,8 +324,8 @@
     {{template "field" (dict "F" . "name" "amount" "label" "field.amount" "type" "money" "required" true "hint" "hint.amount_payment")}}
     {{template "f-select" (dict "F" . "name" "payments" "label" "field.frequency" "options" .Opt.ExpensePayments "prefix" "frequency")}}
     {{template "field" (dict "F" . "name" "growth" "label" "field.growth" "type" "percent" "placeholder" "placeholder.inflation" "hint" "hint.growth")}}
-    {{template "field" (dict "F" . "name" "start" "label" "field.start" "type" "month" "hint" "hint.start")}}
-    {{template "field" (dict "F" . "name" "end" "label" "field.end" "type" "month" "hint" "hint.end")}}
+    {{template "f-boundary" (dict "F" . "ms" "start_ms" "month" "start" "label" "field.start" "hint" "hint.start")}}
+    {{template "f-boundary" (dict "F" . "ms" "end_ms" "month" "end" "label" "field.end" "hint" "hint.end")}}
   </div>
   {{template "form-actions" .}}
 </form>

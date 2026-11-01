@@ -26,7 +26,7 @@ type resource struct {
 	save  func(ctx context.Context, plan, id int64, item any) error
 	del   func(ctx context.Context, plan, id int64) error
 	// total sums the section's headline amount (nil = no total shown).
-	total func(items []any, now domain.Month) domain.Cents
+	total func(items []any, now domain.Month, r domain.Resolved) domain.Cents
 }
 
 func itemID(item any) int64 {
@@ -41,6 +41,8 @@ func itemID(item any) int64 {
 		return v.ID
 	case domain.Debt:
 		return v.ID
+	case domain.Milestone:
+		return v.ID
 	}
 	return 0
 }
@@ -51,6 +53,8 @@ func itemOwner(item any) *int64 {
 		return v.OwnerID
 	case domain.Income:
 		return v.OwnerID
+	case domain.Milestone:
+		return v.PersonID
 	}
 	return nil
 }
@@ -99,6 +103,70 @@ func newResources(st *store.Store) map[string]*resource {
 			del: st.DeletePerson,
 		},
 		{
+			kind: "milestones",
+			list: func(ctx context.Context, plan int64) ([]any, error) { return toAny(st.ListMilestones(ctx, plan)) },
+			get: func(ctx context.Context, plan, id int64) (any, error) {
+				return st.GetMilestone(ctx, plan, id)
+			},
+			values: func(lang i18n.Lang, item any) map[string]string {
+				v := map[string]string{"kind": string(domain.MilestoneAge), "age": "65",
+					"multiple":   i18n.FormatInput(lang, domain.DefaultFIMultiple, 1),
+					"fi_variant": string(domain.FIStandard), "coast_age": "65"}
+				if item == nil {
+					return v
+				}
+				m := item.(domain.Milestone)
+				v["name"], v["kind"], v["date"] = m.Name, string(m.Kind), m.Date.String()
+				switch m.Kind {
+				case domain.MilestoneAge:
+					v["person"], v["age"] = inOwner(m.PersonID), strconv.Itoa(m.Age)
+				case domain.MilestoneFI:
+					v["multiple"] = i18n.FormatInput(lang, m.FIMultiple, 1)
+					v["fi_variant"] = string(m.FIVariant)
+					if m.FIVariant.UsesAmount() {
+						v["fi_amount"] = inMoney(lang, m.FIAmount)
+					}
+					if m.FIVariant == domain.FICoast {
+						v["coast_person"], v["coast_age"] = inOwner(m.PersonID), strconv.Itoa(m.Age)
+					}
+				}
+				return v
+			},
+			parse: func(p *formParser, now domain.Month) (any, domain.Errors) {
+				it := domain.Milestone{Name: p.str("name"), Kind: domain.MilestoneKind(p.str("kind"))}
+				// Only the fields of the chosen kind are read, so hidden fields never cause errors.
+				switch it.Kind {
+				case domain.MilestoneAge:
+					it.PersonID = p.owner("person")
+					it.Age = p.integer("age")
+				case domain.MilestoneDate:
+					it.Date = p.month("date")
+				case domain.MilestoneFI:
+					it.FIMultiple = p.decimal("multiple")
+					it.FIVariant = domain.FIVariant(p.str("fi_variant"))
+					if it.FIVariant == "" {
+						it.FIVariant = domain.FIStandard
+					}
+					if it.FIVariant.UsesAmount() {
+						it.FIAmount = p.money("fi_amount", true)
+					}
+					if it.FIVariant == domain.FICoast {
+						it.PersonID = p.owner("coast_person")
+						it.Age = p.integer("coast_age")
+					}
+				}
+				p.merge(it.Validate())
+				return it, p.errs
+			},
+			save: func(ctx context.Context, plan, id int64, item any) error {
+				it := item.(domain.Milestone)
+				it.ID, it.PlanID = id, plan
+				_, err := st.SaveMilestone(ctx, it)
+				return err
+			},
+			del: st.DeleteMilestone,
+		},
+		{
 			kind: "accounts",
 			list: func(ctx context.Context, plan int64) ([]any, error) { return toAny(st.ListAccounts(ctx, plan)) },
 			get: func(ctx context.Context, plan, id int64) (any, error) {
@@ -112,7 +180,7 @@ func newResources(st *store.Store) map[string]*resource {
 				return map[string]string{
 					"name": a.Name, "kind": string(a.Kind), "owner": inOwner(a.OwnerID),
 					"balance": inMoney(lang, a.Balance), "contribution": inMoney(lang, a.MonthlyContribution),
-					"return": inOptPercent(lang, a.AnnualReturn),
+					"return": inOptPercent(lang, a.AnnualReturn), "contrib_end_ms": inOwner(a.ContributionEndMS),
 				}
 			},
 			parse: func(p *formParser, now domain.Month) (any, domain.Errors) {
@@ -123,6 +191,7 @@ func newResources(st *store.Store) map[string]*resource {
 					Balance:             p.money("balance", false),
 					MonthlyContribution: p.money("contribution", false),
 					AnnualReturn:        p.optPercent("return"),
+					ContributionEndMS:   p.owner("contrib_end_ms"),
 				}
 				p.merge(it.Validate())
 				return it, p.errs
@@ -134,7 +203,7 @@ func newResources(st *store.Store) map[string]*resource {
 				return err
 			},
 			del: st.DeleteAccount,
-			total: func(items []any, _ domain.Month) domain.Cents {
+			total: func(items []any, _ domain.Month, _ domain.Resolved) domain.Cents {
 				var t domain.Cents
 				for _, it := range items {
 					t += it.(domain.Account).Balance
@@ -157,6 +226,7 @@ func newResources(st *store.Store) map[string]*resource {
 					"name": i.Name, "kind": string(i.Kind), "owner": inOwner(i.OwnerID),
 					"amount": inMoney(lang, i.Amount), "payments": strconv.Itoa(i.PaymentsPerYear),
 					"growth": inOptPercent(lang, i.AnnualGrowth), "start": i.Start.String(), "end": i.End.String(),
+					"start_ms": inOwner(i.StartMS), "end_ms": inOwner(i.EndMS),
 				}
 			},
 			parse: func(p *formParser, now domain.Month) (any, domain.Errors) {
@@ -167,9 +237,9 @@ func newResources(st *store.Store) map[string]*resource {
 					Amount:          p.money("amount", true),
 					PaymentsPerYear: p.integer("payments"),
 					AnnualGrowth:    p.optPercent("growth"),
-					Start:           p.month("start"),
-					End:             p.month("end"),
 				}
+				it.StartMS, it.Start = p.boundary("start_ms", "start")
+				it.EndMS, it.End = p.boundary("end_ms", "end")
 				p.merge(it.Validate())
 				return it, p.errs
 			},
@@ -180,10 +250,10 @@ func newResources(st *store.Store) map[string]*resource {
 				return err
 			},
 			del: st.DeleteIncome,
-			total: func(items []any, now domain.Month) domain.Cents {
+			total: func(items []any, now domain.Month, r domain.Resolved) domain.Cents {
 				var t domain.Cents
 				for _, it := range items {
-					if i := it.(domain.Income); domain.Active(i.Start, i.End, now) {
+					if i := it.(domain.Income); r.ActiveIn(i.Start, i.End, i.StartMS, i.EndMS, now) {
 						t += i.MonthlyAverage()
 					}
 				}
@@ -205,6 +275,7 @@ func newResources(st *store.Store) map[string]*resource {
 					"name": e.Name, "category": string(e.Category),
 					"amount": inMoney(lang, e.Amount), "payments": strconv.Itoa(e.PaymentsPerYear),
 					"growth": inOptPercent(lang, e.AnnualGrowth), "start": e.Start.String(), "end": e.End.String(),
+					"start_ms": inOwner(e.StartMS), "end_ms": inOwner(e.EndMS),
 				}
 			},
 			parse: func(p *formParser, now domain.Month) (any, domain.Errors) {
@@ -214,9 +285,9 @@ func newResources(st *store.Store) map[string]*resource {
 					Amount:          p.money("amount", true),
 					PaymentsPerYear: p.integer("payments"),
 					AnnualGrowth:    p.optPercent("growth"),
-					Start:           p.month("start"),
-					End:             p.month("end"),
 				}
+				it.StartMS, it.Start = p.boundary("start_ms", "start")
+				it.EndMS, it.End = p.boundary("end_ms", "end")
 				p.merge(it.Validate())
 				return it, p.errs
 			},
@@ -227,10 +298,10 @@ func newResources(st *store.Store) map[string]*resource {
 				return err
 			},
 			del: st.DeleteExpense,
-			total: func(items []any, now domain.Month) domain.Cents {
+			total: func(items []any, now domain.Month, r domain.Resolved) domain.Cents {
 				var t domain.Cents
 				for _, it := range items {
-					if e := it.(domain.Expense); domain.Active(e.Start, e.End, now) {
+					if e := it.(domain.Expense); r.ActiveIn(e.Start, e.End, e.StartMS, e.EndMS, now) {
 						t += e.MonthlyAverage()
 					}
 				}
@@ -271,7 +342,7 @@ func newResources(st *store.Store) map[string]*resource {
 				return err
 			},
 			del: st.DeleteDebt,
-			total: func(items []any, _ domain.Month) domain.Cents {
+			total: func(items []any, _ domain.Month, _ domain.Resolved) domain.Cents {
 				var t domain.Cents
 				for _, it := range items {
 					t += it.(domain.Debt).Balance

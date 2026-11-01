@@ -84,7 +84,7 @@
 
   // Projection: stacked account balances, debt below zero, net worth as a line.
   // Accounts cycle through the non-signal banknote colors (red is reserved for debt).
-  builders.projection = function (spec) {
+  builders.projection = function (spec, el) {
     const opt = baseOption();
     const fmt = moneyFormatter(false);
     const accountColors = [cssVar("--chart-1"), cssVar("--chart-2"), cssVar("--chart-3"), cssVar("--chart-5")];
@@ -140,14 +140,59 @@
       emphasis: { disabled: true },
       data: spec.netWorth.data,
     };
+    // Vertical marks: milestones (ink), debts paid off (green), money runs out (red).
+    // Labels sit in a band above the plot, alternating between two rows so
+    // neighbouring marks do not overlap.
+    const muted = cssVar("--app-muted");
+    const positive = cssVar("--app-positive");
+
+    // Merge marks that fall in the same period into one label.
+    const byIndex = new Map();
+    (spec.marks || []).forEach((m) => {
+      const g = byIndex.get(m.index) || { index: m.index, labels: [], kind: "debt" };
+      g.labels.push(m.label);
+      if (m.kind !== "debt") g.kind = "milestone";
+      byIndex.set(m.index, g);
+    });
     if (spec.failIndex >= 0) {
-      net.markLine = {
-        symbol: "none",
-        silent: true,
-        lineStyle: { color: negative, type: "dashed", width: 1.5 },
-        label: { formatter: spec.failLabel, color: negative, position: "insideEndTop" },
-        data: [{ xAxis: spec.categories[spec.failIndex] }],
+      const g = byIndex.get(spec.failIndex) || { index: spec.failIndex, labels: [], kind: "fail" };
+      g.labels.push(spec.failLabel);
+      g.kind = "fail";
+      byIndex.set(spec.failIndex, g);
+    }
+    const groups = [...byIndex.values()].sort((a, b) => a.index - b.index);
+
+    // Place each label in the first row where it does not collide with the
+    // previous label in that row (centred on its line, widths estimated from
+    // the font size).
+    const rowGap = 15, fontSize = 11;
+    const plotWidth = Math.max(200, (el ? el.clientWidth : 800) - 90);
+    const step = plotWidth / Math.max(1, spec.categories.length - 1);
+    const rowEnds = [];
+    const lines = groups.map((g) => {
+      const label = g.labels.join(", ");
+      const width = label.length * fontSize * 0.56 + 8;
+      const x = g.index * step;
+      let row = rowEnds.findIndex((end) => x - width / 2 > end);
+      if (row < 0) row = rowEnds.length;
+      rowEnds[row] = x + width / 2;
+      const color = g.kind === "fail" ? negative : g.kind === "debt" ? positive : muted;
+      return {
+        xAxis: spec.categories[g.index],
+        lineStyle: { color: color, type: g.kind === "debt" ? "dotted" : "dashed", width: g.kind === "fail" ? 1.5 : 1.25 },
+        label: {
+          formatter: label,
+          color: g.kind === "milestone" ? text : color,
+          fontWeight: g.kind === "fail" ? 600 : 400,
+          position: "end",
+          distance: 4 + row * rowGap,
+          fontSize: fontSize,
+        },
       };
+    });
+    if (lines.length) {
+      net.markLine = { symbol: "none", silent: true, animation: false, data: lines };
+      opt.grid.top = 52 + rowEnds.length * rowGap; // legend plus one band per label row
     }
     series.push(net);
     opt.series = series;
@@ -171,7 +216,7 @@
       return;
     }
     const chart = echarts.getInstanceByDom(el) || echarts.init(el, null, { renderer: "svg" });
-    chart.setOption(build(spec), true);
+    chart.setOption(build(spec, el), true);
   }
 
   function renderAll(root) {

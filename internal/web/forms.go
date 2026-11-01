@@ -110,6 +110,29 @@ func (p *formParser) owner(name string) *int64 {
 	return &id
 }
 
+// boundary parses a stream start or end: a milestone select (msField) that,
+// when set, replaces the fixed month (monthField).
+func (p *formParser) boundary(msField, monthField string) (*int64, domain.Month) {
+	if ms := p.owner(msField); ms != nil {
+		return ms, domain.Month{}
+	}
+	return nil, p.month(monthField)
+}
+
+// decimal parses a required plain number typed in the interface language.
+func (p *formParser) decimal(name string) float64 {
+	s := p.str(name)
+	if s == "" {
+		p.errs.Add(name, domain.ErrRequired)
+		return 0
+	}
+	f, err := i18n.ParseDecimal(p.lang, s)
+	if err != nil {
+		p.errs.Add(name, errNumber)
+	}
+	return f
+}
+
 // merge adds domain validation errors without overwriting parse errors.
 func (p *formParser) merge(errs domain.Errors) {
 	for k, v := range errs {

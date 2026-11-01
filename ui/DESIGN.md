@@ -86,6 +86,15 @@ Self-hosted variable font (`ui/static/fonts/`, weights 400–700, width 75–100
 - **Data tables** (`table.projection`): tabular figures, right-aligned amounts, sticky
   header, hairline rows, scrolling inside `.table-wrap` (never the page). Negative amounts
   are red; periods with a shortfall get a faint red row tint.
+- **Milestones (phase 3)** appear twice on the Plan: as a chronological timeline under the
+  verdict (`.timeline`; a 2px left bar in ink for milestones, green for debts paid off, red
+  for money running out, a pale bar for milestones never reached) and as vertical marks on
+  the chart (dashed ink / dotted green / dashed red). Mark labels sit in a band above the
+  plot: marks in the same period share one label, and each label takes the first row
+  where it does not collide with its neighbour (the band grows a row at a time).
+- **Fields that depend on a choice** (milestone kind, "Desde" a milestone or a date) are
+  shown and hidden with Alpine (`x-show`); the server only reads the fields of the chosen
+  option, so hidden values never cause errors.
 - **Settings that drive a result recalculate live** (`hx-trigger="change"`), with a quiet
   status line ("Guardado. El plan se ha recalculado.") instead of a save button.
 

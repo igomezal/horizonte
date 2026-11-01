@@ -44,6 +44,22 @@
     {{if .ShowPeak}}<p class="muted peak">{{t "plan.peak" (money .PeakValue) .PeakAge .PeakYear}}</p>{{end}}
   </div>
 
+  {{if .Timeline}}
+  <ol class="timeline" aria-label="{{t "plan.timeline"}}">
+    {{range .Timeline}}
+    <li class="tl-{{.Kind}}{{if not .Reached}} tl-unreached{{end}}">
+      <span class="tl-name">{{.Label}}</span>
+      {{if .Reached}}
+      <span class="tl-when">{{month .Month}}</span>
+      <span class="tl-when">{{if .Past}}{{t "plan.timeline.past"}}{{else}}{{t "plan.chart.age" (str .Age)}}{{end}}</span>
+      {{else}}
+      <span class="tl-when">{{t "plan.timeline.unreached"}}</span>
+      {{end}}
+    </li>
+    {{end}}
+  </ol>
+  {{end}}
+
   <div class="view-toggles">
     <div class="segmented" role="group" aria-label="{{t "plan.toggle.units"}}">
       {{template "plan-toggle" (dict "opts" (.Opts.WithReal true) "on" .Opts.Real "label" "plan.toggle.real")}}

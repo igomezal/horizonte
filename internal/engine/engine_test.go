@@ -239,3 +239,135 @@ func TestSurplusAccountChoice(t *testing.T) {
 		t.Errorf("property only = %d, want -1", got)
 	}
 }
+
+func TestMilestonesDriveStreams(t *testing.T) {
+	// Ana is 64 at the start; retirement at 65 = start + 12 months.
+	ana := domain.Person{ID: 1, Birth: start.AddMonths(-64 * 12), LifeExpectancy: 66}
+	retire := domain.Milestone{ID: 7, Name: "Jubilación", Kind: domain.MilestoneAge, PersonID: ptr(int64(1)), Age: 65}
+	in := Input{
+		People:     []domain.Person{ana},
+		Milestones: []domain.Milestone{retire},
+		Accounts: []domain.Account{
+			{ID: 1, Kind: domain.AccountCash},
+			{ID: 2, Kind: domain.AccountInvestment, MonthlyContribution: 10000, ContributionEndMS: ptr(int64(7))},
+		},
+		Incomes: []domain.Income{
+			{Amount: 200000, PaymentsPerYear: 12, EndMS: ptr(int64(7))},   // salary until retirement
+			{Amount: 150000, PaymentsPerYear: 12, StartMS: ptr(int64(7))}, // pension from retirement
+		},
+		Assumptions: flat(),
+		Start:       start,
+	}
+	res := Simulate(in)
+	before, at := res.Months[11], res.Months[12]
+	if before.Income != 2000 || at.Income != 1500 {
+		t.Errorf("income before/at retirement = %v / %v, want 2000 / 1500", before.Income, at.Income)
+	}
+	if before.Contributions != 100 || at.Contributions != 0 {
+		t.Errorf("contributions before/at retirement = %v / %v", before.Contributions, at.Contributions)
+	}
+	if len(res.Milestones) != 1 || res.Milestones[0].Month != start.AddMonths(12) {
+		t.Errorf("milestone hit = %+v", res.Milestones)
+	}
+}
+
+func TestFinancialIndependenceIsConditional(t *testing.T) {
+	fi := domain.Milestone{ID: 9, Name: "IF", Kind: domain.MilestoneFI, FIVariant: domain.FIStandard, FIMultiple: 25}
+	in := Input{
+		People:     []domain.Person{personFor(36)},
+		Milestones: []domain.Milestone{fi},
+		Accounts: []domain.Account{
+			{ID: 1, Kind: domain.AccountCash, Balance: 2900000},        // 29.000 €
+			{ID: 2, Kind: domain.AccountRealEstate, Balance: 90000000}, // property does not count
+		},
+		// Spending 100 €/month → FI at 25 × 1.200 € = 30.000 €. Saving 100 €/month gets there in 10 months.
+		Incomes:     []domain.Income{{Amount: 20000, PaymentsPerYear: 12, EndMS: ptr(int64(9))}},
+		Expenses:    []domain.Expense{{Amount: 10000, PaymentsPerYear: 12}},
+		Assumptions: flat(),
+		Start:       start,
+	}
+	res := Simulate(in)
+	hit := res.Milestones[0]
+	if !hit.Reached() {
+		t.Fatal("FI should be reached")
+	}
+	// Balance reaches 30.000 € at the end of month index 9; the milestone is the next month.
+	if hit.Month != start.AddMonths(10) {
+		t.Errorf("FI month = %v, want %v", hit.Month, start.AddMonths(10))
+	}
+	if res.Months[10].Income != 0 || res.Months[9].Income != 200 {
+		t.Errorf("salary should stop at FI: month9=%v month10=%v", res.Months[9].Income, res.Months[10].Income)
+	}
+
+	// Never reached: a stream waiting for it never starts.
+	in.Incomes = []domain.Income{{Amount: 100000, PaymentsPerYear: 12, StartMS: ptr(int64(9))}}
+	in.Accounts = in.Accounts[1:] // only property
+	res = Simulate(in)
+	if res.Milestones[0].Reached() {
+		t.Error("FI with no savings must not be reached")
+	}
+	for _, m := range res.Months {
+		if m.Income != 0 {
+			t.Fatalf("income waiting for an unreached milestone was paid in %v", m.Month)
+		}
+	}
+}
+
+func TestDebtPaidOffEvent(t *testing.T) {
+	in := Input{
+		People:      []domain.Person{personFor(12)},
+		Accounts:    []domain.Account{{ID: 1, Kind: domain.AccountCash, Balance: 1000000}},
+		Debts:       []domain.Debt{{Name: "Coche", Balance: 30000, MonthlyPayment: 10000}},
+		Assumptions: flat(),
+		Start:       start,
+	}
+	res := Simulate(in)
+	if len(res.PaidOff) != 1 || res.PaidOff[0].Month != start.AddMonths(2) {
+		t.Errorf("paid off = %+v, want third month", res.PaidOff)
+	}
+}
+
+func TestFIREVariants(t *testing.T) {
+	// 300.000 € saved, spending 24.000 €/year (2.000 €/month), no flows.
+	base := func(ms domain.Milestone) Result {
+		ms.ID, ms.Name, ms.Kind, ms.FIMultiple = 9, "FI", domain.MilestoneFI, 25
+		a := flat()
+		a.Returns[domain.AccountInvestment] = 0.05
+		return Simulate(Input{
+			People:      []domain.Person{{ID: 1, Birth: start.AddMonths(-40 * 12), LifeExpectancy: 41}},
+			Milestones:  []domain.Milestone{ms},
+			Accounts:    []domain.Account{{ID: 1, Kind: domain.AccountInvestment, Balance: 30000000}},
+			Incomes:     []domain.Income{{Amount: 200000, PaymentsPerYear: 12}},
+			Expenses:    []domain.Expense{{Amount: 200000, PaymentsPerYear: 12}},
+			Assumptions: a,
+			Start:       start,
+		})
+	}
+	cases := []struct {
+		name  string
+		ms    domain.Milestone
+		reach bool
+	}{
+		// Classic needs 25 × 24.000 = 600.000 €: not within a year at 5 %.
+		{"classic", domain.Milestone{FIVariant: domain.FIStandard}, false},
+		// Lean on 12.000 €/year needs 300.000 €: already there.
+		{"lean", domain.Milestone{FIVariant: domain.FILean, FIAmount: 1200000}, true},
+		// Fat on 60.000 €/year needs 1.500.000 €.
+		{"fat", domain.Milestone{FIVariant: domain.FIFat, FIAmount: 6000000}, false},
+		// Barista with 12.000 €/year part-time covers half: needs 25 × 12.000 = 300.000 €.
+		{"barista", domain.Milestone{FIVariant: domain.FIBarista, FIAmount: 1200000}, true},
+		// Coast to 65 (25 years at 5 %): 300.000 × 1,05^25 ≈ 1.016.000 € ≥ 600.000 €.
+		{"coast", domain.Milestone{FIVariant: domain.FICoast, PersonID: ptr(int64(1)), Age: 65}, true},
+		// Coast to 45 (5 years): 300.000 × 1,05^5 ≈ 383.000 € < 600.000 €.
+		{"coast-soon", domain.Milestone{FIVariant: domain.FICoast, PersonID: ptr(int64(1)), Age: 45}, false},
+	}
+	for _, c := range cases {
+		res := base(c.ms)
+		if got := res.Milestones[0].Reached(); got != c.reach {
+			t.Errorf("%s: reached = %v, want %v", c.name, got, c.reach)
+		}
+		if c.reach && res.Milestones[0].Month != start.AddMonths(1) {
+			t.Errorf("%s: month = %v, want the second month", c.name, res.Milestones[0].Month)
+		}
+	}
+}
