@@ -61,17 +61,21 @@
     "stacked-area": function (spec) {
       const opt = baseOption();
       const fmt = moneyFormatter(false);
+      if (spec.hideLegend) {
+        opt.legend.show = false;
+        opt.grid.top = 12;
+      }
       opt.xAxis.data = spec.categories;
       opt.tooltip.valueFormatter = (v) => fmt.format(v);
       opt.series = spec.series.map((s) => ({
         name: s.name,
         type: "line",
         stack: "total",
-        smooth: true,
+        smooth: 0.2,
         symbol: "none",
-        lineStyle: { width: 2 },
-        areaStyle: { opacity: 0.35 },
-        emphasis: { focus: "series" },
+        lineStyle: { width: 1.5 },
+        areaStyle: { opacity: 0.85 },
+        emphasis: { disabled: true },
         data: s.data,
       }));
       return opt;

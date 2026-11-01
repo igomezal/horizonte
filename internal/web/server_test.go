@@ -76,7 +76,7 @@ func TestHTMXPartialRendersContentOnly(t *testing.T) {
 	if strings.Contains(body, "<html") {
 		t.Error("htmx partial should not include the layout")
 	}
-	if !strings.Contains(body, "Bienvenido") {
+	if !strings.Contains(body, "Lo que hacen") {
 		t.Error("htmx partial missing page content")
 	}
 }

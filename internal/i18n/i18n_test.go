@@ -41,7 +41,7 @@ func TestTFallbacks(t *testing.T) {
 	if got := c.T(ES, "no.such.key"); got != "no.such.key" {
 		t.Errorf("missing key should return key, got %q", got)
 	}
-	if got := c.T(ES, "demo.desc", "1 €", "2 €", "5 %", 30); got == "" || got == "demo.desc" {
+	if got := c.T(ES, "demo.headline", "300 €", 30); got != "Lo que hacen 300 € al mes en 30 años" {
 		t.Errorf("formatted message not rendered: %q", got)
 	}
 }

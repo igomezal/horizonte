@@ -34,6 +34,8 @@ type stackedChart struct {
 	Type       string        `json:"type"`
 	Categories []string      `json:"categories"`
 	Series     []chartSeries `json:"series"`
+	// HideLegend is set when the page explains the colors itself (e.g. swatches in a sentence).
+	HideLegend bool `json:"hideLegend,omitempty"`
 }
 
 type chartSeries struct {
@@ -61,6 +63,7 @@ func compoundDemo(lang i18n.Lang, catalog *i18n.Catalog) demoData {
 	d.Final, d.Contributed = balance, contributed
 	d.Chart = stackedChart{
 		Type:       "stacked-area",
+		HideLegend: true,
 		Categories: cats,
 		Series: []chartSeries{
 			{Name: catalog.T(lang, "demo.contributed"), Data: contribSeries},

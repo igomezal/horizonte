@@ -1,44 +1,32 @@
 {{define "content"}}
 {{with .Data}}
-<section class="hero">
-  <h1>{{t "home.title"}}</h1>
-  <p class="lead">{{t "home.intro"}}</p>
-  <p class="muted">{{t "home.start"}}</p>
-</section>
-
-<article class="card">
-  <header>
-    <h2>{{t "demo.title"}}</h2>
-    <p class="muted">{{t "demo.desc" (money .Initial) (money .Monthly) (percent .Rate 0) .Years}}</p>
-  </header>
-  <div class="stats">
-    <div class="stat">
-      <span class="stat-label">{{t "demo.final"}}</span>
-      <span class="stat-value">{{money .Final}}</span>
-    </div>
-    <div class="stat">
-      <span class="stat-label">{{t "demo.contributed"}}</span>
-      <span class="stat-value">{{money .Contributed}}</span>
-    </div>
-    <div class="stat">
-      <span class="stat-label">{{t "demo.growth"}}</span>
-      <span class="stat-value positive">{{money (sub .Final .Contributed)}}</span>
-    </div>
-  </div>
-  <div class="chart" data-chart="demo-chart" role="img" aria-label="{{t "demo.title"}}"></div>
+<section class="lead-figure" aria-labelledby="demo-heading">
+  <h1 id="demo-heading">{{t "demo.headline" (money .Monthly) .Years}}</h1>
+  <span class="figure">{{money .Final}}</span>
+  <p class="breakdown">
+    <span class="key"><span class="swatch contributed" aria-hidden="true"></span>{{t "demo.contributed_amount" (money .Contributed)}}</span>
+    <span class="key"><span class="swatch growth" aria-hidden="true"></span>{{t "demo.growth_amount" (money (sub .Final .Contributed))}}</span>
+  </p>
+  <p class="assumptions muted">{{t "demo.assumptions" (money .Initial) (percent .Rate 0)}}</p>
+  <div class="chart" data-chart="demo-chart" role="img" aria-label="{{t "demo.chart_label"}}"></div>
   <script type="application/json" id="demo-chart">{{json .Chart}}</script>
-</article>
+</section>
 {{end}}
 
-<section>
-  <h2>{{t "home.roadmap"}}</h2>
-  <div class="feature-grid">
-    <article class="feature"><h3>{{t "nav.finances"}}</h3><p>{{t "home.feature.finances"}}</p></article>
-    <article class="feature"><h3>{{t "nav.plan"}}</h3><p>{{t "home.feature.plan"}}</p></article>
-    <article class="feature"><h3>{{t "nav.success"}}</h3><p>{{t "home.feature.success"}}</p></article>
-    <article class="feature"><h3>{{t "nav.cashflow"}}</h3><p>{{t "home.feature.cashflow"}}</p></article>
-    <article class="feature"><h3>{{t "home.milestones"}}</h3><p>{{t "home.feature.milestones"}}</p></article>
-    <article class="feature"><h3>{{t "home.taxes"}}</h3><p>{{t "home.feature.taxes"}}</p></article>
-  </div>
+<section class="section" aria-labelledby="about-heading">
+  <h2 id="about-heading">{{t "home.about"}}</h2>
+  <p class="prose">{{t "home.intro"}}</p>
+</section>
+
+<section class="section" aria-labelledby="roadmap-heading">
+  <h2 id="roadmap-heading">{{t "home.roadmap"}}</h2>
+  <dl class="ledger">
+    <div class="ledger-row"><dt>{{t "nav.finances"}}</dt><dd>{{t "home.feature.finances"}}</dd></div>
+    <div class="ledger-row"><dt>{{t "nav.plan"}}</dt><dd>{{t "home.feature.plan"}}</dd></div>
+    <div class="ledger-row"><dt>{{t "home.milestones"}}</dt><dd>{{t "home.feature.milestones"}}</dd></div>
+    <div class="ledger-row"><dt>{{t "nav.cashflow"}}</dt><dd>{{t "home.feature.cashflow"}}</dd></div>
+    <div class="ledger-row"><dt>{{t "nav.success"}}</dt><dd>{{t "home.feature.success"}}</dd></div>
+    <div class="ledger-row"><dt>{{t "home.taxes"}}</dt><dd>{{t "home.feature.taxes"}}</dd></div>
+  </dl>
 </section>
 {{end}}
