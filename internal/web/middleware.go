@@ -19,6 +19,10 @@ func (s *statusRecorder) WriteHeader(code int) {
 	s.ResponseWriter.WriteHeader(code)
 }
 
+// Unwrap lets ResponseController reach the underlying writer through logging,
+// so middleware like compression can still flush streaming responses.
+func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
 // logRequests logs method, path, status and duration of every request. It
 // writes to the access logger (stdout only): Sentry already records every
 // request as a trace, so sending these lines too would only add volume.

@@ -3,6 +3,7 @@ package web
 import (
 	"compress/gzip"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -164,7 +165,8 @@ func TestCompressStatusAndFlush(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	req.Header.Set("Accept-Encoding", "br")
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logRequests(logger, h).ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnprocessableEntity || !rec.Flushed {
 		t.Fatalf("status %d, flushed %v", rec.Code, rec.Flushed)
 	}
