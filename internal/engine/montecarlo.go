@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"math"
 	"math/rand/v2"
 	"runtime"
@@ -89,10 +90,17 @@ type runSummary struct {
 // σ/√12, where μ is the account's expected return and σ its volatility, so the
 // median scenario follows the deterministic projection. Inflation stays fixed.
 func MonteCarlo(in Input, vol map[domain.AccountKind]float64, s MCSettings) MCResult {
+	res, _ := MonteCarloContext(context.Background(), in, vol, s)
+	return res
+}
+
+// MonteCarloContext is MonteCarlo that stops early when ctx is done (the
+// person left the page), returning ctx's error and an empty result.
+func MonteCarloContext(ctx context.Context, in Input, vol map[domain.AccountKind]float64, s MCSettings) (MCResult, error) {
 	in.Detail = false
 	end := in.EndMonth()
 	if end.IsZero() || end.Before(in.Start) || s.Runs <= 0 {
-		return MCResult{}
+		return MCResult{}, nil
 	}
 	n := in.Start.MonthsUntil(end) + 1
 
@@ -178,11 +186,19 @@ func MonteCarlo(in Input, vol map[domain.AccountKind]float64, s MCSettings) MCRe
 			}
 		})
 	}
+feed:
 	for r := range s.Runs {
-		next <- r
+		select {
+		case next <- r:
+		case <-ctx.Done():
+			break feed
+		}
 	}
 	close(next)
 	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return MCResult{}, err
+	}
 
 	out := MCResult{Runs: s.Runs, Years: years, YearEnd: yearEnd}
 	for _, r := range runs {
@@ -238,7 +254,7 @@ func MonteCarlo(in Input, vol map[domain.AccountKind]float64, s MCSettings) MCRe
 	})
 	bad := runs[order[int(0.1*float64(s.Runs-1))]]
 	out.Bad = MCBadCase{Failed: bad.failed, FailMonth: bad.failMonth, EndReal: bad.endReal}
-	return out
+	return out, nil
 }
 
 // percentiles returns the 10/25/50/75/90th percentiles of xs (xs is reordered).

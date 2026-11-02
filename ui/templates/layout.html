@@ -24,6 +24,7 @@
   <script src="/static/vendor/alpine.min.js" defer></script>
 </head>
 <body hx-boost="true" x-data="{ navOpen: false }">
+  <div class="nav-progress" aria-hidden="true"></div>
   <div class="shell">
     {{template "sidebar" .}}
     <div class="main">

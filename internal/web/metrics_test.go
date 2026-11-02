@@ -125,8 +125,8 @@ func TestMetricSimulationDuration(t *testing.T) {
 	metrics := captureMetrics(t)
 	s, _ := newFinanceServer(t)
 	seedMC(t, s)
-	for _, path := range []string{"/success", "/backtest"} {
-		if rec, _ := do(s, httptest.NewRequest("GET", path, nil)); rec.Code != http.StatusOK {
+	for _, path := range []string{"/success/results", "/backtest/summary", "/success/results"} {
+		if rec, _ := do(s, htmxReq("GET", path, nil)); rec.Code != http.StatusOK {
 			t.Fatalf("%s: %d", path, rec.Code)
 		}
 	}
@@ -143,5 +143,16 @@ func TestMetricSimulationDuration(t *testing.T) {
 	}
 	if bt, ok := kinds["rolling_backtest"]; !ok || bt.attrs["horizonte.simulation.source"] != "backtest" {
 		t.Errorf("backtest metric = %+v, %v", bt, ok)
+	}
+
+	// The second Monte Carlo request came from the cache.
+	cache := map[string]int{}
+	for _, m := range metrics() {
+		if m.name == "horizonte.simulation.cache" && m.attrs["horizonte.simulation.kind"] == "monte_carlo" {
+			cache[m.attrs["horizonte.simulation.cache"]]++
+		}
+	}
+	if cache["miss"] != 1 || cache["hit"] != 1 {
+		t.Errorf("monte carlo cache counts = %v, want 1 miss and 1 hit", cache)
 	}
 }

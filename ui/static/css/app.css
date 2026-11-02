@@ -1519,3 +1519,154 @@ table.fire-table tr.fire-plan td {
     align-items: start;
   }
 }
+
+/* Loading states for the simulation pages (partials/sim.html). */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes reveal {
+  to { opacity: 1; max-height: 6em; }
+}
+@keyframes nav-progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+.spinner {
+  display: inline-block;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 3px solid var(--app-rule);
+  border-top-color: var(--app-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.spinner-sm {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-width: 2px;
+  vertical-align: -0.1em;
+}
+
+.sim-pending {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1.5rem 1.25rem;
+  border: 1px dashed var(--app-rule);
+  border-radius: 0.5rem;
+  background: var(--papel-raised);
+}
+.lead-figure.verdict:has(> .sim-pending) {
+  display: block;
+}
+.sim-pending-text p {
+  margin: 0;
+}
+.sim-pending-title {
+  font-weight: 600;
+}
+/* "Still calculating" appears only if it takes more than a few seconds. */
+.sim-pending-slow {
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  animation: reveal 0.4s ease 6s forwards;
+  margin-top: 0.35rem !important;
+}
+.sim-pending-error {
+  display: none;
+  color: var(--app-negative);
+}
+[data-state="error"] .spinner,
+[data-state="error"] .sim-pending-slow,
+[data-state="error"] .sim-inline-text {
+  display: none;
+}
+[data-state="error"] .sim-pending-error {
+  display: inline;
+}
+[data-state="error"] .sim-pending-text .sim-pending-error {
+  display: block;
+}
+[data-state="error"] .sim-pending-title {
+  font-weight: 400;
+  color: var(--app-muted);
+}
+
+.sim-inline {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  white-space: nowrap;
+}
+td.scen-odds-pending {
+  text-align: center;
+}
+
+/* Results being recalculated: dim them and show a label on top. */
+.sim-region {
+  position: relative;
+}
+.sim-busy {
+  display: none;
+}
+.sim-region.htmx-request > .sim-busy {
+  display: flex;
+  position: absolute;
+  z-index: 2;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--app-rule);
+  border-radius: 999px;
+  background: var(--papel-raised);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  font-weight: 600;
+}
+.sim-region.htmx-request > :not(.sim-busy) {
+  opacity: 0.45;
+  transition: opacity 0.2s ease 0.15s;
+  pointer-events: none;
+}
+
+/* Thin bar at the top while a navigation or request takes a while
+   (app.js toggles html.is-loading after a short delay). */
+.nav-progress {
+  position: fixed;
+  z-index: 100;
+  inset: 0 0 auto 0;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.nav-progress::before {
+  content: "";
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--app-accent);
+  animation: nav-progress 1.2s ease-in-out infinite;
+}
+html.is-loading .nav-progress {
+  opacity: 1;
+}
+html.is-loading body {
+  cursor: progress;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .nav-progress::before {
+    animation-duration: 3s;
+  }
+  .sim-pending-slow {
+    animation-duration: 0s;
+  }
+}

@@ -8,16 +8,7 @@
 <p class="empty">{{t "plan.no_people"}}</p>
 <p><a href="/finances">{{t "plan.go_finances"}}</a></p>
 {{else}}
-<section class="lead-figure verdict" aria-label="{{t "backtest.title"}}">
-  <p class="lead">{{t "bt.verdict" .FirstYear .LastYear .EndAge}}</p>
-  <span class="figure">{{percent .Rate 0}}</span>
-  <p class="breakdown"><span>
-    {{if .Worst.Failed}}{{t "bt.worst_fail" .Worst.Year .WorstFailAge}}{{else}}{{t "bt.worst_ok" .Worst.Year (money .Worst.EndReal)}}{{end}}
-  </span></p>
-  <p class="muted">{{t "bt.starts" .Successes .Starts}}
-    {{if .PartialStarts}}<br>{{t "bt.partial_starts" .PartialFirst .PartialLast .PartialSuccesses .PartialStarts}}{{end}}</p>
-  {{if .ShowHistNote}}<p class="callout">{{t "bt.history_beats_plan" (percent .HistReal 1) (percent .PlanReal 1)}}</p>{{end}}
-</section>
+{{template "bt-summary" .Rolling}}
 
 <section class="section" aria-labelledby="h-crises">
   <h2 id="h-crises">{{t "bt.crises_title"}}</h2>
@@ -38,7 +29,8 @@
         <small class="muted">{{t "bt.lowest" (money .MinReal)}}</small>
       </div>
       <div class="entry-actions">
-        <button type="button" class="link-btn" hx-get="/backtest/scenario?crisis={{.Key}}" hx-target="#bt-scenario" hx-swap="outerHTML">{{t "bt.see"}}</button>
+        <button type="button" class="link-btn" hx-get="/backtest/scenario?crisis={{.Key}}" hx-target="#bt-scenario" hx-swap="outerHTML"
+                hx-indicator="#bt-scenario" hx-disabled-elt="this">{{t "bt.see"}}</button>
       </div>
     </div>
     {{end}}
@@ -50,13 +42,7 @@
 <section class="section" aria-labelledby="h-heat">
   <h2 id="h-heat">{{t "bt.heat_title"}}</h2>
   <p class="section-desc muted">{{t "bt.heat_desc"}}</p>
-  <div class="chart chart-heat" data-chart="bt-heat" role="img" aria-label="{{t "bt.heat_title"}}"></div>
-  <script type="application/json" id="bt-heat">{{json .Heat}}</script>
-  <p class="heat-legend muted">
-    <span><span class="dot dot-income" aria-hidden="true"></span>{{t "bt.legend_ok"}}</span>
-    <span><span class="dot dot-debt" aria-hidden="true"></span>{{t "bt.legend_fail"}}</span>
-    <span><span class="dot dot-partial" aria-hidden="true"></span>{{t "bt.legend_partial"}}</span>
-  </p>
+  {{template "bt-heat" .Rolling}}
 </section>
 
 <p class="note muted">{{t "bt.method" (month .DataFrom) (month .DataTo)}}</p>
@@ -64,9 +50,51 @@
 {{end}}
 {{end}}
 
+{{/* Headline of the rolling backtest (every start year). Pending: the page
+     was sent before the calculation finished; this loads it. */}}
+{{define "bt-summary"}}
+{{if .Pending}}
+<section id="bt-summary" class="lead-figure verdict" aria-label="{{t "backtest.title"}}" data-sim
+         hx-get="/backtest/summary" hx-trigger="load, retry" hx-swap="outerHTML">
+  {{template "sim-pending" (t "bt.pending" .DataFrom.Year .DataTo.Year)}}
+</section>
+{{else}}
+<section id="bt-summary" class="lead-figure verdict" aria-label="{{t "backtest.title"}}">
+  <p class="lead">{{t "bt.verdict" .FirstYear .LastYear .EndAge}}</p>
+  <span class="figure">{{percent .Rate 0}}</span>
+  <p class="breakdown"><span>
+    {{if .Worst.Failed}}{{t "bt.worst_fail" .Worst.Year .WorstFailAge}}{{else}}{{t "bt.worst_ok" .Worst.Year (money .Worst.EndReal)}}{{end}}
+  </span></p>
+  <p class="muted">{{t "bt.starts" .Successes .Starts}}
+    {{if .PartialStarts}}<br>{{t "bt.partial_starts" .PartialFirst .PartialLast .PartialSuccesses .PartialStarts}}{{end}}</p>
+  {{if .ShowHistNote}}<p class="callout">{{t "bt.history_beats_plan" (percent .HistReal 1) (percent .PlanReal 1)}}</p>{{end}}
+</section>
+{{end}}
+{{end}}
+
+{{/* Heat map of every start year (same calculation as bt-summary). */}}
+{{define "bt-heat"}}
+{{if .Pending}}
+<div id="bt-heat-wrap" data-sim hx-get="/backtest/heat" hx-trigger="load, retry" hx-swap="outerHTML">
+  {{template "sim-pending" (t "bt.heat_pending")}}
+</div>
+{{else}}
+<div id="bt-heat-wrap">
+  <div class="chart chart-heat" data-chart="bt-heat" role="img" aria-label="{{t "bt.heat_title"}}"></div>
+  <script type="application/json" id="bt-heat">{{json .Heat}}</script>
+  <p class="heat-legend muted">
+    <span><span class="dot dot-income" aria-hidden="true"></span>{{t "bt.legend_ok"}}</span>
+    <span><span class="dot dot-debt" aria-hidden="true"></span>{{t "bt.legend_fail"}}</span>
+    <span><span class="dot dot-partial" aria-hidden="true"></span>{{t "bt.legend_partial"}}</span>
+  </p>
+</div>
+{{end}}
+{{end}}
+
 {{/* One replayed scenario (a crisis or a start year). */}}
 {{define "bt-scenario"}}
-<section id="bt-scenario" class="section bt-scenario" aria-live="polite" aria-labelledby="h-scenario">
+<section id="bt-scenario" class="section bt-scenario sim-region" aria-live="polite" aria-labelledby="h-scenario">
+  {{template "sim-busy" (t "sim.updating")}}
   <h2 id="h-scenario">{{t "bt.scenario_title" .Title (month .Start)}}</h2>
   <p class="lead-line">
     {{if .Failed}}<strong class="negative">{{t "bt.sc_fail" .FailAge (month .FailMonth)}}</strong>

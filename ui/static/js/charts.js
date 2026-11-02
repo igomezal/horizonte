@@ -696,10 +696,12 @@
       // Clicking a start year replays it in the scenario section.
       chart.on("click", (p) => {
         if (!p.data || !p.data.cell) return;
-        htmx.ajax("GET", spec.url + p.data.cell.year, { target: "#bt-scenario", swap: "outerHTML" }).then(() => {
-          const el = document.getElementById("bt-scenario");
-          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
+        // Scroll first, so the "updating" overlay is visible while it loads
+        // (the scenario section is the request's source, so it gets htmx's
+        // .htmx-request class).
+        const el = document.getElementById("bt-scenario");
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        htmx.ajax("GET", spec.url + p.data.cell.year, { source: "#bt-scenario", target: "#bt-scenario", swap: "outerHTML" });
       });
       return;
     }

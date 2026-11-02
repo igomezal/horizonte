@@ -60,6 +60,9 @@ type mcMilestoneRow struct {
 
 type successView struct {
 	HasPeople bool
+	// Pending: the simulation isn't cached yet, so the page shows a
+	// placeholder that loads the results from /success/results.
+	Pending   bool
 	Seed      uint64
 	Runs      int
 	Rate      float64
@@ -92,15 +95,37 @@ type successPage struct {
 	Form mcSettingsForm
 }
 
-func (s *Server) buildSuccessView(ctx context.Context, lang i18n.Lang, in engine.Input, seed uint64) successView {
-	v := successView{HasPeople: len(in.People) > 0, Seed: seed}
-	if !v.HasPeople {
-		return v
+func mcSettings(in engine.Input, seed uint64) engine.MCSettings {
+	return engine.MCSettings{Runs: in.Assumptions.MCRuns, Seed: seed, Correlation: mcCorrelation}
+}
+
+// pendingSuccessView is the placeholder shown while the simulation runs, or
+// the full view when its result is already cached.
+func (s *Server) pendingSuccessView(lang i18n.Lang, in engine.Input, seed uint64) successView {
+	if len(in.People) > 0 {
+		if mc, ok := cachedSim[engine.MCResult](s.sims, mcKey(in, mcSettings(in, seed))); ok {
+			return s.successViewFrom(lang, in, seed, mc)
+		}
 	}
-	mc := monteCarlo(ctx, "success", in, engine.MCSettings{
-		Runs: in.Assumptions.MCRuns, Seed: seed, Correlation: mcCorrelation,
-	})
-	if mc.Runs == 0 {
+	return successView{HasPeople: len(in.People) > 0, Pending: true, Seed: seed, Runs: in.Assumptions.MCRuns}
+}
+
+// buildSuccessView runs the simulation (or takes it from the cache). The
+// error is ctx's when the person left before it finished.
+func (s *Server) buildSuccessView(ctx context.Context, lang i18n.Lang, in engine.Input, seed uint64) (successView, error) {
+	if len(in.People) == 0 {
+		return successView{Seed: seed}, nil
+	}
+	mc, err := s.monteCarlo(ctx, "success", in, mcSettings(in, seed))
+	if err != nil {
+		return successView{}, err
+	}
+	return s.successViewFrom(lang, in, seed, mc), nil
+}
+
+func (s *Server) successViewFrom(lang i18n.Lang, in engine.Input, seed uint64, mc engine.MCResult) successView {
+	v := successView{HasPeople: len(in.People) > 0, Seed: seed}
+	if !v.HasPeople || mc.Runs == 0 {
 		return v
 	}
 	main := in.People[0]
@@ -187,7 +212,7 @@ func (s *Server) handleSuccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := successPage{
-		View: s.buildSuccessView(r.Context(), fc.lang, in, parseSeed(r)),
+		View: s.pendingSuccessView(fc.lang, in, parseSeed(r)),
 		Form: newMCForm(s.mcSettingsValues(fc.lang, in.Assumptions), domain.Errors{}),
 	}
 	s.page(w, r, http.StatusOK, "success", "success.title", page)
@@ -205,7 +230,10 @@ func (s *Server) handleSuccessResults(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	v := s.buildSuccessView(r.Context(), fc.lang, in, parseSeed(r))
+	v, err := s.buildSuccessView(r.Context(), fc.lang, in, parseSeed(r))
+	if err != nil {
+		return // the person left; nobody is waiting for the response
+	}
 	if err := s.render.render(w, r, http.StatusOK, "success", "mc-results", v); err != nil {
 		s.serverError(w, r, err)
 	}

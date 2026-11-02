@@ -24,17 +24,30 @@ func TestSuccessPage(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
+	// The page comes at once, with a placeholder that loads the simulation.
 	for _, want := range []string{
-		"Probabilidad de éxito", "tu dinero llega hasta los 90 años", "escenarios simulados",
-		`"type":"fan"`, "te queda dinero cada año", "Mejor caso", ">FIRE<", "Volatilidad",
-		`name="vol_investment"`, `value="16"`, `hx-get="/success/results?seed=1"`, `aria-current="page"`,
+		"Probabilidad de éxito", "escenarios de mercado para tu plan", "Volatilidad", `name="vol_investment"`, `value="16"`,
+		`hx-get="/success/results?seed=1" hx-trigger="load, retry, success-changed from:body"`, `aria-current="page"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("success page missing %q", want)
 		}
 	}
-	if !regexp.MustCompile(`<span class="figure">\d+\x{00a0}%</span>`).MatchString(body) {
+	_, results := do(s, htmxReq("GET", "/success/results?seed=1", nil))
+	for _, want := range []string{
+		"tu dinero llega hasta los 90 años", "escenarios simulados", `"type":"fan"`, "te queda dinero cada año", "Mejor caso", ">FIRE<",
+	} {
+		if !strings.Contains(results, want) {
+			t.Errorf("success results missing %q", want)
+		}
+	}
+	if !regexp.MustCompile(`<span class="figure">\d+\x{00a0}%</span>`).MatchString(results) {
 		t.Error("hero figure should be a percentage")
+	}
+	// Now cached: the page includes the results directly.
+	_, body = do(s, httptest.NewRequest("GET", "/success", nil))
+	if strings.Contains(body, "escenarios de mercado para tu plan") || !strings.Contains(body, "escenarios simulados") {
+		t.Error("with the result cached, the page should include it directly")
 	}
 
 	// Same seed, same result; reseeding changes the seed in the refresh URL.

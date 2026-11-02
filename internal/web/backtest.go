@@ -78,7 +78,21 @@ type btScenario struct {
 }
 
 type btView struct {
-	HasPeople         bool
+	HasPeople        bool
+	DataFrom, DataTo domain.Month
+	EndAge           int
+	Crises           []btCrisis
+	Scenario         btScenario
+	// Rolling holds what comes from replaying every start year: the slow
+	// part, loaded separately (/backtest/summary, /backtest/heat) unless the
+	// result is already cached.
+	Rolling btRolling
+}
+
+// btRolling is the result of replaying the plan from every start year.
+type btRolling struct {
+	// Pending: not computed yet; the page shows placeholders that load it.
+	Pending           bool
 	DataFrom, DataTo  domain.Month
 	Starts, Successes int // fully historical starts
 	Rate              float64
@@ -90,9 +104,7 @@ type btView struct {
 	EndAge                          int
 	Worst                           engine.RollingStart
 	WorstFailAge                    int
-	Crises                          []btCrisis
 	Heat                            heatChart
-	Scenario                        btScenario
 	// HistReal and PlanReal compare the historical real stock return with the
 	// plan's expected real return for investments (shown when history is
 	// clearly better, which explains why backtests beat the plan).
@@ -160,17 +172,38 @@ func (s *Server) crisisLabel(lang i18n.Lang, key string) string {
 	return s.catalog.T(lang, "bt.crisis."+key)
 }
 
-func (s *Server) buildBacktestView(ctx context.Context, lang i18n.Lang, in engine.Input, hs *history.Series, sel func() (domain.Month, string)) btView {
-	v := btView{HasPeople: len(in.People) > 0, DataFrom: hs.Start, DataTo: hs.End()}
-	if !v.HasPeople {
+func endAge(in engine.Input) int {
+	if end := in.EndMonth(); !end.IsZero() && len(in.People) > 0 {
+		return in.People[0].AgeAt(end)
+	}
+	return 0
+}
+
+// pendingRolling is the placeholder for the rolling backtest, or its result
+// when already cached.
+func (s *Server) pendingRolling(lang i18n.Lang, in engine.Input, hs *history.Series) btRolling {
+	if all, ok := cachedSim[[]engine.RollingStart](s.sims, rollingKey(in)); ok {
+		return s.rollingFrom(lang, in, hs, all)
+	}
+	return btRolling{Pending: true, DataFrom: hs.Start, DataTo: hs.End(), EndAge: endAge(in)}
+}
+
+// buildRolling replays the plan from every start year (or takes it from the
+// cache). The error is ctx's when the person left before it finished.
+func (s *Server) buildRolling(ctx context.Context, lang i18n.Lang, in engine.Input, hs *history.Series) (btRolling, error) {
+	all, err := s.rolling(ctx, "backtest", in, hs)
+	if err != nil {
+		return btRolling{}, err
+	}
+	return s.rollingFrom(lang, in, hs, all), nil
+}
+
+func (s *Server) rollingFrom(lang i18n.Lang, in engine.Input, hs *history.Series, all []engine.RollingStart) btRolling {
+	v := btRolling{DataFrom: hs.Start, DataTo: hs.End(), EndAge: endAge(in)}
+	if len(in.People) == 0 {
 		return v
 	}
 	main := in.People[0]
-	if end := in.EndMonth(); !end.IsZero() {
-		v.EndAge = main.AgeAt(end)
-	}
-
-	all := rolling(ctx, "backtest", in, hs)
 	var starts []engine.RollingStart // fully historical: the headline result
 	for _, st := range all {
 		if st.Partial {
@@ -230,6 +263,24 @@ func (s *Server) buildBacktestView(ctx context.Context, lang i18n.Lang, in engin
 		}
 	}
 
+	a := in.Assumptions
+	v.HistReal = hs.RealStockReturn()
+	v.PlanReal = (1+a.Returns[domain.AccountInvestment])/(1+a.Inflation) - 1
+	v.ShowHistNote = v.HistReal-v.PlanReal > 0.01
+	return v
+}
+
+// buildBacktestView builds the quick part of the page: the crises and the
+// replayed scenario. The rolling backtest is a placeholder unless cached.
+func (s *Server) buildBacktestView(lang i18n.Lang, in engine.Input, hs *history.Series, sel func() (domain.Month, string)) btView {
+	v := btView{HasPeople: len(in.People) > 0, DataFrom: hs.Start, DataTo: hs.End()}
+	if !v.HasPeople {
+		return v
+	}
+	main := in.People[0]
+	v.EndAge = endAge(in)
+	v.Rolling = s.pendingRolling(lang, in, hs)
+
 	for _, c := range engine.Crises {
 		res, _ := engine.Backtest(in, hs, c.Start)
 		row := btCrisis{Key: c.Key, Label: s.crisisLabel(lang, c.Key), Desc: s.catalog.T(lang, "bt.crisis_desc."+c.Key), Start: c.Start}
@@ -247,11 +298,6 @@ func (s *Server) buildBacktestView(ctx context.Context, lang i18n.Lang, in engin
 		}
 		v.Crises = append(v.Crises, row)
 	}
-
-	a := in.Assumptions
-	v.HistReal = hs.RealStockReturn()
-	v.PlanReal = (1+a.Returns[domain.AccountInvestment])/(1+a.Inflation) - 1
-	v.ShowHistNote = v.HistReal-v.PlanReal > 0.01
 
 	from, title := sel()
 	v.Scenario = s.buildScenario(lang, in, hs, from, title)
@@ -293,8 +339,42 @@ func (s *Server) handleBacktest(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	v := s.buildBacktestView(r.Context(), fc.lang, in, hs, s.scenarioFromQuery(r, fc.lang, hs))
+	v := s.buildBacktestView(fc.lang, in, hs, s.scenarioFromQuery(r, fc.lang, hs))
 	s.page(w, r, http.StatusOK, "backtest", "backtest.title", v)
+}
+
+// GET /backtest/summary and /backtest/heat: the rolling backtest's headline
+// and heat map, loaded by the page's placeholders. Both share one
+// calculation (simRunner), so loading them together costs one simulation.
+func (s *Server) handleBacktestRolling(block string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		fc, err := s.finCtx(r)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		in, err := s.loadInput(r.Context(), fc)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		if len(in.People) == 0 {
+			s.handleNotFound(w, r)
+			return
+		}
+		hs, err := history.Load()
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		v, err := s.buildRolling(r.Context(), fc.lang, in, hs)
+		if err != nil {
+			return // the person left; nobody is waiting for the response
+		}
+		if err := s.render.render(w, r, http.StatusOK, "backtest", block, v); err != nil {
+			s.serverError(w, r, err)
+		}
+	}
 }
 
 // GET /backtest/scenario?crisis=key | ?year=YYYY

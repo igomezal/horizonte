@@ -29,39 +29,86 @@ import (
 // meter returns a Sentry meter tied to the request's trace when ctx has one.
 func meter(ctx context.Context) sentry.Meter { return sentry.NewMeter(ctx) }
 
-// monteCarlo runs the simulation and records how long it took. Its cost grows
-// with runs × months and depends on the CPU, so these attributes are what
-// tell a slow machine apart from a plan with a very long horizon.
-func monteCarlo(ctx context.Context, source string, in engine.Input, set engine.MCSettings) engine.MCResult {
-	start := time.Now()
-	mc := engine.MonteCarlo(in, in.Assumptions.Volatility, set)
-	meter(ctx).Distribution("horizonte.simulation.duration", msSince(start),
-		sentry.WithUnit(sentry.UnitMillisecond),
-		sentry.WithAttributes(
-			attribute.String("horizonte.simulation.kind", "monte_carlo"),
-			attribute.String("horizonte.simulation.source", source),
-			attribute.Int("horizonte.simulation.runs", mc.Runs),
-			attribute.Int("horizonte.simulation.months", horizonMonths(in)),
-			attribute.Int("horizonte.simulation.workers", runtime.GOMAXPROCS(0)),
-		))
-	return mc
+// mcKey and rollingKey identify a simulation by everything it depends on, for
+// the simulation cache (see simrunner.go). The history series is fixed, so
+// the rolling backtest only depends on the plan.
+func mcKey(in engine.Input, set engine.MCSettings) string {
+	return simKey("mc", in, in.Assumptions.Volatility, set)
 }
 
-// rolling runs the historical backtest from every start year and records how
-// long it took (one simulation per start year).
-func rolling(ctx context.Context, source string, in engine.Input, hs *history.Series) []engine.RollingStart {
-	start := time.Now()
-	starts := engine.Rolling(in, hs)
-	meter(ctx).Distribution("horizonte.simulation.duration", msSince(start),
-		sentry.WithUnit(sentry.UnitMillisecond),
-		sentry.WithAttributes(
-			attribute.String("horizonte.simulation.kind", "rolling_backtest"),
-			attribute.String("horizonte.simulation.source", source),
-			attribute.Int("horizonte.simulation.runs", len(starts)),
-			attribute.Int("horizonte.simulation.months", horizonMonths(in)),
-			attribute.Int("horizonte.simulation.workers", runtime.GOMAXPROCS(0)),
-		))
-	return starts
+func rollingKey(in engine.Input) string { return simKey("rolling", in) }
+
+// countSimCache counts simulation requests by whether the result was already
+// cached, which shows how much work the cache saves.
+func countSimCache(ctx context.Context, kind, source string, hit bool) {
+	outcome := "miss"
+	if hit {
+		outcome = "hit"
+	}
+	meter(ctx).Count("horizonte.simulation.cache", 1, sentry.WithAttributes(
+		attribute.String("horizonte.simulation.kind", kind),
+		attribute.String("horizonte.simulation.source", source),
+		attribute.String("horizonte.simulation.cache", outcome),
+	))
+}
+
+// monteCarlo runs the simulation through the simulation runner (cached,
+// shared and limited) and records how long it took when it actually ran. Its
+// cost grows with runs × months and depends on the CPU, so these attributes
+// are what tell a slow machine apart from a plan with a very long horizon.
+// The error is ctx's when the person left before it finished.
+func (s *Server) monteCarlo(ctx context.Context, source string, in engine.Input, set engine.MCSettings) (engine.MCResult, error) {
+	key := mcKey(in, set)
+	if mc, ok := cachedSim[engine.MCResult](s.sims, key); ok {
+		countSimCache(ctx, "monte_carlo", source, true)
+		return mc, nil
+	}
+	countSimCache(ctx, "monte_carlo", source, false)
+	return runSim(ctx, s.sims, key, func(ctx context.Context) (engine.MCResult, error) {
+		start := time.Now()
+		mc, err := engine.MonteCarloContext(ctx, in, in.Assumptions.Volatility, set)
+		if err != nil {
+			return mc, err
+		}
+		meter(ctx).Distribution("horizonte.simulation.duration", msSince(start),
+			sentry.WithUnit(sentry.UnitMillisecond),
+			sentry.WithAttributes(
+				attribute.String("horizonte.simulation.kind", "monte_carlo"),
+				attribute.String("horizonte.simulation.source", source),
+				attribute.Int("horizonte.simulation.runs", mc.Runs),
+				attribute.Int("horizonte.simulation.months", horizonMonths(in)),
+				attribute.Int("horizonte.simulation.workers", runtime.GOMAXPROCS(0)),
+			))
+		return mc, nil
+	})
+}
+
+// rolling runs the historical backtest from every start year (one simulation
+// per start year), the same way as monteCarlo.
+func (s *Server) rolling(ctx context.Context, source string, in engine.Input, hs *history.Series) ([]engine.RollingStart, error) {
+	key := rollingKey(in)
+	if starts, ok := cachedSim[[]engine.RollingStart](s.sims, key); ok {
+		countSimCache(ctx, "rolling_backtest", source, true)
+		return starts, nil
+	}
+	countSimCache(ctx, "rolling_backtest", source, false)
+	return runSim(ctx, s.sims, key, func(ctx context.Context) ([]engine.RollingStart, error) {
+		start := time.Now()
+		starts, err := engine.RollingContext(ctx, in, hs)
+		if err != nil {
+			return nil, err
+		}
+		meter(ctx).Distribution("horizonte.simulation.duration", msSince(start),
+			sentry.WithUnit(sentry.UnitMillisecond),
+			sentry.WithAttributes(
+				attribute.String("horizonte.simulation.kind", "rolling_backtest"),
+				attribute.String("horizonte.simulation.source", source),
+				attribute.Int("horizonte.simulation.runs", len(starts)),
+				attribute.Int("horizonte.simulation.months", horizonMonths(in)),
+				attribute.Int("horizonte.simulation.workers", runtime.GOMAXPROCS(0)),
+			))
+		return starts, nil
+	})
 }
 
 func horizonMonths(in engine.Input) int {

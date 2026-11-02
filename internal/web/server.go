@@ -47,7 +47,16 @@ type Server struct {
 	resources map[string]*resource
 	now       func() time.Time
 	handler   http.Handler
+	sims      *simRunner
 }
+
+// Simulation runner limits (see simrunner.go): each simulation already uses
+// every CPU core, so two at a time keeps the CPU busy without making everyone
+// wait for everyone; the cache holds the latest few hundred results.
+const (
+	simConcurrency = 2
+	simCacheSize   = 256
+)
 
 // New builds the server and its routes.
 func New(cfg Config) (*Server, error) {
@@ -66,6 +75,7 @@ func New(cfg Config) (*Server, error) {
 		render:    r,
 		resources: newResources(cfg.Store),
 		now:       cfg.Now,
+		sims:      newSimRunner(simConcurrency, simCacheSize),
 	}
 	if s.now == nil {
 		s.now = time.Now
@@ -116,9 +126,12 @@ func New(cfg Config) (*Server, error) {
 
 	mux.HandleFunc("GET /backtest", s.handleBacktest)
 	mux.HandleFunc("GET /backtest/scenario", s.handleBacktestScenario)
+	mux.HandleFunc("GET /backtest/summary", s.handleBacktestRolling("bt-summary"))
+	mux.HandleFunc("GET /backtest/heat", s.handleBacktestRolling("bt-heat"))
 
 	mux.HandleFunc("GET /scenarios", s.handleScenarios)
 	mux.HandleFunc("POST /scenarios", s.handleCreateScenario)
+	mux.HandleFunc("GET /scenarios/{id}/odds", s.handlePlanOdds)
 	mux.HandleFunc("POST /scenarios/{id}/activate", s.handleActivatePlan)
 	mux.HandleFunc("POST /scenarios/{id}/rename", s.handleRenamePlan)
 	mux.HandleFunc("POST /scenarios/{id}/delete", s.handleDeletePlan)

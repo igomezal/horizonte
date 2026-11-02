@@ -14,15 +14,42 @@ func TestBacktestPage(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
+	// The quick part comes with the page; every start year loads afterwards.
 	for _, want := range []string{
-		"Prueba histórica", "Empezando en cualquier año entre 1871 y", "años de inicio salen bien",
-		"Gran Depresión", "Estanflación de los 70", "Burbuja puntocom", "Crisis financiera", "COVID",
-		"Desde sept 1929", `"type":"start-years"`, `"type":"scenario"`,
-		"Crisis financiera, desde oct 2007", "Datos de Robert Shiller", "ene 1871", "más prudente que la historia", "60 % bolsa", "De 1971 a 2023, con datos parciales", `"year":2023,"partial":true`, `"year":1970,"col"`, `aria-current="page"`,
+		"Prueba histórica", "Gran Depresión", "Estanflación de los 70", "Burbuja puntocom", "Crisis financiera", "COVID",
+		"Desde sept 1929", `"type":"scenario"`, "Crisis financiera, desde oct 2007", "Datos de Robert Shiller", "ene 1871",
+		`aria-current="page"`, `hx-get="/backtest/summary"`, `hx-get="/backtest/heat"`,
+		"Reproduciendo tu plan desde cada año entre 1871 y", "60 % bolsa",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("backtest page missing %q", want)
 		}
+	}
+
+	_, summary := do(s, htmxReq("GET", "/backtest/summary", nil))
+	_, heat := do(s, htmxReq("GET", "/backtest/heat", nil))
+	for _, want := range []string{
+		"Empezando en cualquier año entre 1871 y", "años de inicio salen bien", "más prudente que la historia",
+		"De 1971 a 2023, con datos parciales",
+	} {
+		if !strings.Contains(summary, want) {
+			t.Errorf("backtest summary missing %q", want)
+		}
+	}
+	for _, want := range []string{`"type":"start-years"`, `"year":2023,"partial":true`, `"year":1970,"col"`} {
+		if !strings.Contains(heat, want) {
+			t.Errorf("backtest heat map missing %q", want)
+		}
+	}
+	if strings.Contains(summary, "<html") || strings.Contains(heat, "<html") {
+		t.Error("summary and heat map should be fragments")
+	}
+
+	// Now cached: the page comes complete, without placeholders.
+	_, body = do(s, httptest.NewRequest("GET", "/backtest", nil))
+	if strings.Contains(body, `hx-get="/backtest/summary"`) || !strings.Contains(body, "años de inicio salen bien") ||
+		!strings.Contains(body, `"type":"start-years"`) {
+		t.Error("with the result cached, the page should include it directly")
 	}
 }
 

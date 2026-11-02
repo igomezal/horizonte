@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"math"
 	"runtime"
 	"sync"
@@ -103,9 +104,16 @@ type RollingStart struct {
 // whose whole plan fits inside the data are fully historical; later starts are
 // Partial: once the data ends they continue with the expected returns.
 func Rolling(in Input, s *history.Series) []RollingStart {
+	starts, _ := RollingContext(context.Background(), in, s)
+	return starts
+}
+
+// RollingContext is Rolling that stops early when ctx is done, returning
+// ctx's error and no starts.
+func RollingContext(ctx context.Context, in Input, s *history.Series) ([]RollingStart, error) {
 	end := in.EndMonth()
 	if end.IsZero() || end.Before(in.Start) {
-		return nil
+		return nil, nil
 	}
 	var years []int
 	for y := s.Start.Year; y <= s.End().Year; y++ {
@@ -127,12 +135,20 @@ func Rolling(in Input, s *history.Series) []RollingStart {
 			}
 		})
 	}
+feed:
 	for k := range years {
-		next <- k
+		select {
+		case next <- k:
+		case <-ctx.Done():
+			break feed
+		}
 	}
 	close(next)
 	wg.Wait()
-	return starts
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return starts, nil
 }
 
 func summarizeStart(year int, res Result) RollingStart {

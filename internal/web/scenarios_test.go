@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -111,5 +112,31 @@ func TestCreateScenarioValidation(t *testing.T) {
 	rec = postForm(s, "/scenarios", url.Values{"name": {"X"}, "source": {"99"}, "preset": {"exact"}})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("unknown source plan: %d", rec.Code)
+	}
+}
+
+func TestScenarioOddsLoadPerPlan(t *testing.T) {
+	s, st := newFinanceServer(t)
+	seedMC(t, s)
+	id, _ := st.CurrentPlan(t.Context(), "x")
+
+	_, body := do(s, httptest.NewRequest("GET", "/scenarios", nil))
+	placeholder := `hx-get="/scenarios/` + strconv.FormatInt(id, 10) + `/odds"`
+	if !strings.Contains(body, placeholder) || !strings.Contains(body, "Calculando…") {
+		t.Fatalf("comparison should load each plan's odds afterwards; missing %s", placeholder)
+	}
+
+	rec, cells := do(s, htmxReq("GET", "/scenarios/"+strconv.FormatInt(id, 10)+"/odds", nil))
+	if rec.Code != http.StatusOK || strings.Count(cells, "<td") != 2 || !strings.Contains(cells, " %") {
+		t.Fatalf("odds = %d %q", rec.Code, cells)
+	}
+
+	// Cached now: the page shows the figures directly.
+	_, body = do(s, httptest.NewRequest("GET", "/scenarios", nil))
+	if strings.Contains(body, placeholder) {
+		t.Error("with the odds cached, the page should include them directly")
+	}
+	if rec, _ := do(s, htmxReq("GET", "/scenarios/999/odds", nil)); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown plan = %d", rec.Code)
 	}
 }

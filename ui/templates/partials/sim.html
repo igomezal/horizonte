@@ -1,0 +1,33 @@
+{{/* Shown while a simulation runs on the server. The argument is the
+     already translated message ("Simulating 1,000 market scenarios…").
+     The "still working" line appears after a few seconds (CSS), and the
+     error line when the request fails (app.js sets data-state="error" on
+     the closest [data-sim] element; its button triggers "retry"). */}}
+{{define "sim-pending"}}
+<div class="sim-pending" role="status">
+  <span class="spinner" aria-hidden="true"></span>
+  <div class="sim-pending-text">
+    <p class="sim-pending-title">{{.}}</p>
+    <p class="sim-pending-slow muted">{{t "sim.slow"}}</p>
+    <p class="sim-pending-error">{{t "sim.error"}} <button type="button" class="link-btn" data-sim-retry>{{t "sim.retry"}}</button></p>
+  </div>
+</div>
+{{end}}
+
+{{/* Compact form, for a table cell. */}}
+{{define "sim-pending-inline"}}
+<span class="sim-inline" role="status">
+  <span class="spinner spinner-sm" aria-hidden="true"></span>
+  <span class="sim-inline-text muted">{{.}}</span>
+  <span class="sim-pending-error">{{t "sim.error_short"}} <button type="button" class="link-btn" data-sim-retry>{{t "sim.retry"}}</button></span>
+</span>
+{{end}}
+
+{{/* Overlay on results that are being recalculated (visible while the
+     enclosing .sim-region has htmx's .htmx-request class). */}}
+{{define "sim-busy"}}
+<div class="sim-busy" aria-hidden="true">
+  <span class="spinner" aria-hidden="true"></span>
+  <span>{{.}}</span>
+</div>
+{{end}}

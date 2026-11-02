@@ -18,10 +18,19 @@
 {{end}}
 {{end}}
 
-{{/* Results: refreshed when the settings change, or with new scenarios. */}}
+{{/* Results: refreshed when the settings change, or with new scenarios.
+     Pending: the simulation isn't cached yet, so the page is sent at once
+     with this placeholder, which loads the results as soon as it appears. */}}
 {{define "mc-results"}}
-<section id="mc-results" class="mc-results" aria-label="{{t "success.title"}}"
-         hx-get="/success/results?seed={{.Seed}}" hx-trigger="success-changed from:body" hx-target="this" hx-swap="outerHTML">
+{{if .Pending}}
+<section id="mc-results" class="mc-results" aria-label="{{t "success.title"}}" data-sim
+         hx-get="/success/results?seed={{.Seed}}" hx-trigger="load, retry, success-changed from:body" hx-target="this" hx-swap="outerHTML">
+  {{template "sim-pending" (t "mc.pending" (number (float .Runs) 0))}}
+</section>
+{{else}}
+<section id="mc-results" class="mc-results sim-region" aria-label="{{t "success.title"}}" data-sim
+         hx-get="/success/results?seed={{.Seed}}" hx-trigger="retry, success-changed from:body" hx-target="this" hx-swap="outerHTML">
+  {{template "sim-busy" (t "sim.updating")}}
   <div class="lead-figure verdict">
     <p class="lead">{{t "mc.verdict" .EndAge}}</p>
     <span class="figure">{{percent .Rate 0}}</span>
@@ -30,7 +39,8 @@
     </span></p>
     <p class="muted mc-meta">
       {{t "mc.runs" (number (float .Runs) 0)}}
-      <button type="button" class="link-btn" hx-get="/success/results?reseed=1" hx-target="#mc-results" hx-swap="outerHTML">{{t "mc.reseed"}}</button>
+      <button type="button" class="link-btn" hx-get="/success/results?reseed=1" hx-target="#mc-results" hx-swap="outerHTML"
+              hx-indicator="#mc-results" hx-disabled-elt="this">{{t "mc.reseed"}}</button>
     </p>
   </div>
 
@@ -82,6 +92,7 @@
   {{end}}
   <p class="note muted">{{t "mc.method"}}</p>
 </section>
+{{end}}
 {{end}}
 
 {{define "mc-settings"}}

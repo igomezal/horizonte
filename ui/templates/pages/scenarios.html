@@ -57,8 +57,7 @@
           {{else}}
           <td>{{if .Failed}}<span class="negative">{{t "scenarios.fails" .FailAge}}</span>{{else}}{{t "scenarios.lasts" .EndAge}}{{end}}</td>
           <td class="num">{{money .EndReal}}</td>
-          <td class="num">{{percent .MCRate 0}}</td>
-          <td class="num">{{if .HasHist}}{{percent .HistRate 0}}{{else}}—{{end}}</td>
+          {{template "scen-odds" .Odds}}
           <td>{{if .HasFI}}{{if .FIReached}}{{t "scenarios.fi_at" .FIAge}}{{else}}<span class="muted">{{t "scenarios.fi_never"}}</span>{{end}}{{else}}<span class="muted">—</span>{{end}}</td>
           {{end}}
         </tr>
@@ -127,5 +126,19 @@
   </form>
 </section>
 </div>
+{{end}}
+{{end}}
+
+{{/* A row's Monte Carlo and historical success rates. Pending: they are
+     calculated after the page is shown, one request per plan. */}}
+{{define "scen-odds"}}
+{{if .Pending}}
+<td colspan="2" class="scen-odds-pending" data-sim
+    hx-get="/scenarios/{{.ID}}/odds" hx-trigger="load, retry" hx-swap="outerHTML">
+  {{template "sim-pending-inline" (t "scenarios.pending")}}
+</td>
+{{else}}
+<td class="num">{{percent .MCRate 0}}</td>
+<td class="num">{{if .HasHist}}{{percent .HistRate 0}}{{else}}—{{end}}</td>
 {{end}}
 {{end}}

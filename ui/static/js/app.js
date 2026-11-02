@@ -129,6 +129,56 @@
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
+  // Loading feedback. A thin bar at the top of the page appears when a
+  // navigation or update takes more than a moment, so a slow server never
+  // looks like a click that did nothing. Requests from simulation
+  // placeholders ([data-sim]) are left out: they show their own spinner.
+  const root = document.documentElement;
+  let inFlight = 0;
+  let showTimer = null;
+  const tracked = new WeakSet();
+  document.addEventListener("htmx:beforeRequest", (e) => {
+    const elt = e.detail.elt;
+    if (elt && elt.closest && elt.closest("[data-sim]")) return;
+    if (e.detail.xhr) tracked.add(e.detail.xhr);
+    inFlight++;
+    if (!showTimer && !root.classList.contains("is-loading")) {
+      showTimer = setTimeout(() => {
+        showTimer = null;
+        if (inFlight > 0) root.classList.add("is-loading");
+      }, 300);
+    }
+  });
+  document.addEventListener("htmx:afterRequest", (e) => {
+    if (!e.detail.xhr || !tracked.has(e.detail.xhr)) return;
+    tracked.delete(e.detail.xhr);
+    inFlight = Math.max(0, inFlight - 1);
+    if (inFlight === 0) {
+      clearTimeout(showTimer);
+      showTimer = null;
+      root.classList.remove("is-loading");
+    }
+  });
+
+  // A simulation placeholder whose request failed shows an error and a
+  // "try again" button instead of spinning forever.
+  function simFailed(e) {
+    const elt = e.detail.elt;
+    const sim = elt && elt.closest && elt.closest("[data-sim]");
+    if (sim) sim.dataset.state = "error";
+  }
+  document.addEventListener("htmx:responseError", simFailed);
+  document.addEventListener("htmx:sendError", simFailed);
+  document.addEventListener("htmx:timeout", simFailed);
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-sim-retry]");
+    if (!btn || !window.htmx) return;
+    const sim = btn.closest("[data-sim]");
+    if (!sim) return;
+    delete sim.dataset.state;
+    htmx.trigger(sim, "retry");
+  });
+
   // Theme toggle (event delegation, so it keeps working after htmx body swaps).
   document.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-theme-toggle]");

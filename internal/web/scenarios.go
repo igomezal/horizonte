@@ -39,15 +39,23 @@ type scenarioRow struct {
 	FailAge   int
 	EndAge    int
 	EndReal   float64
-	MCRate    float64
-	HistRate  float64
-	HasHist   bool
+	Odds      planOdds
 	FIName    string
 	FIAge     int
 	FIReached bool
 	HasFI     bool
 
 	years map[int]float64 // net worth in today's euros by year, for the chart
+}
+
+// planOdds is the slow part of a comparison row (a Monte Carlo and a
+// rolling backtest), loaded per row from /scenarios/{id}/odds unless cached.
+type planOdds struct {
+	ID       int64
+	Pending  bool
+	MCRate   float64
+	HistRate float64
+	HasHist  bool
 }
 
 type scenarioChartSpec struct {
@@ -74,7 +82,56 @@ type scenariosPage struct {
 	ImportError string
 }
 
-func (s *Server) summarizePlan(ctx context.Context, lang i18n.Lang, now domain.Month, p store.Plan, hs *history.Series) (scenarioRow, error) {
+func compareSettings() engine.MCSettings {
+	return engine.MCSettings{Runs: mcRunsCompare, Seed: defaultSeed, Correlation: mcCorrelation}
+}
+
+// cachedOdds returns a plan's odds if both simulations are cached, or a
+// pending placeholder.
+func (s *Server) cachedOdds(id int64, in engine.Input) planOdds {
+	mc, ok1 := cachedSim[engine.MCResult](s.sims, mcKey(in, compareSettings()))
+	starts, ok2 := cachedSim[[]engine.RollingStart](s.sims, rollingKey(in))
+	if !ok1 || !ok2 {
+		return planOdds{ID: id, Pending: true}
+	}
+	return oddsFrom(id, mc, starts)
+}
+
+// buildOdds runs (or takes from the cache) a plan's Monte Carlo and rolling
+// backtest. The error is ctx's when the person left before it finished.
+func (s *Server) buildOdds(ctx context.Context, id int64, in engine.Input, hs *history.Series) (planOdds, error) {
+	mc, err := s.monteCarlo(ctx, "scenarios", in, compareSettings())
+	if err != nil {
+		return planOdds{}, err
+	}
+	starts, err := s.rolling(ctx, "scenarios", in, hs)
+	if err != nil {
+		return planOdds{}, err
+	}
+	return oddsFrom(id, mc, starts), nil
+}
+
+func oddsFrom(id int64, mc engine.MCResult, starts []engine.RollingStart) planOdds {
+	o := planOdds{ID: id, MCRate: mc.SuccessRate()}
+	full, ok := 0, 0
+	for _, st := range starts {
+		if st.Partial {
+			continue
+		}
+		full++
+		if !st.Failed {
+			ok++
+		}
+	}
+	if full > 0 {
+		o.HasHist, o.HistRate = true, float64(ok)/float64(full)
+	}
+	return o
+}
+
+// summarizePlan builds a comparison row from the plan's deterministic
+// projection (quick); the odds come from cache or load afterwards.
+func (s *Server) summarizePlan(ctx context.Context, lang i18n.Lang, now domain.Month, p store.Plan) (scenarioRow, error) {
 	row := scenarioRow{ID: p.ID, Name: p.Name, years: map[int]float64{}}
 	in, err := s.loadInput(ctx, finCtx{plan: p.ID, lang: lang, now: now})
 	if err != nil {
@@ -107,25 +164,7 @@ func (s *Server) summarizePlan(ctx context.Context, lang i18n.Lang, now domain.M
 			break
 		}
 	}
-
-	mc := monteCarlo(ctx, "scenarios", in, engine.MCSettings{
-		Runs: mcRunsCompare, Seed: defaultSeed, Correlation: mcCorrelation,
-	})
-	row.MCRate = mc.SuccessRate()
-
-	full, ok := 0, 0
-	for _, st := range rolling(ctx, "scenarios", in, hs) {
-		if st.Partial {
-			continue
-		}
-		full++
-		if !st.Failed {
-			ok++
-		}
-	}
-	if full > 0 {
-		row.HasHist, row.HistRate = true, float64(ok)/float64(full)
-	}
+	row.Odds = s.cachedOdds(p.ID, in)
 	return row, nil
 }
 
@@ -148,17 +187,13 @@ func (s *Server) buildScenariosPage(ctx context.Context, lang i18n.Lang, now dom
 	page.Form["source"] = strconv.FormatInt(cur, 10)
 	page.Form["preset"] = "exact"
 
-	hs, err := history.Load()
-	if err != nil {
-		return page, err
-	}
 	names := map[int64]string{}
 	for _, p := range plans {
 		names[p.ID] = p.Name
 	}
 	yearSet := map[int]bool{}
 	for _, p := range plans {
-		row, err := s.summarizePlan(ctx, lang, now, p, hs)
+		row, err := s.summarizePlan(ctx, lang, now, p)
 		if err != nil {
 			return page, err
 		}
@@ -193,6 +228,51 @@ func (s *Server) buildScenariosPage(ctx context.Context, lang i18n.Lang, now dom
 		page.Chart.Series = append(page.Chart.Series, ser)
 	}
 	return page, nil
+}
+
+// GET /scenarios/{id}/odds: a comparison row's Monte Carlo and historical
+// success rates (two table cells), loaded by the row's placeholder.
+func (s *Server) handlePlanOdds(w http.ResponseWriter, r *http.Request) {
+	id, ok := planIDFromPath(r)
+	if !ok {
+		s.handleNotFound(w, r)
+		return
+	}
+	fc, err := s.finCtx(r)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if _, err := s.store.GetPlan(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			s.handleNotFound(w, r)
+			return
+		}
+		s.serverError(w, r, err)
+		return
+	}
+	fc.plan = id
+	in, err := s.loadInput(r.Context(), fc)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if len(in.People) == 0 {
+		s.handleNotFound(w, r)
+		return
+	}
+	hs, err := history.Load()
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	odds, err := s.buildOdds(r.Context(), id, in, hs)
+	if err != nil {
+		return // the person left; nobody is waiting for the response
+	}
+	if err := s.render.render(w, r, http.StatusOK, "scenarios", "scen-odds", odds); err != nil {
+		s.serverError(w, r, err)
+	}
 }
 
 // applyPreset shifts a copied plan's assumptions.
