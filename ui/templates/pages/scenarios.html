@@ -138,7 +138,7 @@
   {{template "sim-pending-inline" (t "scenarios.pending")}}
 </td>
 {{else}}
-<td class="num">{{percent .MCRate 0}}</td>
-<td class="num">{{if .HasHist}}{{percent .HistRate 0}}{{else}}—{{end}}</td>
+<td class="num sim-fade">{{percent .MCRate 0}}</td>
+<td class="num sim-fade">{{if .HasHist}}{{percent .HistRate 0}}{{else}}—{{end}}</td>
 {{end}}
 {{end}}

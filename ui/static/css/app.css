@@ -1527,6 +1527,14 @@ table.fire-table tr.fire-plan td {
 @keyframes reveal {
   to { opacity: 1; max-height: 6em; }
 }
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translate(-50%, -6px) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
 @keyframes nav-progress {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(250%); }
@@ -1537,7 +1545,7 @@ table.fire-table tr.fire-plan td {
   flex: none;
   width: 1.5rem;
   height: 1.5rem;
-  border: 3px solid var(--app-rule);
+  border: 3px solid color-mix(in srgb, var(--app-accent) 22%, transparent);
   border-top-color: var(--app-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -1548,13 +1556,19 @@ table.fire-table tr.fire-plan td {
   border-width: 2px;
   vertical-align: -0.1em;
 }
+.sim-elapsed {
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
 
+/* Placeholder while the first result is calculated. */
 .sim-pending {
   display: flex;
   gap: 1rem;
   align-items: flex-start;
-  padding: 1.5rem 1.25rem;
-  border: 1px dashed var(--app-rule);
+  padding: 1.25rem 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 35%, var(--app-rule));
+  border-left: 4px solid var(--app-accent);
   border-radius: 0.5rem;
   background: var(--papel-raised);
 }
@@ -1581,7 +1595,10 @@ table.fire-table tr.fire-plan td {
 }
 [data-state="error"] .spinner,
 [data-state="error"] .sim-pending-slow,
-[data-state="error"] .sim-inline-text {
+[data-state="error"] .sim-inline-text,
+[data-state="error"] .sim-elapsed,
+[data-state="error"] .skel-group,
+[data-state="error"] .skel {
   display: none;
 }
 [data-state="error"] .sim-pending-error {
@@ -1595,6 +1612,44 @@ table.fire-table tr.fire-plan td {
   color: var(--app-muted);
 }
 
+/* Skeletons: where the results will appear, so nothing jumps. */
+.skel {
+  border-radius: 0.4rem;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--app-rule) 55%, transparent) 25%,
+    color-mix(in srgb, var(--app-rule) 100%, transparent) 50%,
+    color-mix(in srgb, var(--app-rule) 55%, transparent) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+.skel-group {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.75rem 0 0;
+}
+.skel-text {
+  width: min(32rem, 90%);
+  height: 0.9rem;
+}
+.skel-short {
+  width: min(20rem, 60%);
+}
+.skel-figure {
+  width: 9rem;
+  height: 4.25rem;
+}
+.skel-chart {
+  width: 100%;
+  height: clamp(320px, 24vw, 420px);
+  margin-top: 2rem;
+}
+.skel-chart.chart-tall {
+  height: clamp(440px, 32vw, 600px);
+}
+.skel-chart.chart-heat {
+  margin-top: 0.5rem;
+}
+
 .sim-inline {
   display: inline-flex;
   gap: 0.4rem;
@@ -1605,33 +1660,99 @@ td.scen-odds-pending {
   text-align: center;
 }
 
-/* Results being recalculated: dim them and show a label on top. */
+/* Results being recalculated: a card that stays in view while the old
+   results fade back, so it is obvious something is happening. */
 .sim-region {
   position: relative;
 }
-.sim-busy {
-  display: none;
+.sim-busy,
+.sim-busy[hidden] {
+  display: none !important;
 }
-.sim-region.htmx-request > .sim-busy {
-  display: flex;
+.sim-region.htmx-request > .sim-busy,
+.sim-region[data-state="error"] > .sim-busy {
+  display: block !important;
+  position: sticky;
+  z-index: 5;
+  top: 40vh;
+  height: 0;
+  overflow: visible;
+}
+.sim-busy-card {
   position: absolute;
-  z-index: 2;
-  top: 0.75rem;
   left: 50%;
-  transform: translateX(-50%);
-  gap: 0.6rem;
+  display: flex;
+  gap: 0.75rem;
   align-items: center;
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--app-rule);
-  border-radius: 999px;
+  width: max-content;
+  max-width: min(32rem, 90vw);
+  padding: 0.9rem 1.4rem;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 45%, var(--app-rule));
+  border-radius: 0.75rem;
   background: var(--papel-raised);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.12);
   font-weight: 600;
+  transform: translate(-50%, 0);
+  animation: pop-in 0.18s ease-out;
+}
+.sim-region[data-state="error"] > .sim-busy .sim-busy-card {
+  font-weight: 400;
+}
+.sim-region > :not(.sim-busy) {
+  transition: opacity 0.25s ease, filter 0.25s ease;
 }
 .sim-region.htmx-request > :not(.sim-busy) {
-  opacity: 0.45;
-  transition: opacity 0.2s ease 0.15s;
+  opacity: 0.3;
+  filter: saturate(0.4) blur(1.5px);
   pointer-events: none;
+}
+
+/* New results fade in instead of popping. htmx adds .htmx-added while it
+   settles the swapped content. */
+.sim-fade {
+  transition: opacity 0.35s ease;
+}
+.sim-fade.htmx-added {
+  opacity: 0;
+}
+
+/* Buttons and links waiting for their request: a spinner, and buttons
+   with a busy label switch to it. */
+.when-busy[hidden] {
+  display: none;
+}
+.is-busy .when-idle,
+.sim-region.htmx-request .when-idle {
+  display: none;
+}
+.is-busy .when-busy,
+.sim-region.htmx-request .when-busy {
+  display: inline !important; /* over Pico's [hidden] rule */
+}
+button.is-busy,
+.sim-region.htmx-request button:has(.when-busy) {
+  cursor: progress;
+  opacity: 1 !important;
+}
+button.is-busy::before,
+.sim-region.htmx-request button:has(.when-busy)::before,
+a.is-busy::after {
+  content: "";
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: -0.1em;
+}
+button.is-busy::before,
+.sim-region.htmx-request button:has(.when-busy)::before {
+  margin-right: 0.4em;
+}
+a.is-busy::after {
+  margin-left: 0.5em;
 }
 
 /* Thin bar at the top while a navigation or request takes a while
@@ -1652,6 +1773,7 @@ td.scen-odds-pending {
   width: 40%;
   height: 100%;
   background: var(--app-accent);
+  box-shadow: 0 0 8px var(--app-accent);
   animation: nav-progress 1.2s ease-in-out infinite;
 }
 html.is-loading .nav-progress {
@@ -1663,10 +1785,18 @@ html.is-loading body {
 
 @media (prefers-reduced-motion: reduce) {
   .spinner,
-  .nav-progress::before {
+  .nav-progress::before,
+  button.is-busy::before,
+  a.is-busy::after {
     animation-duration: 3s;
+  }
+  .skel {
+    animation: none;
   }
   .sim-pending-slow {
     animation-duration: 0s;
+  }
+  .sim-busy-card {
+    animation: none;
   }
 }

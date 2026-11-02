@@ -30,7 +30,7 @@
       </div>
       <div class="entry-actions">
         <button type="button" class="link-btn" hx-get="/backtest/scenario?crisis={{.Key}}" hx-target="#bt-scenario" hx-swap="outerHTML"
-                hx-indicator="#bt-scenario" hx-disabled-elt="this">{{t "bt.see"}}</button>
+                hx-indicator="#bt-scenario" hx-disabled-elt="this" data-scroll-to="#bt-scenario">{{template "busy-label" (list (t "bt.see") (t "bt.seeing"))}}</button>
       </div>
     </div>
     {{end}}
@@ -57,9 +57,10 @@
 <section id="bt-summary" class="lead-figure verdict" aria-label="{{t "backtest.title"}}" data-sim
          hx-get="/backtest/summary" hx-trigger="load, retry" hx-swap="outerHTML">
   {{template "sim-pending" (t "bt.pending" .DataFrom.Year .DataTo.Year)}}
+  {{template "skel-figure"}}
 </section>
 {{else}}
-<section id="bt-summary" class="lead-figure verdict" aria-label="{{t "backtest.title"}}">
+<section id="bt-summary" class="lead-figure verdict sim-fade" aria-label="{{t "backtest.title"}}">
   <p class="lead">{{t "bt.verdict" .FirstYear .LastYear .EndAge}}</p>
   <span class="figure">{{percent .Rate 0}}</span>
   <p class="breakdown"><span>
@@ -77,9 +78,10 @@
 {{if .Pending}}
 <div id="bt-heat-wrap" data-sim hx-get="/backtest/heat" hx-trigger="load, retry" hx-swap="outerHTML">
   {{template "sim-pending" (t "bt.heat_pending")}}
+  {{template "skel-chart" "chart-heat"}}
 </div>
 {{else}}
-<div id="bt-heat-wrap">
+<div id="bt-heat-wrap" class="sim-fade">
   <div class="chart chart-heat" data-chart="bt-heat" role="img" aria-label="{{t "bt.heat_title"}}"></div>
   <script type="application/json" id="bt-heat">{{json .Heat}}</script>
   <p class="heat-legend muted">
@@ -93,8 +95,8 @@
 
 {{/* One replayed scenario (a crisis or a start year). */}}
 {{define "bt-scenario"}}
-<section id="bt-scenario" class="section bt-scenario sim-region" aria-live="polite" aria-labelledby="h-scenario">
-  {{template "sim-busy" (t "sim.updating")}}
+<section id="bt-scenario" class="section bt-scenario sim-region sim-fade" aria-live="polite" aria-labelledby="h-scenario">
+  {{template "sim-busy" (t "bt.busy")}}
   <h2 id="h-scenario">{{t "bt.scenario_title" .Title (month .Start)}}</h2>
   <p class="lead-line">
     {{if .Failed}}<strong class="negative">{{t "bt.sc_fail" .FailAge (month .FailMonth)}}</strong>

@@ -26,11 +26,13 @@
 <section id="mc-results" class="mc-results" aria-label="{{t "success.title"}}" data-sim
          hx-get="/success/results?seed={{.Seed}}" hx-trigger="load, retry, success-changed from:body" hx-target="this" hx-swap="outerHTML">
   {{template "sim-pending" (t "mc.pending" (number (float .Runs) 0))}}
+  {{template "skel-figure"}}
+  {{template "skel-chart" "chart-tall"}}
 </section>
 {{else}}
-<section id="mc-results" class="mc-results sim-region" aria-label="{{t "success.title"}}" data-sim
+<section id="mc-results" class="mc-results sim-region sim-fade" aria-label="{{t "success.title"}}" data-sim
          hx-get="/success/results?seed={{.Seed}}" hx-trigger="retry, success-changed from:body" hx-target="this" hx-swap="outerHTML">
-  {{template "sim-busy" (t "sim.updating")}}
+  {{template "sim-busy" (t "mc.busy" (number (float .Runs) 0))}}
   <div class="lead-figure verdict">
     <p class="lead">{{t "mc.verdict" .EndAge}}</p>
     <span class="figure">{{percent .Rate 0}}</span>
@@ -40,7 +42,7 @@
     <p class="muted mc-meta">
       {{t "mc.runs" (number (float .Runs) 0)}}
       <button type="button" class="link-btn" hx-get="/success/results?reseed=1" hx-target="#mc-results" hx-swap="outerHTML"
-              hx-indicator="#mc-results" hx-disabled-elt="this">{{t "mc.reseed"}}</button>
+              hx-indicator="#mc-results" hx-disabled-elt="this">{{template "busy-label" (list (t "mc.reseed") (t "mc.reseeding"))}}</button>
     </p>
   </div>
 

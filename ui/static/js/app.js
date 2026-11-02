@@ -129,6 +129,62 @@
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
+  // A deploy changed the static files: this tab still runs the old CSS and
+  // JavaScript (boosted navigation never reloads them), so new HTML would
+  // render with the wrong styles. Load the page for real instead.
+  const assets = document.querySelector('meta[name="horizonte-assets"]');
+  document.addEventListener("htmx:beforeSwap", (e) => {
+    const xhr = e.detail.xhr;
+    const served = xhr && xhr.getResponseHeader("X-Horizonte-Assets");
+    if (!assets || !served || served === assets.content) return;
+    e.detail.shouldSwap = false;
+    log("info", "assets changed, reloading", { "horizonte.page": location.pathname });
+    if (e.detail.boosted && xhr.responseURL) location.assign(xhr.responseURL);
+    else location.reload();
+  });
+
+  // Whatever was clicked shows it is working (a spinner on the button or
+  // link, styled by .is-busy), so a slow response never looks like a click
+  // that did nothing.
+  const busy = new WeakMap();
+  document.addEventListener("htmx:beforeRequest", (e) => {
+    const elt = e.detail.elt;
+    if (!elt || !elt.classList || !e.detail.xhr) return;
+    if (elt.matches("a, button, [data-busy]")) {
+      elt.classList.add("is-busy");
+      busy.set(e.detail.xhr, elt);
+    }
+  });
+  document.addEventListener("htmx:afterRequest", (e) => {
+    const elt = e.detail.xhr && busy.get(e.detail.xhr);
+    if (elt) elt.classList.remove("is-busy");
+  });
+
+  // Buttons that update a section further down the page (data-scroll-to)
+  // bring it into view as the request starts, so the person sees it
+  // working and then sees the result, instead of nothing changing.
+  document.addEventListener("htmx:beforeRequest", (e) => {
+    const sel = e.detail.elt && e.detail.elt.dataset && e.detail.elt.dataset.scrollTo;
+    const target = sel && document.querySelector(sel);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  // Seconds elapsed, in the "calculating" messages: a counter that moves
+  // tells the person the app is alive even when the server is slow.
+  setInterval(() => {
+    document.querySelectorAll("[data-elapsed]").forEach((el) => {
+      const active = el.closest(".sim-pending, .htmx-request");
+      if (!active || (active.closest("[data-state]") && active.closest("[data-state]").dataset.state === "error")) {
+        delete el.dataset.t0;
+        el.textContent = "";
+        return;
+      }
+      if (!el.dataset.t0) el.dataset.t0 = String(Date.now());
+      const s = Math.floor((Date.now() - Number(el.dataset.t0)) / 1000);
+      el.textContent = s >= 2 ? s + " s" : "";
+    });
+  }, 500);
+
   // Loading feedback. A thin bar at the top of the page appears when a
   // navigation or update takes more than a moment, so a slow server never
   // looks like a click that did nothing. Requests from simulation

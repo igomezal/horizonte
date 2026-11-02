@@ -82,6 +82,17 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	var staticHandler http.Handler = http.StripPrefix("/static/", http.FileServerFS(static))
+	if !cfg.Dev {
+		// Versioned URLs (?v=, see renderer.assets) never change content, so
+		// browsers may keep them; a new build uses new URLs.
+		next := staticHandler
+		staticHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("v") == s.render.assets {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 	if cfg.Dev {
 		// Always revalidate in dev so CSS/JS edits show up on a normal reload.
 		next := staticHandler

@@ -1,13 +1,14 @@
 {{/* Shown while a simulation runs on the server. The argument is the
      already translated message ("Simulating 1,000 market scenarios…").
-     The "still working" line appears after a few seconds (CSS), and the
-     error line when the request fails (app.js sets data-state="error" on
-     the closest [data-sim] element; its button triggers "retry"). */}}
+     A counter shows the seconds elapsed (app.js, [data-elapsed]); the
+     "still working" line appears after a few seconds (CSS), and the error
+     line when the request fails (app.js sets data-state="error" on the
+     closest [data-sim] element; its button triggers "retry"). */}}
 {{define "sim-pending"}}
 <div class="sim-pending" role="status">
   <span class="spinner" aria-hidden="true"></span>
   <div class="sim-pending-text">
-    <p class="sim-pending-title">{{.}}</p>
+    <p class="sim-pending-title">{{.}} <span class="sim-elapsed muted" data-elapsed></span></p>
     <p class="sim-pending-slow muted">{{t "sim.slow"}}</p>
     <p class="sim-pending-error">{{t "sim.error"}} <button type="button" class="link-btn" data-sim-retry>{{t "sim.retry"}}</button></p>
   </div>
@@ -18,16 +19,37 @@
 {{define "sim-pending-inline"}}
 <span class="sim-inline" role="status">
   <span class="spinner spinner-sm" aria-hidden="true"></span>
-  <span class="sim-inline-text muted">{{.}}</span>
+  <span class="sim-inline-text muted">{{.}} <span data-elapsed></span></span>
   <span class="sim-pending-error">{{t "sim.error_short"}} <button type="button" class="link-btn" data-sim-retry>{{t "sim.retry"}}</button></span>
 </span>
 {{end}}
 
-{{/* Overlay on results that are being recalculated (visible while the
-     enclosing .sim-region has htmx's .htmx-request class). */}}
+{{/* Card over results that are being recalculated. It stays in view while
+     scrolling (sticky) and is visible only while the enclosing .sim-region
+     has htmx's .htmx-request class; `hidden` keeps it out of sight even if
+     the stylesheet hasn't loaded. */}}
 {{define "sim-busy"}}
-<div class="sim-busy" aria-hidden="true">
-  <span class="spinner" aria-hidden="true"></span>
-  <span>{{.}}</span>
+<div class="sim-busy" hidden>
+  <div class="sim-busy-card" role="status">
+    <span class="spinner" aria-hidden="true"></span>
+    <span>{{.}}</span>
+    <span class="sim-elapsed muted" data-elapsed></span>
+    <span class="sim-pending-error">{{t "sim.error"}} <button type="button" class="link-btn" data-sim-retry>{{t "sim.retry"}}</button></span>
+  </div>
 </div>
 {{end}}
+
+{{/* Grey shapes where the results will appear, so the page keeps its
+     layout instead of jumping when they arrive. */}}
+{{define "skel-figure"}}
+<div class="skel-group" aria-hidden="true">
+  <div class="skel skel-text"></div>
+  <div class="skel skel-figure"></div>
+  <div class="skel skel-text skel-short"></div>
+</div>
+{{end}}
+{{define "skel-chart"}}<div class="skel skel-chart {{.}}" aria-hidden="true"></div>{{end}}
+
+{{/* A button that shows a spinner and a "working" label while its request
+     runs (.is-busy, set by app.js) or while its section recalculates. */}}
+{{define "busy-label"}}<span class="when-idle">{{index . 0}}</span><span class="when-busy" hidden>{{index . 1}}</span>{{end}}
