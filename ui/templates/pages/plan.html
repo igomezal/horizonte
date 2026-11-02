@@ -88,7 +88,67 @@
     <p class="note muted">{{t "estate.tax_note"}}{{if .HasPension}} {{t "estate.pension_note"}}{{end}}{{if .HasProperty}} {{t "estate.property_note"}}{{end}}</p>
   </div>
   {{end}}
+
+  {{with .Fire}}
+  <div class="fire">
+    <h2 class="fire-title" id="h-fire">{{t "fire.title"}}</h2>
+    <p class="section-desc muted">{{t "fire.desc"}}</p>
+    <div class="table-wrap fire-wrap" tabindex="0" role="region" aria-labelledby="h-fire">
+      <table class="projection fire-table">
+        <thead>
+          <tr>
+            <th scope="col">{{t "fire.col.scenario"}}</th>
+            <th scope="col">{{t "fire.col.stop"}}</th>
+            <th scope="col">{{t "plan.col.age"}}</th>
+            <th scope="col">{{t "fire.col.result"}}</th>
+            <th scope="col" class="num">{{t "fire.col.end"}}</th>
+            {{if .HasProperty}}<th scope="col" class="num">{{t "fire.col.property"}}</th>{{end}}
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="fire-plan">
+            <th scope="row">{{t "fire.plan"}}</th>
+            <td class="muted">{{t "fire.plan_stop"}}</td>
+            <td></td>
+            {{template "fire-outcome" .Plan}}
+            {{if .HasProperty}}<td class="num">{{money .Plan.Property}}</td>{{end}}
+          </tr>
+          {{$prop := .HasProperty}}
+          {{range .Rows}}
+          <tr>
+            {{$variant := t (printf "milestone.fi.%s" .Variant)}}
+            <th scope="row">{{.Name}}{{if ne $variant .Name}}<small class="muted fire-variant">{{$variant}}</small>{{end}}</th>
+            {{if not .Reached}}
+            <td colspan="{{if $prop}}5{{else}}4{{end}}" class="muted">{{t "plan.timeline.unreached"}}</td>
+            {{else}}
+            <td>{{month .Month}}</td>
+            <td>{{.Ages}}</td>
+            {{if .Same}}
+            <td class="muted">{{t "fire.same"}}</td>
+            <td class="num">{{money .Outcome.EndValue}}</td>
+            {{else}}
+            {{template "fire-outcome" .Outcome}}
+            {{end}}
+            {{if $prop}}<td class="num">{{money .Outcome.Property}}</td>{{end}}
+            {{end}}
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{if .HasPension}}<p class="note muted">{{t "fire.pension_note"}}</p>{{end}}
+  </div>
+  {{end}}
 </section>
+{{end}}
+
+{{define "fire-outcome"}}
+{{if .Failed}}
+<td class="negative">{{t "fire.fails" .FailAge (month .FailMonth)}}</td>
+{{else}}
+<td>{{t "fire.lasts" .EndAge}}</td>
+{{end}}
+<td class="num{{if lt .EndValue -0.5}} negative{{end}}">{{money .EndValue}}</td>
 {{end}}
 
 {{define "plan-table"}}

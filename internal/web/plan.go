@@ -123,6 +123,72 @@ type planView struct {
 	WdMin, WdMax float64
 	WdMinYear    int
 	Estate       *estateView
+	Fire         *fireView // nil when the plan has no FIRE milestone
+}
+
+// fireView compares the plan with stopping work at each FIRE milestone.
+type fireView struct {
+	Plan fireOutcome
+	Rows []fireRow
+	// HasPension: the plan has a public pension, which is not recalculated
+	// for the shorter working life.
+	HasPension bool
+	// HasProperty shows the property column: property is never sold, so the
+	// money can run out with a large net worth left.
+	HasProperty bool
+}
+
+type fireOutcome struct {
+	Failed    bool
+	FailMonth domain.Month
+	FailAge   int
+	EndAge    int
+	EndValue  float64 // net worth at the end, display units
+	Property  float64 // value of property at the end (part of EndValue), display units
+}
+
+type fireRow struct {
+	Name    string
+	Variant domain.FIVariant
+	Reached bool
+	Month   domain.Month // month the milestone is reached
+	Ages    string       // everyone's age then
+	// Same: work income already stops by then, so the outcome is the plan's.
+	Same    bool
+	Outcome fireOutcome
+}
+
+// buildFire projects, for each FIRE milestone, the plan with work income
+// stopping when it is reached. outcome summarises a projection.
+func buildFire(in engine.Input, base engine.Result, outcome func(engine.Result) fireOutcome) *fireView {
+	var f *fireView
+	for i, ms := range in.Milestones {
+		if !ms.Conditional() {
+			continue
+		}
+		if f == nil {
+			f = &fireView{Plan: outcome(base)}
+			for _, acc := range in.Accounts {
+				f.HasProperty = f.HasProperty || acc.Kind == domain.AccountRealEstate
+			}
+			for _, inc := range in.Incomes {
+				f.HasPension = f.HasPension || inc.Kind == domain.IncomePension
+			}
+		}
+		hit := base.Milestones[i]
+		row := fireRow{Name: ms.Name, Variant: ms.FIVariant, Reached: hit.Reached(), Month: hit.Month}
+		if row.Reached {
+			row.Ages = ages(in.People, hit.Month)
+			variant, changed := engine.StopWorkAt(in, base, ms.ID)
+			row.Same, row.Outcome = !changed, f.Plan
+			if changed {
+				variant.Detail = false
+				row.Outcome = outcome(engine.Simulate(variant))
+			}
+		}
+		f.Rows = append(f.Rows, row)
+	}
+	return f
 }
 
 // estateView is what is left when the plan ends: the inheritance.
@@ -254,6 +320,21 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 	if len(est.Lines) > 0 || est.Debts > 0.5 {
 		v.Estate = est
 	}
+
+	v.Fire = buildFire(in, res, func(r engine.Result) fireOutcome {
+		o := fireOutcome{Failed: r.Failed()}
+		end := r.Months[len(r.Months)-1]
+		o.EndAge, o.EndValue = main.AgeAt(end.Month), unit(end.NetWorth, end.Deflator)
+		for i, acc := range r.Accounts {
+			if acc.Kind == domain.AccountRealEstate {
+				o.Property += unit(end.Balances[i], end.Deflator)
+			}
+		}
+		if o.Failed {
+			o.FailMonth, o.FailAge = r.FailMonth, main.AgeAt(r.FailMonth)
+		}
+		return o
+	})
 
 	if !res.WithdrawalFrom.IsZero() {
 		v.WdActive, v.WdStrategy, v.WdMin, v.WdMax = true, string(in.Assumptions.Withdrawal.Strategy), math.Inf(1), math.Inf(-1)

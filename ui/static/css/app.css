@@ -1399,6 +1399,31 @@ table.health-phases td:last-child input {
   font-size: 1.25rem;
   margin: 0 0 0.25rem;
 }
+
+/* Stopping work at each FIRE milestone, compared with the plan (Plan page). */
+.fire {
+  margin-top: 2rem;
+}
+.fire-title {
+  font-size: 1.25rem;
+  margin: 0 0 0.25rem;
+}
+.fire-wrap {
+  max-height: none;
+}
+table.fire-table th[scope="row"] {
+  white-space: normal;
+  min-width: 10rem;
+}
+.fire-variant {
+  display: block;
+  font-weight: 400;
+  font-size: 0.8125rem;
+}
+table.fire-table tr.fire-plan th,
+table.fire-table tr.fire-plan td {
+  background: color-mix(in srgb, var(--app-accent) 7%, transparent);
+}
 .export-all {
   margin: 0.75rem 0 0;
   font-size: 0.9375rem;

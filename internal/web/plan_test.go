@@ -196,3 +196,47 @@ func TestPlanReturnColumns(t *testing.T) {
 		t.Error("returns should carry the rate as a tooltip")
 	}
 }
+
+// With a FIRE milestone, the plan compares itself with stopping work there.
+func TestPlanStopWorkingAtFire(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	mustPost(t, s, "/finances/people", url.Values{"name": {"Ana"}, "birth": {"1990-04"}, "life_expectancy": {"90"}})
+	mustPost(t, s, "/finances/accounts", url.Values{"name": {"Fondo"}, "kind": {"investment"}, "balance": {"150000"}})
+	mustPost(t, s, "/finances/incomes", url.Values{"name": {"Nómina"}, "kind": {"salary"}, "amount": {"4000"}, "payments": {"14"}})
+	mustPost(t, s, "/finances/expenses", url.Values{"name": {"Vida"}, "category": {"housing"}, "amount": {"1800"}, "payments": {"12"}})
+
+	if _, body := do(s, httptest.NewRequest("GET", "/plan", nil)); strings.Contains(body, "Si dejas de trabajar") {
+		t.Error("no FIRE milestone: no comparison")
+	}
+	mustPost(t, s, "/finances/milestones", url.Values{"name": {"Libertad"}, "kind": {"fi"}, "fi_variant": {"standard"}, "multiple": {"25"}})
+	_, body := do(s, httptest.NewRequest("GET", "/plan", nil))
+	for _, want := range []string{"Si dejas de trabajar al alcanzar FIRE", "Tu plan actual", "Libertad", "FIRE clásico"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("plan page missing %q", want)
+		}
+	}
+	i := strings.Index(body, `class="fire"`)
+	if i < 0 || strings.Count(body[i:], "Tu dinero llega hasta los")+strings.Count(body[i:], "El dinero se acaba a los") < 2 {
+		t.Error("both the plan and the FIRE row should have an outcome")
+	}
+	if strings.Contains(body[i:], "Igual que tu plan") {
+		t.Error("the open-ended salary should stop at FIRE, so the outcome differs")
+	}
+}
+
+// The FIRE comparison shows how much of the final net worth is property
+// (never sold), only when the plan has property.
+func TestPlanFirePropertyColumn(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	mustPost(t, s, "/finances/people", url.Values{"name": {"Ana"}, "birth": {"1990-04"}, "life_expectancy": {"90"}})
+	mustPost(t, s, "/finances/accounts", url.Values{"name": {"Fondo"}, "kind": {"investment"}, "balance": {"150000"}})
+	mustPost(t, s, "/finances/incomes", url.Values{"name": {"Nómina"}, "kind": {"salary"}, "amount": {"4000"}, "payments": {"14"}})
+	mustPost(t, s, "/finances/milestones", url.Values{"name": {"Libertad"}, "kind": {"fi"}, "fi_variant": {"standard"}, "multiple": {"25"}})
+	if _, body := do(s, httptest.NewRequest("GET", "/plan", nil)); strings.Contains(body, "De ello, inmuebles") {
+		t.Error("no property: no property column")
+	}
+	mustPost(t, s, "/finances/accounts", url.Values{"name": {"Piso"}, "kind": {"realestate"}, "balance": {"200000"}})
+	if _, body := do(s, httptest.NewRequest("GET", "/plan", nil)); !strings.Contains(body, "De ello, inmuebles") {
+		t.Error("with property: want the property column")
+	}
+}
