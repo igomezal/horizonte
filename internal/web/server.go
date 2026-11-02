@@ -143,6 +143,8 @@ func New(cfg Config) (*Server, error) {
 	// recoverPanics still renders the 500 page. It is a no-op without a DSN.
 	h = sentryhttp.New(sentryhttp.Options{Repanic: true}).Handle(h)
 	h = s.recoverPanics(h)
+	// Compression wraps everything a handler writes, the 500 page included.
+	h = compressResponses(h)
 	access := cfg.AccessLog
 	if access == nil {
 		access = cfg.Logger
