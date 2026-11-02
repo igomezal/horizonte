@@ -181,8 +181,9 @@ func endAge(in engine.Input) int {
 
 // pendingRolling is the placeholder for the rolling backtest, or its result
 // when already cached.
-func (s *Server) pendingRolling(lang i18n.Lang, in engine.Input, hs *history.Series) btRolling {
+func (s *Server) pendingRolling(ctx context.Context, lang i18n.Lang, in engine.Input, hs *history.Series) btRolling {
 	if all, ok := cachedSim[[]engine.RollingStart](s.sims, rollingKey(in)); ok {
+		countSimCache(ctx, "rolling_backtest", "backtest", servedPage, true)
 		return s.rollingFrom(lang, in, hs, all)
 	}
 	v := btRolling{Pending: true, DataFrom: hs.Start, DataTo: hs.End(), EndAge: endAge(in)}
@@ -279,14 +280,14 @@ func (s *Server) rollingFrom(lang i18n.Lang, in engine.Input, hs *history.Series
 
 // buildBacktestView builds the quick part of the page: the crises and the
 // replayed scenario. The rolling backtest is a placeholder unless cached.
-func (s *Server) buildBacktestView(lang i18n.Lang, in engine.Input, hs *history.Series, sel func() (domain.Month, string)) btView {
+func (s *Server) buildBacktestView(ctx context.Context, lang i18n.Lang, in engine.Input, hs *history.Series, sel func() (domain.Month, string)) btView {
 	v := btView{HasPeople: len(in.People) > 0, DataFrom: hs.Start, DataTo: hs.End()}
 	if !v.HasPeople {
 		return v
 	}
 	main := in.People[0]
 	v.EndAge = endAge(in)
-	v.Rolling = s.pendingRolling(lang, in, hs)
+	v.Rolling = s.pendingRolling(ctx, lang, in, hs)
 
 	for _, c := range engine.Crises {
 		res, _ := engine.Backtest(in, hs, c.Start)
@@ -346,7 +347,7 @@ func (s *Server) handleBacktest(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	v := s.buildBacktestView(fc.lang, in, hs, s.scenarioFromQuery(r, fc.lang, hs))
+	v := s.buildBacktestView(r.Context(), fc.lang, in, hs, s.scenarioFromQuery(r, fc.lang, hs))
 	s.page(w, r, http.StatusOK, "backtest", "backtest.title", v)
 }
 

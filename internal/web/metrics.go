@@ -39,8 +39,13 @@ func mcKey(in engine.Input, set engine.MCSettings) string {
 func rollingKey(in engine.Input) string { return simKey("rolling", in) }
 
 // countSimCache counts simulation requests by whether the result was already
-// cached, which shows how much work the cache saves.
-func countSimCache(ctx context.Context, kind, source string, hit bool) {
+// cached, which shows how much work the cache saves. served says where the
+// result went: "results" for the requests a page makes to load its results
+// (monteCarlo, rolling), "page" for a page that found the result cached and
+// rendered it straight away. Every lookup is counted once: a page only counts
+// its hits, because on a miss it renders a placeholder and the results
+// request that follows counts the miss.
+func countSimCache(ctx context.Context, kind, source, served string, hit bool) {
 	outcome := "miss"
 	if hit {
 		outcome = "hit"
@@ -48,9 +53,16 @@ func countSimCache(ctx context.Context, kind, source string, hit bool) {
 	meter(ctx).Count("horizonte.simulation.cache", 1, sentry.WithAttributes(
 		attribute.String("horizonte.simulation.kind", kind),
 		attribute.String("horizonte.simulation.source", source),
+		attribute.String("horizonte.simulation.served", served),
 		attribute.String("horizonte.simulation.cache", outcome),
 	))
 }
+
+// Values of horizonte.simulation.served.
+const (
+	servedResults = "results"
+	servedPage    = "page"
+)
 
 // monteCarlo runs the simulation through the simulation runner (cached,
 // shared and limited) and records how long it took when it actually ran. Its
@@ -60,10 +72,10 @@ func countSimCache(ctx context.Context, kind, source string, hit bool) {
 func (s *Server) monteCarlo(ctx context.Context, source string, in engine.Input, set engine.MCSettings) (engine.MCResult, error) {
 	key := mcKey(in, set)
 	if mc, ok := cachedSim[engine.MCResult](s.sims, key); ok {
-		countSimCache(ctx, "monte_carlo", source, true)
+		countSimCache(ctx, "monte_carlo", source, servedResults, true)
 		return mc, nil
 	}
-	countSimCache(ctx, "monte_carlo", source, false)
+	countSimCache(ctx, "monte_carlo", source, servedResults, false)
 	return runSim(ctx, s.sims, key, func(ctx context.Context) (engine.MCResult, error) {
 		start := time.Now()
 		mc, err := engine.MonteCarloContext(ctx, in, in.Assumptions.Volatility, set)
@@ -88,10 +100,10 @@ func (s *Server) monteCarlo(ctx context.Context, source string, in engine.Input,
 func (s *Server) rolling(ctx context.Context, source string, in engine.Input, hs *history.Series) ([]engine.RollingStart, error) {
 	key := rollingKey(in)
 	if starts, ok := cachedSim[[]engine.RollingStart](s.sims, key); ok {
-		countSimCache(ctx, "rolling_backtest", source, true)
+		countSimCache(ctx, "rolling_backtest", source, servedResults, true)
 		return starts, nil
 	}
-	countSimCache(ctx, "rolling_backtest", source, false)
+	countSimCache(ctx, "rolling_backtest", source, servedResults, false)
 	return runSim(ctx, s.sims, key, func(ctx context.Context) ([]engine.RollingStart, error) {
 		start := time.Now()
 		starts, err := engine.RollingContext(ctx, in, hs)

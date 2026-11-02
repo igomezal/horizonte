@@ -87,13 +87,16 @@ func compareSettings() engine.MCSettings {
 }
 
 // cachedOdds returns a plan's odds if both simulations are cached, or a
-// pending placeholder.
-func (s *Server) cachedOdds(id int64, in engine.Input) planOdds {
+// pending placeholder. Hits are counted only when the odds go into the page:
+// otherwise the row's odds request looks both up again and counts them.
+func (s *Server) cachedOdds(ctx context.Context, id int64, in engine.Input) planOdds {
 	mc, ok1 := cachedSim[engine.MCResult](s.sims, mcKey(in, compareSettings()))
 	starts, ok2 := cachedSim[[]engine.RollingStart](s.sims, rollingKey(in))
 	if !ok1 || !ok2 {
 		return planOdds{ID: id, Pending: true}
 	}
+	countSimCache(ctx, "monte_carlo", "scenarios", servedPage, true)
+	countSimCache(ctx, "rolling_backtest", "scenarios", servedPage, true)
 	return oddsFrom(id, mc, starts)
 }
 
@@ -164,7 +167,7 @@ func (s *Server) summarizePlan(ctx context.Context, lang i18n.Lang, now domain.M
 			break
 		}
 	}
-	row.Odds = s.cachedOdds(p.ID, in)
+	row.Odds = s.cachedOdds(ctx, p.ID, in)
 	return row, nil
 }
 

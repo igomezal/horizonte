@@ -101,9 +101,10 @@ func mcSettings(in engine.Input, seed uint64) engine.MCSettings {
 
 // pendingSuccessView is the placeholder shown while the simulation runs, or
 // the full view when its result is already cached.
-func (s *Server) pendingSuccessView(lang i18n.Lang, in engine.Input, seed uint64) successView {
+func (s *Server) pendingSuccessView(ctx context.Context, lang i18n.Lang, in engine.Input, seed uint64) successView {
 	if len(in.People) > 0 {
 		if mc, ok := cachedSim[engine.MCResult](s.sims, mcKey(in, mcSettings(in, seed))); ok {
+			countSimCache(ctx, "monte_carlo", "success", servedPage, true)
 			return s.successViewFrom(lang, in, seed, mc)
 		}
 	}
@@ -220,7 +221,7 @@ func (s *Server) handleSuccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := successPage{
-		View: s.pendingSuccessView(fc.lang, in, parseSeed(r)),
+		View: s.pendingSuccessView(r.Context(), fc.lang, in, parseSeed(r)),
 		Form: newMCForm(s.mcSettingsValues(fc.lang, in.Assumptions), domain.Errors{}),
 	}
 	s.page(w, r, http.StatusOK, "success", "success.title", page)

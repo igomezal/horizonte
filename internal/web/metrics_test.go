@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -154,5 +155,64 @@ func TestMetricSimulationDuration(t *testing.T) {
 	}
 	if cache["miss"] != 1 || cache["hit"] != 1 {
 		t.Errorf("monte carlo cache counts = %v, want 1 miss and 1 hit", cache)
+	}
+}
+
+// A page that finds its result cached renders it straight away; that hit
+// must be counted too, or a warm cache looks idle in Sentry.
+func TestMetricSimulationCachePageHits(t *testing.T) {
+	metrics := captureMetrics(t)
+	s, _ := newFinanceServer(t)
+	seedMC(t, s)
+	// Fill the cache the way the pages' placeholders do.
+	for _, path := range []string{"/success/results", "/backtest/summary"} {
+		if rec, _ := do(s, htmxReq("GET", path, nil)); rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d", path, rec.Code)
+		}
+	}
+	plans, err := s.store.ListPlans(context.Background())
+	if err != nil || len(plans) == 0 {
+		t.Fatalf("plans: %v %v", plans, err)
+	}
+	if rec, _ := do(s, htmxReq("GET", fmt.Sprintf("/scenarios/%d/odds", plans[0].ID), nil)); rec.Code != http.StatusOK {
+		t.Fatalf("odds: %d", rec.Code)
+	}
+	before := len(metrics())
+
+	for _, path := range []string{"/success", "/backtest", "/scenarios"} {
+		rec, body := do(s, httptest.NewRequest("GET", path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d", path, rec.Code)
+		}
+		if strings.Contains(body, "is-pending") {
+			t.Errorf("%s rendered a placeholder although the result was cached", path)
+		}
+	}
+
+	got := map[string]int{}
+	for _, m := range metrics()[before:] {
+		if m.name != "horizonte.simulation.cache" {
+			continue
+		}
+		if m.attrs["horizonte.simulation.cache"] != "hit" || m.attrs["horizonte.simulation.served"] != "page" {
+			t.Errorf("page lookup counted as %v", m.attrs)
+		}
+		got[m.attrs["horizonte.simulation.source"]+"/"+m.attrs["horizonte.simulation.kind"]]++
+	}
+	want := map[string]int{
+		"success/monte_carlo":        1,
+		"backtest/rolling_backtest":  1,
+		"scenarios/monte_carlo":      1,
+		"scenarios/rolling_backtest": 1,
+	}
+	for k, n := range want {
+		if got[k] != n {
+			t.Errorf("%s hits = %d, want %d (all: %v)", k, got[k], n, got)
+		}
+	}
+	for _, m := range metrics()[:before] {
+		if m.name == "horizonte.simulation.cache" && m.attrs["horizonte.simulation.served"] != "results" {
+			t.Errorf("results lookup counted as %v", m.attrs)
+		}
 	}
 }
