@@ -106,10 +106,13 @@
           <th scope="col" class="num">{{t "plan.col.expenses"}}</th>
           <th scope="col" class="num">{{t "plan.col.debt"}}</th>
           <th scope="col" class="num">{{t "plan.col.savings"}}</th>
+          <th scope="col" class="num">{{t "plan.col.returns"}}</th>
+          {{if .HasProperty}}<th scope="col" class="num">{{t "plan.col.appreciation"}}</th>{{end}}
           <th scope="col" class="num">{{t "plan.col.net_worth"}}</th>
         </tr>
       </thead>
       <tbody>
+        {{$prop := .HasProperty}}
         {{range .Rows}}
         <tr{{if .Short}} class="short"{{end}}>
           <th scope="row">{{.Label}}</th>
@@ -119,6 +122,8 @@
           <td class="num">{{money .Expenses}}</td>
           <td class="num">{{money .DebtPayments}}</td>
           <td class="num{{if lt .Savings 0.0}} negative{{end}}">{{money .Savings}}</td>
+          <td class="num{{if lt .Returns -0.5}} negative{{end}}"{{if .ReturnRate}} title="{{t "plan.col.returns_rate" (percent .ReturnRate 1)}}"{{end}}>{{money .Returns}}</td>
+          {{if $prop}}<td class="num{{if lt .Appreciation -0.5}} negative{{end}}">{{money .Appreciation}}</td>{{end}}
           <td class="num{{if lt .NetWorth 0.0}} negative{{end}}">{{money .NetWorth}}</td>
         </tr>
         {{end}}

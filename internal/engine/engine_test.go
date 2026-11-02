@@ -741,3 +741,26 @@ func TestIRPFTaxesOnlyInvestmentGains(t *testing.T) {
 		t.Errorf("2028 realised gains = %.2f, want a fraction of the 12.000 € withdrawn", s28)
 	}
 }
+
+// With no flows, returns and property appreciation are exactly the growth of
+// the balances, and each goes to its own figure.
+func TestReturnsAndAppreciation(t *testing.T) {
+	in := Input{
+		People: []domain.Person{{ID: 1, Birth: domain.Month{Year: 1980, Month: 1}, LifeExpectancy: 50}},
+		Accounts: []domain.Account{
+			{ID: 1, Name: "Fondo", Kind: domain.AccountInvestment, Balance: domain.FromEuros(100000)},
+			{ID: 2, Name: "Piso", Kind: domain.AccountRealEstate, Balance: domain.FromEuros(200000)},
+		},
+		Assumptions: DefaultAssumptions(),
+		Start:       domain.Month{Year: 2026, Month: 1},
+	}
+	in.Assumptions.TaxModel = TaxFlat
+	res := Simulate(in)
+	y := res.Years()[0]
+	if got, want := y.Returns, y.Last.Balances[0]-100000; math.Abs(got-want) > 0.01 || math.Abs(want-6000) > 1 {
+		t.Errorf("returns %.2f, investment grew %.2f (want about 6000)", got, want)
+	}
+	if got, want := y.Appreciation, y.Last.Balances[1]-200000; math.Abs(got-want) > 0.01 || math.Abs(want-6000) > 1 {
+		t.Errorf("appreciation %.2f, property grew %.2f (want about 6000)", got, want)
+	}
+}

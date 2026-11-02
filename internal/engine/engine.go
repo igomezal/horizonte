@@ -157,6 +157,12 @@ type MonthRow struct {
 	Withdrawals   float64 // taken from accounts to cover a deficit
 	Shortfall     float64 // deficit nothing could cover this month
 
+	// Returns is what the accounts other than property earned this month
+	// (interest and growth, negative in a bad month); Appreciation is the
+	// change in value of property.
+	Returns      float64
+	Appreciation float64
+
 	// SurplusSaved is money left over after contributions that went to the
 	// surplus account (or was spent when there is none).
 	SurplusSaved float64
@@ -380,6 +386,11 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 				tx.addSavings(in.Accounts[i].OwnerID, g)
 			}
 			balances[i] += g
+			if in.Accounts[i].Kind == domain.AccountRealEstate {
+				row.Appreciation += g
+			} else {
+				row.Returns += g
+			}
 		}
 
 		// 2. Income, tax and expenses.
@@ -804,6 +815,7 @@ type YearRow struct {
 
 	Income, Tax, Expenses, DebtPayments, Prepayments, Contributions, Withdrawals, Shortfall float64
 	SurplusSaved                                                                            float64
+	Returns, Appreciation                                                                   float64
 	Months                                                                                  int   // projected months in the year (12 except the first and last years)
 	Flow                                                                                    *Flow // summed breakdown, when the months have one
 }
@@ -828,6 +840,8 @@ func (r Result) Years() []YearRow {
 		y.Withdrawals += m.Withdrawals
 		y.Shortfall += m.Shortfall
 		y.SurplusSaved += m.SurplusSaved
+		y.Returns += m.Returns
+		y.Appreciation += m.Appreciation
 		y.Months++
 		if m.Flow != nil {
 			if y.Flow == nil {

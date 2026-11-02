@@ -168,3 +168,31 @@ func TestTaxModelFromPlanForm(t *testing.T) {
 		t.Errorf("unknown region accepted: %d", rec.Code)
 	}
 }
+
+// The table shows returns, and property appreciation only when there is property.
+func TestPlanReturnColumns(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	seedPlan(t, s)
+	_, body := do(s, httptest.NewRequest("GET", "/plan", nil))
+	if !strings.Contains(body, ">Rentabilidad</th>") || strings.Contains(body, "Revalorización inmuebles") {
+		t.Error("without property: want a returns column and no appreciation column")
+	}
+	if strings.Contains(body, "sobre el saldo al inicio") {
+		t.Error("a cash account at 0 % has no return rate to show")
+	}
+	for _, acc := range []url.Values{
+		{"name": {"Fondo"}, "kind": {"investment"}, "balance": {"50000"}},
+		{"name": {"Piso"}, "kind": {"realestate"}, "balance": {"200000"}},
+	} {
+		if rec, b := do(s, htmxReq("POST", "/finances/accounts", acc)); rec.Code != http.StatusOK {
+			t.Fatalf("add account: %d %.200s", rec.Code, b)
+		}
+	}
+	_, body = do(s, httptest.NewRequest("GET", "/plan", nil))
+	if !strings.Contains(body, "Revalorización inmuebles") {
+		t.Error("with property: want the appreciation column")
+	}
+	if !strings.Contains(body, "sobre el saldo al inicio") {
+		t.Error("returns should carry the rate as a tooltip")
+	}
+}

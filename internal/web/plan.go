@@ -57,7 +57,11 @@ type planRow struct {
 	Label                                                  string
 	Ages                                                   string
 	Income, Tax, Expenses, DebtPayments, Savings, NetWorth float64
-	Short                                                  bool // money ran out in this period
+	// Returns is what the accounts other than property earned, ReturnRate
+	// that as a share of their balance at the start of the period (0 when
+	// there was none); Appreciation is the change in value of property.
+	Returns, ReturnRate, Appreciation float64
+	Short                             bool // money ran out in this period
 }
 
 // projectionChart is the JSON contract for the "projection" chart in charts.js.
@@ -94,7 +98,9 @@ type timelineItem struct {
 type planView struct {
 	HasPeople bool
 	Opts      planOpts
-	OOB       bool // render the table as an out-of-band swap
+	// HasProperty shows the property appreciation column.
+	HasProperty bool
+	OOB         bool // render the table as an out-of-band swap
 
 	Failed     bool
 	FailMonth  domain.Month
@@ -270,6 +276,8 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 		inc, tax  float64
 		exp, debt float64
 		short     float64
+		ret, appr float64
+		partial   bool // a year with fewer than 12 projected months
 	}
 	var periods []period
 	if opts.Monthly {
@@ -277,6 +285,7 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 			periods = append(periods, period{
 				label: i18n.FormatMonth(lang, m.Month.Year, m.Month.Month), last: m, deflator: m.Deflator,
 				inc: m.Income, tax: m.Tax, exp: m.Expenses, debt: m.DebtPayments, short: m.Shortfall,
+				ret: m.Returns, appr: m.Appreciation,
 			})
 		}
 	} else {
@@ -284,6 +293,7 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 			periods = append(periods, period{
 				label: strconv.Itoa(y.Year), last: y.Last, deflator: y.Deflator,
 				inc: y.Income, tax: y.Tax, exp: y.Expenses, debt: y.DebtPayments, short: y.Shortfall,
+				ret: y.Returns, appr: y.Appreciation, partial: y.Months < 12,
 			})
 		}
 	}
@@ -300,6 +310,16 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 	hasDebt := len(in.Debts) > 0
 	if hasDebt {
 		ch.Debt = &chartSeries{Name: s.catalog.T(lang, "plan.debts")}
+	}
+	// liquid is the balance of the accounts other than property at the start
+	// of each period, for the return rate (nominal, like the returns).
+	var liquid float64
+	for _, a := range res.Accounts {
+		if a.Kind == domain.AccountRealEstate {
+			v.HasProperty = true
+		} else {
+			liquid += a.Balance.Euros()
+		}
 	}
 	for i, p := range periods {
 		d := p.deflator
@@ -324,8 +344,18 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 			Label: p.label, Ages: ages(in.People, p.last.Month),
 			Income: p.inc / d, Tax: p.tax / d, Expenses: p.exp / d, DebtPayments: p.debt / d,
 			Savings: (p.inc - p.tax - p.exp - p.debt) / d, NetWorth: p.last.NetWorth / d,
+			Returns: p.ret / d, Appreciation: p.appr / d,
 			Short: p.short > 0,
 		})
+		if liquid > 0 && !p.partial { // a rate over part of a year would mislead
+			v.Rows[len(v.Rows)-1].ReturnRate = p.ret / liquid
+		}
+		liquid = 0
+		for j, a := range res.Accounts {
+			if a.Kind != domain.AccountRealEstate {
+				liquid += p.last.Balances[j]
+			}
+		}
 	}
 	// Milestones and detected events: a timeline, and marks on the chart.
 	periodOf := func(m domain.Month) int {
