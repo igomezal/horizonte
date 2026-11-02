@@ -51,16 +51,20 @@
 {{end}}
 
 {{/* Headline of the rolling backtest (every start year). Pending: the page
-     was sent before the calculation finished; this loads it. */}}
+     was sent before the calculation finished; the same layout with grey
+     bars (so nothing moves when it arrives) loads it. */}}
 {{define "bt-summary"}}
-{{if .Pending}}
-<section id="bt-summary" class="lead-figure verdict" aria-label="{{t "backtest.title"}}" data-sim
-         hx-get="/backtest/summary" hx-trigger="load, retry" hx-swap="outerHTML">
-  {{template "sim-pending" (t "bt.pending" .DataFrom.Year .DataTo.Year)}}
-  {{template "skel-figure"}}
-</section>
-{{else}}
-<section id="bt-summary" class="lead-figure verdict sim-fade" aria-label="{{t "backtest.title"}}">
+{{$p := .Pending}}
+<section id="bt-summary" class="lead-figure verdict sim-region{{if $p}} is-pending{{else}} sim-fade{{end}}" aria-label="{{t "backtest.title"}}"
+        {{if $p}} data-sim hx-get="/backtest/summary" hx-trigger="load, retry" hx-swap="outerHTML"{{end}}>
+  {{if $p}}{{template "sim-busy" (t "bt.pending" .DataFrom.Year .DataTo.Year)}}{{end}}
+  {{if $p}}
+  <p class="lead"><span class="skel-t">{{t "bt.verdict" 1871 1970 .EndAge}}</span></p>
+  <span class="figure"><span class="skel-t">100 %</span></span>
+  <p class="breakdown"><span><span class="skel-t">{{t "bt.worst_ok" 1956 "000.000 €"}}</span></span></p>
+  <p class="muted"><span class="skel-t">{{t "bt.starts" 100 100}}</span>
+    <br><span class="skel-t">{{t "bt.partial_starts" 1971 2023 53 53}}</span></p>
+  {{else}}
   <p class="lead">{{t "bt.verdict" .FirstYear .LastYear .EndAge}}</p>
   <span class="figure">{{percent .Rate 0}}</span>
   <p class="breakdown"><span>
@@ -68,29 +72,29 @@
   </span></p>
   <p class="muted">{{t "bt.starts" .Successes .Starts}}
     {{if .PartialStarts}}<br>{{t "bt.partial_starts" .PartialFirst .PartialLast .PartialSuccesses .PartialStarts}}{{end}}</p>
+  {{end}}
   {{if .ShowHistNote}}<p class="callout">{{t "bt.history_beats_plan" (percent .HistReal 1) (percent .PlanReal 1)}}</p>{{end}}
 </section>
-{{end}}
 {{end}}
 
 {{/* Heat map of every start year (same calculation as bt-summary). */}}
 {{define "bt-heat"}}
-{{if .Pending}}
-<div id="bt-heat-wrap" data-sim hx-get="/backtest/heat" hx-trigger="load, retry" hx-swap="outerHTML">
-  {{template "sim-pending" (t "bt.heat_pending")}}
-  {{template "skel-chart" "chart-heat"}}
-</div>
-{{else}}
-<div id="bt-heat-wrap" class="sim-fade">
+{{$p := .Pending}}
+<div id="bt-heat-wrap" class="sim-region{{if $p}} is-pending{{else}} sim-fade{{end}}"
+     {{- if $p}} data-sim hx-get="/backtest/heat" hx-trigger="load, retry" hx-swap="outerHTML"{{end}}>
+  {{if $p}}
+  {{template "sim-busy" (t "bt.heat_pending")}}
+  <div class="chart chart-heat skel" aria-hidden="true"></div>
+  {{else}}
   <div class="chart chart-heat" data-chart="bt-heat" role="img" aria-label="{{t "bt.heat_title"}}"></div>
   <script type="application/json" id="bt-heat">{{json .Heat}}</script>
+  {{end}}
   <p class="heat-legend muted">
     <span><span class="dot dot-income" aria-hidden="true"></span>{{t "bt.legend_ok"}}</span>
     <span><span class="dot dot-debt" aria-hidden="true"></span>{{t "bt.legend_fail"}}</span>
     <span><span class="dot dot-partial" aria-hidden="true"></span>{{t "bt.legend_partial"}}</span>
   </p>
 </div>
-{{end}}
 {{end}}
 
 {{/* One replayed scenario (a crisis or a start year). */}}

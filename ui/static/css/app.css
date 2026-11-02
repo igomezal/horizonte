@@ -1525,7 +1525,7 @@ table.fire-table tr.fire-plan td {
   to { transform: rotate(360deg); }
 }
 @keyframes reveal {
-  to { opacity: 1; max-height: 6em; }
+  to { opacity: 1; max-height: 8em; }
 }
 @keyframes shimmer {
   0% { background-position: 100% 0; }
@@ -1538,6 +1538,13 @@ table.fire-table tr.fire-plan td {
 @keyframes nav-progress {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(250%); }
+}
+
+/* Always show the scrollbar track, so going between a short page and a
+   long one never shifts the layout sideways. (scrollbar-gutter: stable
+   isn't applied to the page scrollbar in Chrome, so it can't be used.) */
+html {
+  overflow-y: scroll;
 }
 
 .spinner {
@@ -1561,60 +1568,11 @@ table.fire-table tr.fire-plan td {
   font-weight: 400;
 }
 
-/* Placeholder while the first result is calculated. */
-.sim-pending {
-  display: flex;
-  gap: 1rem;
-  align-items: flex-start;
-  padding: 1.25rem 1.25rem;
-  border: 1px solid color-mix(in srgb, var(--app-accent) 35%, var(--app-rule));
-  border-left: 4px solid var(--app-accent);
-  border-radius: 0.5rem;
-  background: var(--papel-raised);
-}
-.lead-figure.verdict:has(> .sim-pending) {
-  display: block;
-}
-.sim-pending-text p {
-  margin: 0;
-}
-.sim-pending-title {
-  font-weight: 600;
-}
-/* "Still calculating" appears only if it takes more than a few seconds. */
-.sim-pending-slow {
-  opacity: 0;
-  max-height: 0;
-  overflow: hidden;
-  animation: reveal 0.4s ease 6s forwards;
-  margin-top: 0.35rem !important;
-}
-.sim-pending-error {
-  display: none;
-  color: var(--app-negative);
-}
-[data-state="error"] .spinner,
-[data-state="error"] .sim-pending-slow,
-[data-state="error"] .sim-inline-text,
-[data-state="error"] .sim-elapsed,
-[data-state="error"] .skel-group,
-[data-state="error"] .skel {
-  display: none;
-}
-[data-state="error"] .sim-pending-error {
-  display: inline;
-}
-[data-state="error"] .sim-pending-text .sim-pending-error {
-  display: block;
-}
-[data-state="error"] .sim-pending-title {
-  font-weight: 400;
-  color: var(--app-muted);
-}
-
-/* Skeletons: where the results will appear, so nothing jumps. */
-.skel {
-  border-radius: 0.4rem;
+/* Grey bars where numbers and charts will appear. .skel-t wraps placeholder
+   text of about the right length, so lines keep their real height. */
+.skel,
+.skel-t {
+  border-radius: 0.35rem;
   background: linear-gradient(90deg,
     color-mix(in srgb, var(--app-rule) 55%, transparent) 25%,
     color-mix(in srgb, var(--app-rule) 100%, transparent) 50%,
@@ -1622,34 +1580,107 @@ table.fire-table tr.fire-plan td {
   background-size: 200% 100%;
   animation: shimmer 1.6s ease-in-out infinite;
 }
-.skel-group {
-  display: grid;
-  gap: 0.75rem;
-  margin: 1.75rem 0 0;
+.skel-t {
+  color: transparent !important;
+  user-select: none;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
-.skel-text {
-  width: min(32rem, 90%);
-  height: 0.9rem;
-}
-.skel-short {
-  width: min(20rem, 60%);
-}
-.skel-figure {
-  width: 9rem;
-  height: 4.25rem;
-}
-.skel-chart {
-  width: 100%;
-  height: clamp(320px, 24vw, 420px);
-  margin-top: 2rem;
-}
-.skel-chart.chart-tall {
-  height: clamp(440px, 32vw, 600px);
-}
-.skel-chart.chart-heat {
-  margin-top: 0.5rem;
+.skel-callout {
+  border-left-color: var(--app-rule);
 }
 
+/* The floating card (sim-busy): visible while pending, recalculating, or
+   after a failure. Sticky with no height, so it takes no space. */
+.sim-region {
+  position: relative;
+}
+.sim-busy,
+.sim-busy[hidden] {
+  display: none !important;
+}
+.sim-region.is-pending > .sim-busy,
+.sim-region.htmx-request > .sim-busy,
+.sim-region[data-state="error"] > .sim-busy {
+  display: block !important;
+  position: sticky;
+  z-index: 5;
+  top: 35vh;
+  height: 0;
+  overflow: visible;
+}
+.sim-busy-card {
+  position: absolute;
+  left: 50%;
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  width: max-content;
+  max-width: min(30rem, calc(100vw - 2rem));
+  padding: 0.85rem 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 45%, var(--app-rule));
+  border-radius: 0.75rem;
+  background: var(--papel-raised);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.12);
+  transform: translate(-50%, 0);
+  animation: pop-in 0.18s ease-out;
+}
+.sim-busy-text p {
+  margin: 0;
+}
+.sim-busy-title {
+  font-weight: 600;
+  line-height: 1.5rem; /* the spinner's height: one line sits centred on it */
+}
+/* "Still calculating" appears only if it takes more than a few seconds. */
+.sim-pending-slow {
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  animation: reveal 0.4s ease 6s forwards;
+  margin-top: 0.3rem !important;
+  font-size: 0.9375rem;
+}
+.sim-pending-error {
+  display: none;
+  color: var(--app-negative);
+}
+[data-state="error"] .spinner,
+[data-state="error"] .sim-pending-slow,
+[data-state="error"] .sim-elapsed {
+  display: none;
+}
+[data-state="error"] .sim-pending-error {
+  display: inline;
+}
+[data-state="error"] .sim-busy-text .sim-pending-error {
+  display: block;
+  margin-top: 0.3rem;
+}
+[data-state="error"] .sim-busy-title {
+  font-weight: 400;
+  color: var(--app-muted);
+}
+[data-state="error"] .skel,
+[data-state="error"] .skel-t {
+  animation: none;
+}
+
+/* Recalculating: the old results fade back under the card. */
+.sim-region > :not(.sim-busy) {
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+.sim-region.htmx-request:not(.is-pending) > :not(.sim-busy) {
+  opacity: 0.3;
+  filter: saturate(0.4) blur(1.5px);
+  pointer-events: none;
+}
+
+/* Comparison table: fixed widths for the two odds columns, so a row's
+   spinner and later its figures never resize the table. */
+th.scen-odds-col {
+  width: 8.5rem;
+}
 .sim-inline {
   display: inline-flex;
   gap: 0.4rem;
@@ -1658,53 +1689,6 @@ table.fire-table tr.fire-plan td {
 }
 td.scen-odds-pending {
   text-align: center;
-}
-
-/* Results being recalculated: a card that stays in view while the old
-   results fade back, so it is obvious something is happening. */
-.sim-region {
-  position: relative;
-}
-.sim-busy,
-.sim-busy[hidden] {
-  display: none !important;
-}
-.sim-region.htmx-request > .sim-busy,
-.sim-region[data-state="error"] > .sim-busy {
-  display: block !important;
-  position: sticky;
-  z-index: 5;
-  top: 40vh;
-  height: 0;
-  overflow: visible;
-}
-.sim-busy-card {
-  position: absolute;
-  left: 50%;
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  width: max-content;
-  max-width: min(32rem, 90vw);
-  padding: 0.9rem 1.4rem;
-  border: 1px solid color-mix(in srgb, var(--app-accent) 45%, var(--app-rule));
-  border-radius: 0.75rem;
-  background: var(--papel-raised);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.12);
-  font-weight: 600;
-  transform: translate(-50%, 0);
-  animation: pop-in 0.18s ease-out;
-}
-.sim-region[data-state="error"] > .sim-busy .sim-busy-card {
-  font-weight: 400;
-}
-.sim-region > :not(.sim-busy) {
-  transition: opacity 0.25s ease, filter 0.25s ease;
-}
-.sim-region.htmx-request > :not(.sim-busy) {
-  opacity: 0.3;
-  filter: saturate(0.4) blur(1.5px);
-  pointer-events: none;
 }
 
 /* New results fade in instead of popping. htmx adds .htmx-added while it
@@ -1753,6 +1737,17 @@ button.is-busy::before,
 }
 a.is-busy::after {
   margin-left: 0.5em;
+}
+/* In the menu the spinner sits at the link's right edge, outside the text
+   flow, so the label never wraps and the menu never moves. */
+.sidebar a.is-busy {
+  position: relative;
+}
+.sidebar a.is-busy::after {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  margin: -0.4em 0 0;
 }
 
 /* Thin bar at the top while a navigation or request takes a while

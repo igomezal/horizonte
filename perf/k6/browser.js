@@ -110,7 +110,7 @@ async function settled(page, path) {
   const slow = SLOW_PATHS.test(path);
   const start = Date.now();
   await page.waitForTimeout(150);
-  await page.waitForFunction(() => !document.querySelector(".htmx-request, .sim-pending, .sim-inline"), {
+  await page.waitForFunction(() => !document.querySelector(".htmx-request, .is-pending, .sim-inline"), {
     timeout: slow ? SLOW_SETTLE_TIMEOUT : SETTLE_TIMEOUT,
     polling: 100,
   });

@@ -185,7 +185,17 @@ func (s *Server) pendingRolling(lang i18n.Lang, in engine.Input, hs *history.Ser
 	if all, ok := cachedSim[[]engine.RollingStart](s.sims, rollingKey(in)); ok {
 		return s.rollingFrom(lang, in, hs, all)
 	}
-	return btRolling{Pending: true, DataFrom: hs.Start, DataTo: hs.End(), EndAge: endAge(in)}
+	v := btRolling{Pending: true, DataFrom: hs.Start, DataTo: hs.End(), EndAge: endAge(in)}
+	v.histNote(in, hs) // known without the backtest, so the placeholder shows it
+	return v
+}
+
+// histNote compares the historical real stock return with the plan's.
+func (v *btRolling) histNote(in engine.Input, hs *history.Series) {
+	a := in.Assumptions
+	v.HistReal = hs.RealStockReturn()
+	v.PlanReal = (1+a.Returns[domain.AccountInvestment])/(1+a.Inflation) - 1
+	v.ShowHistNote = v.HistReal-v.PlanReal > 0.01
 }
 
 // buildRolling replays the plan from every start year (or takes it from the
@@ -263,10 +273,7 @@ func (s *Server) rollingFrom(lang i18n.Lang, in engine.Input, hs *history.Series
 		}
 	}
 
-	a := in.Assumptions
-	v.HistReal = hs.RealStockReturn()
-	v.PlanReal = (1+a.Returns[domain.AccountInvestment])/(1+a.Inflation) - 1
-	v.ShowHistNote = v.HistReal-v.PlanReal > 0.01
+	v.histNote(in, hs)
 	return v
 }
 

@@ -107,7 +107,15 @@ func (s *Server) pendingSuccessView(lang i18n.Lang, in engine.Input, seed uint64
 			return s.successViewFrom(lang, in, seed, mc)
 		}
 	}
-	return successView{HasPeople: len(in.People) > 0, Pending: true, Seed: seed, Runs: in.Assumptions.MCRuns}
+	// What is known before simulating, so the placeholder has the same
+	// layout as the results.
+	v := successView{HasPeople: len(in.People) > 0, Pending: true, Seed: seed, Runs: in.Assumptions.MCRuns, EndAge: endAge(in)}
+	for _, m := range in.Milestones {
+		if m.Conditional() {
+			v.Milestones = append(v.Milestones, mcMilestoneRow{Name: m.Name})
+		}
+	}
+	return v
 }
 
 // buildSuccessView runs the simulation (or takes it from the cache). The

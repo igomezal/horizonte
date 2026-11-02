@@ -20,40 +20,50 @@
 
 {{/* Results: refreshed when the settings change, or with new scenarios.
      Pending: the simulation isn't cached yet, so the page is sent at once
-     with this placeholder, which loads the results as soon as it appears. */}}
+     with the same layout, grey bars where the numbers go and a card saying
+     what is being calculated; it loads the results as soon as it appears.
+     Keeping the layout identical means nothing jumps when they arrive. */}}
 {{define "mc-results"}}
-{{if .Pending}}
-<section id="mc-results" class="mc-results" aria-label="{{t "success.title"}}" data-sim
-         hx-get="/success/results?seed={{.Seed}}" hx-trigger="load, retry, success-changed from:body" hx-target="this" hx-swap="outerHTML">
-  {{template "sim-pending" (t "mc.pending" (number (float .Runs) 0))}}
-  {{template "skel-figure"}}
-  {{template "skel-chart" "chart-tall"}}
-</section>
-{{else}}
-<section id="mc-results" class="mc-results sim-region sim-fade" aria-label="{{t "success.title"}}" data-sim
-         hx-get="/success/results?seed={{.Seed}}" hx-trigger="retry, success-changed from:body" hx-target="this" hx-swap="outerHTML">
+{{$p := .Pending}}
+<section id="mc-results" class="mc-results sim-region{{if $p}} is-pending{{else}} sim-fade{{end}}" aria-label="{{t "success.title"}}" data-sim
+         hx-get="/success/results?seed={{.Seed}}" hx-trigger="{{if $p}}load, {{end}}retry, success-changed from:body" hx-target="this" hx-swap="outerHTML">
+  {{if $p}}
+  {{template "sim-busy" (t "mc.pending" (number (float .Runs) 0))}}
+  {{else}}
   {{template "sim-busy" (t "mc.busy" (number (float .Runs) 0))}}
+  {{end}}
   <div class="lead-figure verdict">
     <p class="lead">{{t "mc.verdict" .EndAge}}</p>
+    {{if $p}}
+    <span class="figure"><span class="skel-t">100 %</span></span>
+    <p class="breakdown"><span><span class="skel-t">{{t "mc.bad_ok" "000.000 €"}}</span></span></p>
+    {{else}}
     <span class="figure">{{percent .Rate 0}}</span>
     <p class="breakdown"><span>
       {{if .BadFailed}}{{t "mc.bad_fail" .BadAge (month .BadMonth)}}{{else}}{{t "mc.bad_ok" (money .BadEnd)}}{{end}}
     </span></p>
+    {{end}}
     <p class="muted mc-meta">
       {{t "mc.runs" (number (float .Runs) 0)}}
       <button type="button" class="link-btn" hx-get="/success/results?reseed=1" hx-target="#mc-results" hx-swap="outerHTML"
-              hx-indicator="#mc-results" hx-disabled-elt="this">{{template "busy-label" (list (t "mc.reseed") (t "mc.reseeding"))}}</button>
+              hx-indicator="#mc-results" hx-disabled-elt="this"{{if $p}} disabled{{end}}>{{template "busy-label" (list (t "mc.reseed") (t "mc.reseeding"))}}</button>
     </p>
   </div>
 
   <h2 class="chart-title">{{t "mc.fan_title"}}</h2>
   <p class="section-desc muted">{{t "mc.fan_desc"}}</p>
+  {{if $p}}
+  <div class="chart chart-tall skel" aria-hidden="true"></div>
+  {{else}}
   <div class="chart chart-tall" data-chart="mc-fan-{{.Seed}}" role="img" aria-label="{{t "mc.fan_title"}}"></div>
   <script type="application/json" id="mc-fan-{{.Seed}}">{{json .Fan}}</script>
+  {{end}}
 
   <h2 class="chart-title">{{t "mc.survival_title"}}</h2>
   <p class="section-desc muted">{{t "mc.survival_desc"}}</p>
-  {{if .AlwaysLasts}}
+  {{if $p}}
+  <p class="callout skel-callout" aria-hidden="true"><span class="skel-t">{{t "mc.survival_always"}}</span></p>
+  {{else if .AlwaysLasts}}
   <p class="callout">{{t "mc.survival_always"}}</p>
   {{else}}
   <div class="chart" data-chart="mc-survival-{{.Seed}}" role="img" aria-label="{{t "mc.survival_title"}}"></div>
@@ -76,6 +86,12 @@
         {{range .Milestones}}
         <tr>
           <th scope="row">{{.Name}}</th>
+          {{if $p}}
+          <td class="num"><span class="skel-t">00 %</span></td>
+          <td><span class="skel-t">{{t "mc.when" "ene 2040" 50}}</span></td>
+          <td><span class="skel-t">{{t "mc.when" "ene 2040" 50}}</span></td>
+          <td><span class="skel-t">{{t "mc.when" "ene 2040" 50}}</span></td>
+          {{else}}
           <td class="num">{{percent .Share 0}}</td>
           {{if .Reached}}
           <td>{{t "mc.when" (month .Best) .BestAge}}</td>
@@ -83,6 +99,7 @@
           <td>{{t "mc.when" (month .Worst) .WorstAge}}</td>
           {{else}}
           <td colspan="3" class="muted">{{t "plan.timeline.unreached"}}</td>
+          {{end}}
           {{end}}
         </tr>
         {{end}}
@@ -94,7 +111,6 @@
   {{end}}
   <p class="note muted">{{t "mc.method"}}</p>
 </section>
-{{end}}
 {{end}}
 
 {{define "mc-settings"}}

@@ -173,7 +173,7 @@
   // tells the person the app is alive even when the server is slow.
   setInterval(() => {
     document.querySelectorAll("[data-elapsed]").forEach((el) => {
-      const active = el.closest(".sim-pending, .htmx-request");
+      const active = el.closest(".is-pending, .htmx-request");
       if (!active || (active.closest("[data-state]") && active.closest("[data-state]").dataset.state === "error")) {
         delete el.dataset.t0;
         el.textContent = "";
