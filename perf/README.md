@@ -35,6 +35,34 @@ To see the run in Sentry, start the server with `SENTRY_DSN` and
 traces, logs and the `horizonte.simulation.duration` metric are recorded; k6
 doesn't run the browser JavaScript, so no browser telemetry is sent.
 
+## Real browsers
+
+`perf/k6/browser.js` drives headless Chromium (k6's browser module) instead of
+sending requests: 30 users for 1 hour by default. Each visit opens a fresh
+browser context, clicks 15 random visible links with 2–8 s of think time, and
+closes it. The app's JavaScript runs, so Sentry receives browser transactions,
+web vitals, logs and Session Replays (and the traces link to the server's).
+
+It only clicks `<a href>` links (never buttons, forms or selects) and skips the
+export downloads, so it never changes the plan and can run against a real
+server:
+
+```sh
+k6 run -e BASE_URL=http://192.168.1.128:8347 perf/k6/browser.js
+# -e VUS=30 -e DURATION=1h -e CLICKS=15 -e THINK_MIN=2 -e THINK_MAX=8
+# -e SETTLE_TIMEOUT=15 -e SLOW_SETTLE_TIMEOUT=60   (seconds per click)
+```
+
+A click fails if its page hasn't finished loading within `SETTLE_TIMEOUT`, or
+`SLOW_SETTLE_TIMEOUT` for the simulation pages (Monte Carlo, scenarios,
+backtest), which run the engine on every request and get slow under load.
+When `DURATION` is over, visits stop clicking and close their browser on their
+own, so k6 exits cleanly instead of interrupting them mid-click.
+
+Each user is a Chromium process: 30 of them take about 7 GB of RAM. With k6
+0.49 and a recent Chrome, k6 logs harmless `unknown target type "browser_ui"`
+warnings; filter them out with `grep -v 'unknown target type'`.
+
 To record the server's CPU and memory during the run (Windows):
 
 ```powershell
