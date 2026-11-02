@@ -60,13 +60,17 @@ const (
 
 // New builds the server and its routes.
 func New(cfg Config) (*Server, error) {
-	r, err := newRenderer(cfg.Assets, cfg.Catalog, cfg.Dev, cfg.Sentry)
-	if err != nil {
-		return nil, fmt.Errorf("web: %w", err)
-	}
-	static, err := fs.Sub(cfg.Assets, "static")
+	staticFS, err := fs.Sub(cfg.Assets, "static")
 	if err != nil {
 		return nil, fmt.Errorf("web: static assets: %w", err)
+	}
+	static, err := sharedStaticAssets(cfg.Assets, staticFS, cfg.Dev)
+	if err != nil {
+		return nil, err
+	}
+	r, err := newRenderer(cfg.Assets, cfg.Catalog, cfg.Dev, cfg.Sentry, static)
+	if err != nil {
+		return nil, fmt.Errorf("web: %w", err)
 	}
 	s := &Server{
 		store:     cfg.Store,
@@ -81,29 +85,8 @@ func New(cfg Config) (*Server, error) {
 		s.now = time.Now
 	}
 
-	var staticHandler http.Handler = http.StripPrefix("/static/", http.FileServerFS(static))
-	if !cfg.Dev {
-		// Versioned URLs (?v=, see renderer.assets) never change content, so
-		// browsers may keep them; a new build uses new URLs.
-		next := staticHandler
-		staticHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("v") == s.render.assets {
-				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-	if cfg.Dev {
-		// Always revalidate in dev so CSS/JS edits show up on a normal reload.
-		next := staticHandler
-		staticHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Cache-Control", "no-cache")
-			next.ServeHTTP(w, r)
-		})
-	}
-
 	mux := http.NewServeMux()
-	mux.Handle("GET /static/", staticHandler)
+	mux.Handle("GET /static/", static)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /{$}", s.handleHome)
 	mux.HandleFunc("POST /lang", s.handleSetLang)

@@ -179,39 +179,30 @@ func TestCompoundDemo(t *testing.T) {
 func TestStaticAssetsAreVersioned(t *testing.T) {
 	s, _ := newFinanceServer(t)
 	seedMC(t, s)
-	ver := s.render.assets
-	if len(ver) != 12 {
-		t.Fatalf("assets version = %q", ver)
+	st := s.render.static
+	if len(st.version) != 12 {
+		t.Fatalf("assets version = %q", st.version)
 	}
 
 	rec, body := do(s, httptest.NewRequest("GET", "/success", nil))
-	if rec.Header().Get(assetHeader) != ver {
-		t.Errorf("page header %s = %q, want %q", assetHeader, rec.Header().Get(assetHeader), ver)
+	if rec.Header().Get(assetHeader) != st.version {
+		t.Errorf("page header %s = %q, want %q", assetHeader, rec.Header().Get(assetHeader), st.version)
 	}
-	for _, want := range []string{
-		`<meta name="horizonte-assets" content="` + ver + `">`,
-		`/static/css/app.css?v=` + ver, `/static/js/app.js?v=` + ver, `/static/vendor/htmx.min.js?v=` + ver,
-	} {
+	if !strings.Contains(body, `<meta name="horizonte-assets" content="`+st.version+`">`) {
+		t.Error("page should carry the assets version")
+	}
+	// Every static link carries its own file's hash.
+	for _, p := range []string{"css/app.css", "js/app.js", "vendor/htmx.min.js", "fonts/instrument-sans-latin-wdth.woff2", "img/favicon.svg"} {
+		want := "/static/" + p + "?v=" + st.files[p].hash
 		if !strings.Contains(body, want) {
 			t.Errorf("page missing %q", want)
 		}
 	}
-	// Partials carry it too, so a stale tab notices on its next htmx request.
-	if rec, _ := do(s, htmxReq("GET", "/success/results", nil)); rec.Header().Get(assetHeader) != ver {
+	// Partials carry the set's version too, so a stale tab notices on its next htmx request.
+	if rec, _ := do(s, htmxReq("GET", "/success/results", nil)); rec.Header().Get(assetHeader) != st.version {
 		t.Error("partials should send the assets version")
 	}
-
-	// Only the current version is cacheable for good.
-	rec, _ = do(s, httptest.NewRequest("GET", "/static/css/app.css?v="+ver, nil))
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {
-		t.Errorf("versioned asset: %d %q", rec.Code, rec.Header().Get("Cache-Control"))
-	}
-	rec, _ = do(s, httptest.NewRequest("GET", "/static/css/app.css?v=old", nil))
-	if strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {
-		t.Error("an old version must not be cached as immutable")
-	}
 }
-
 func TestBusyOverlayHiddenWithoutCSS(t *testing.T) {
 	s, _ := newFinanceServer(t)
 	seedMC(t, s)

@@ -11,7 +11,7 @@
     try { var th = localStorage.getItem("theme"); if (th) document.documentElement.dataset.theme = th; } catch (e) {}
   </script>
   <link rel="icon" href="{{asset "/static/img/favicon.svg"}}" type="image/svg+xml">
-  <link rel="preload" href="/static/fonts/instrument-sans-latin-wdth.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{asset "/static/fonts/instrument-sans-latin-wdth.woff2"}}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{asset "/static/vendor/pico.min.css"}}">
   <link rel="stylesheet" href="{{asset "/static/css/app.css"}}">
   {{- with .Sentry}}{{if .DSN}}

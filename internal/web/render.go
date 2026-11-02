@@ -2,8 +2,6 @@ package web
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/getsentry/sentry-go"
@@ -26,50 +24,25 @@ type renderer struct {
 	catalog *i18n.Catalog
 	dev     bool // re-parse on every render so template edits apply immediately
 	sentry  BrowserSentry
-	// assets identifies this build's static files (a hash of their contents).
-	// Static URLs carry it (?v=…) so browsers can cache them for good, and
-	// every response sends it (X-Horizonte-Assets) so a tab opened before a
-	// deploy notices and reloads instead of mixing new HTML with old CSS/JS.
-	assets string
+	// static gives the versioned URLs of static files (asset in templates)
+	// and the version of the whole set, which every response sends
+	// (X-Horizonte-Assets) so a tab opened before a deploy notices and
+	// reloads instead of mixing new HTML with old CSS/JS.
+	static *staticAssets
 
 	mu    sync.Mutex
 	pages map[string]*template.Template
 }
 
-func newRenderer(fsys fs.FS, catalog *i18n.Catalog, dev bool, snt BrowserSentry) (*renderer, error) {
-	r := &renderer{fsys: fsys, catalog: catalog, dev: dev, sentry: snt}
-	var err error
-	if r.assets, err = assetsVersion(fsys); err != nil {
-		return nil, err
-	}
+func newRenderer(fsys fs.FS, catalog *i18n.Catalog, dev bool, snt BrowserSentry, static *staticAssets) (*renderer, error) {
+	r := &renderer{fsys: fsys, catalog: catalog, dev: dev, sentry: snt, static: static}
 	if err := r.parseAll(); err != nil {
 		return nil, err
 	}
 	return r, nil
 }
 
-// assetsVersion hashes every file under static/.
-func assetsVersion(fsys fs.FS) (string, error) {
-	h := sha256.New()
-	err := fs.WalkDir(fsys, "static", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		b, err := fs.ReadFile(fsys, p)
-		if err != nil {
-			return err
-		}
-		h.Write([]byte(p))
-		h.Write(b)
-		return nil
-	})
-	if err != nil {
-		return "", fmt.Errorf("web: hash static assets: %w", err)
-	}
-	return hex.EncodeToString(h.Sum(nil))[:12], nil
-}
-
-// assetHeader is the response header carrying renderer.assets.
+// assetHeader is the response header carrying the static files' version.
 const assetHeader = "X-Horizonte-Assets"
 
 // baseFuncs are the functions available to every template. Language-dependent
@@ -90,9 +63,9 @@ func (r *renderer) baseFuncs() template.FuncMap {
 		"float":   func(n int) float64 { return float64(n) },
 		"list":    func(v ...string) []string { return v },
 		"str":     func(v any) string { return fmt.Sprint(v) },
-		// asset adds this build's version to a static URL.
-		"asset":  func(p string) string { return p + "?v=" + r.assets },
-		"assets": func() string { return r.assets },
+		// asset returns the versioned URL of a static file.
+		"asset":  func(p string) string { return r.static.URL(p) },
+		"assets": func() string { return r.static.version },
 		// dict builds a map from key/value pairs so a template can pass several
 		// named arguments to another template: {{template "field" (dict "F" . "name" "x")}}.
 		"dict": func(kv ...any) (map[string]any, error) {
@@ -223,7 +196,7 @@ func (r *renderer) render(w http.ResponseWriter, req *http.Request, status int, 
 			attribute.String("http.route", req.Pattern)))
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set(assetHeader, r.assets)
+	w.Header().Set(assetHeader, r.static.version)
 	w.WriteHeader(status)
 	_, err = buf.WriteTo(w)
 	return err

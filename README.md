@@ -23,7 +23,7 @@ Flags:
 |---|---|---|
 | `-addr` | `127.0.0.1:8347` | Listen address. Localhost only by default, so your data is not exposed on the network |
 | `-db` | `horizonte.db` | SQLite database file (git-ignored) |
-| `-dev` | `false` | Read templates and static files from `./ui` on every request, so edits show up without restarting |
+| `-dev` | `false` | Read templates and static files from `./ui` on every request, so edits show up without restarting. Without it, static files are minified, compressed (gzip, and brotli for browsers that ask for it, which over plain HTTP Chrome and Firefox don't) and cached by browsers (versioned URLs) |
 
 ## Build
 

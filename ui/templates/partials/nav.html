@@ -1,7 +1,7 @@
 {{define "sidebar"}}
 <aside class="sidebar" :class="navOpen && 'open'" @click.outside="navOpen = false">
   <a href="/" class="brand">
-    <img src="/static/img/favicon.svg" alt="" width="28" height="28">
+    <img src="{{asset "/static/img/favicon.svg"}}" alt="" width="28" height="28">
     <span>{{t "app.name"}}</span>
   </a>
   <nav aria-label="{{t "nav.menu"}}">
