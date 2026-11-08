@@ -1,6 +1,6 @@
 // Package es estimates the Spanish contributory retirement pension
 // (pensión de jubilación de la Seguridad Social) with the rules that apply
-// from 2027 on. Amounts are in today's euros (2025 bases and limits): public
+// from 2027 on. Amounts are in today's euros (2026 bases and limits): public
 // pensions are revalued with inflation, so the estimate grows with it.
 //
 // It is an approximation for planning. It assumes the contribution base stays
@@ -11,13 +11,13 @@ package es
 
 import "math"
 
-// 2025 limits.
+// 2026 limits.
 const (
-	MinBase        = 1381.20 // monthly minimum contribution base (general scheme)
-	MaxBase        = 4909.50 // monthly maximum contribution base
-	MaxPension     = 3267.60 // monthly maximum pension, 14 payments
+	MinBase        = 1424.40 // monthly minimum contribution base (general scheme)
+	MaxBase        = 5101.20 // monthly maximum contribution base
+	MaxPension     = 3359.60 // monthly maximum pension, 14 payments
 	MinPension     = 936.20  // monthly minimum pension at 65+, no dependent spouse, 14 payments
-	MaxComplement  = 564.70  // top-up to the minimum is capped at the non-contributory pension
+	MaxComplement  = 628.80  // top-up to the minimum is capped at the non-contributory pension
 	Payments       = 14
 	windowMonths   = 300 // contribution bases that make up the base reguladora (25 years)
 	divisor        = 350

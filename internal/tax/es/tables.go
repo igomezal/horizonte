@@ -1,5 +1,5 @@
 // Package es computes Spanish personal income tax (IRPF) for one person and
-// one year. Figures are the 2025 rules; update tables.go when they change.
+// one year. Figures are the 2026 rules; update tables.go when they change.
 package es
 
 // Bracket is one step of a progressive scale: Rate applies to income above
@@ -13,7 +13,7 @@ type Bracket struct {
 type Scale []Bracket
 
 // Year of the rules in this file.
-const RulesYear = 2025
+const RulesYear = 2026
 
 // StateGeneral is the state half of the general scale (escala estatal, art. 63 LIRPF).
 var StateGeneral = Scale{
@@ -37,8 +37,8 @@ var Regions = []Region{
 	{"general", StateGeneral},
 	{"madrid", Scale{{13362.22, 0.085}, {19004.63, 0.107}, {35425.68, 0.128}, {57320.40, 0.174}, {0, 0.205}}},
 	{"cataluna", Scale{
-		{12450, 0.105}, {17707.20, 0.12}, {21000, 0.14}, {33007.20, 0.15}, {53407.20, 0.188},
-		{90000, 0.215}, {120000, 0.235}, {175000, 0.245}, {0, 0.255},
+		{12500, 0.095}, {22000, 0.125}, {33000, 0.16}, {53000, 0.19}, {90000, 0.215},
+		{120000, 0.235}, {175000, 0.245}, {0, 0.255},
 	}},
 }
 
@@ -54,10 +54,10 @@ func FindRegion(key string) Region {
 
 const (
 	// Employee Social Security contributions: common contingencies 4,70 %,
-	// unemployment 1,55 %, training 0,10 % and MEI 0,13 %.
-	SocialSecurityRate = 0.0648
-	// Maximum contribution base: 4.909,50 € a month.
-	SocialSecurityMaxBase = 4909.50 * 12
+	// unemployment 1,55 %, training 0,10 % and MEI 0,15 %.
+	SocialSecurityRate = 0.0650
+	// Maximum contribution base: 5.101,20 € a month.
+	SocialSecurityMaxBase = 5101.20 * 12
 
 	// Deductible "other expenses" of work income (art. 19.2.f LIRPF).
 	WorkOtherExpenses = 2000.0

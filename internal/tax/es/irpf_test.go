@@ -24,15 +24,15 @@ func TestScaleApply(t *testing.T) {
 }
 
 func TestSalary30000General(t *testing.T) {
-	// Worked by hand: SS 1.944; net 28.056 − 2.000 = 26.056 (no art. 20
-	// reduction above 19.747,50); combined tax 2 × 2.991,15 = 5.982,30;
-	// minimum 5.550 × 19 % = 1.054,50 → 4.927,80 €.
+	// Worked by hand: SS 1.950; net 28.050 − 2.000 = 26.050 (no art. 20
+	// reduction above 19.747,50); combined tax 2 × 2.990,25 = 5.980,50;
+	// minimum 5.550 × 19 % = 1.054,50 → 4.926,00 €.
 	b := Compute(Income{Age: 36, Salary: 30000}, FindRegion("general"))
-	if !near(b.SocialSecurity, 1944, 1e-6) || !near(b.GeneralBase, 26056, 1e-6) {
+	if !near(b.SocialSecurity, 1950, 1e-6) || !near(b.GeneralBase, 26050, 1e-6) {
 		t.Fatalf("breakdown = %+v", b)
 	}
-	if !near(b.Tax, 4927.80, 0.01) {
-		t.Errorf("tax = %.2f, want 4927.80", b.Tax)
+	if !near(b.Tax, 4926.00, 0.01) {
+		t.Errorf("tax = %.2f, want 4926.00", b.Tax)
 	}
 }
 

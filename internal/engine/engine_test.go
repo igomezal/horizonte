@@ -677,15 +677,15 @@ func TestIRPFWithholdingAndSettlement(t *testing.T) {
 		t.Fatalf("tax years = %d", len(res.TaxYears))
 	}
 	y := res.TaxYears[0]
-	if y.Year != 2027 || y.Partial || math.Abs(y.IRPF()-4927.80) > 0.05 {
-		t.Errorf("2027 IRPF = %.2f, want 4927.80 (%+v)", y.IRPF(), y)
+	if y.Year != 2027 || y.Partial || math.Abs(y.IRPF()-4926.00) > 0.05 {
+		t.Errorf("2027 IRPF = %.2f, want 4926.00 (%+v)", y.IRPF(), y)
 	}
 	// Withholding estimated from the same salary: settlement ≈ 0.
 	if math.Abs(y.Settlement) > 0.05 {
 		t.Errorf("settlement = %.2f, want ≈ 0", y.Settlement)
 	}
-	// Monthly charge = Social Security 6,48 % + withholding (4.927,80 / 30.000).
-	want := 2500*0.0648 + 2500*4927.80/30000
+	// Monthly charge = Social Security 6,50 % + withholding (4.926,00 / 30.000).
+	want := 2500*0.0650 + 2500*4926.00/30000
 	if got := res.Months[0].Tax; math.Abs(got-want) > 0.01 {
 		t.Errorf("monthly tax = %.2f, want %.2f", got, want)
 	}
