@@ -98,6 +98,7 @@ type Account struct {
 	MonthlyContribution float64  `json:"monthly_contribution,omitempty"`
 	AnnualReturn        *float64 `json:"annual_return,omitempty"`
 	ContributionEndMS   *int64   `json:"contribution_end_milestone_id,omitempty"`
+	CostBasis           *float64 `json:"cost_basis,omitempty"`
 }
 
 // span is the start and end shared by streams and repayments.
@@ -184,6 +185,22 @@ func month(m domain.Month) string {
 
 func eur(c domain.Cents) float64 { return c.Euros() }
 
+func optEur(c *domain.Cents) *float64 {
+	if c == nil {
+		return nil
+	}
+	v := c.Euros()
+	return &v
+}
+
+func optCents(e *float64) *domain.Cents {
+	if e == nil {
+		return nil
+	}
+	v := domain.FromEuros(*e)
+	return &v
+}
+
 func mkSpan(start, end domain.Month, sms, ems *int64) span {
 	return span{Start: month(start), End: month(end), StartMS: sms, EndMS: ems}
 }
@@ -226,7 +243,7 @@ func planFrom(name string, snap store.Snapshot) Plan {
 	for _, x := range snap.Accounts {
 		p.Accounts = append(p.Accounts, Account{ID: x.ID, Name: x.Name, Kind: string(x.Kind), OwnerID: x.OwnerID,
 			Balance: eur(x.Balance), MonthlyContribution: eur(x.MonthlyContribution), AnnualReturn: x.AnnualReturn,
-			ContributionEndMS: x.ContributionEndMS})
+			ContributionEndMS: x.ContributionEndMS, CostBasis: optEur(x.CostBasis)})
 	}
 	for _, x := range snap.Incomes {
 		p.Incomes = append(p.Incomes, Income{ID: x.ID, Name: x.Name, Kind: string(x.Kind), OwnerID: x.OwnerID,
@@ -465,7 +482,7 @@ func readPlan(p Plan, now domain.Month) (string, store.Snapshot, error) {
 		}
 		d := domain.Account{ID: x.ID, Name: x.Name, Kind: domain.AccountKind(x.Kind), OwnerID: x.OwnerID,
 			Balance: domain.FromEuros(x.Balance), MonthlyContribution: domain.FromEuros(x.MonthlyContribution),
-			AnnualReturn: x.AnnualReturn, ContributionEndMS: x.ContributionEndMS}
+			AnnualReturn: x.AnnualReturn, ContributionEndMS: x.ContributionEndMS, CostBasis: optCents(x.CostBasis)}
 		if err := invalid("accounts", x.Name, d.Validate()); err != nil {
 			return "", snap, err
 		}

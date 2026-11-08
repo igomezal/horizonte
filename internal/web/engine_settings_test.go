@@ -6,8 +6,30 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/igomezal/horizonte/internal/domain"
 	"github.com/igomezal/horizonte/internal/engine"
 )
+
+func TestCostBasisFromAccountForm(t *testing.T) {
+	s, st := newFinanceServer(t)
+	plan, _ := st.CurrentPlan(t.Context(), "x")
+	mustPost(t, s, "/finances/accounts", url.Values{"name": {"Fondo"}, "kind": {"investment"}, "balance": {"20000"}, "cost_basis": {"8000"}})
+	accs, _ := st.ListAccounts(t.Context(), plan)
+	if len(accs) != 1 || accs[0].CostBasis == nil || *accs[0].CostBasis != 800000 {
+		t.Fatalf("accounts = %+v", accs)
+	}
+	// Left empty there is no basis, and it is kept off kinds it does not apply to.
+	mustPost(t, s, "/finances/accounts", url.Values{"name": {"Vacía"}, "kind": {"investment"}, "balance": {"1"}, "cost_basis": {""}})
+	mustPost(t, s, "/finances/accounts", url.Values{"name": {"Nómina"}, "kind": {"cash"}, "balance": {"1"}, "cost_basis": {"5"}})
+	accs, _ = st.ListAccounts(t.Context(), plan)
+	if accs[1].CostBasis != nil || accs[2].CostBasis != nil {
+		t.Errorf("basis = %v / %v, want none", accs[1].CostBasis, accs[2].CostBasis)
+	}
+	rec, _ := do(s, htmxReq("POST", "/finances/accounts", url.Values{"name": {"Mal"}, "kind": {"investment"}, "balance": {"1"}, "cost_basis": {"-1"}}))
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("negative basis: %d", rec.Code)
+	}
+}
 
 func baseAssumptionsForm() url.Values {
 	return url.Values{"inflation": {"2,5"}, "tax_rate": {"20"}, "surplus": {""}, "return_cash": {"0"},
@@ -48,6 +70,10 @@ func TestSimKeysSeePlanSettings(t *testing.T) {
 	set := engine.MCSettings{Runs: 10, Seed: 1}
 	for name, change := range map[string]func(*engine.Input){
 		"prepayment reserve": func(in *engine.Input) { in.Assumptions.PrepaymentReserve = 100 },
+		"cost basis": func(in *engine.Input) {
+			c := domain.Cents(100)
+			in.Accounts = []domain.Account{{CostBasis: &c}}
+		},
 	} {
 		in := base()
 		change(&in)

@@ -48,6 +48,18 @@ func (p *formParser) money(name string, required bool) domain.Cents {
 	return domain.FromEuros(f)
 }
 
+// optMoney parses a euro amount. Empty returns nil.
+func (p *formParser) optMoney(name string) *domain.Cents {
+	if p.str(name) == "" {
+		return nil
+	}
+	c := p.money(name, false)
+	if p.errs[name] != "" {
+		return nil
+	}
+	return &c
+}
+
 // optPercent parses a percentage ("3,5" → 0.035). Empty returns nil.
 func (p *formParser) optPercent(name string) *float64 {
 	s := p.str(name)
@@ -144,6 +156,13 @@ func (p *formParser) merge(errs domain.Errors) {
 
 func inMoney(lang i18n.Lang, c domain.Cents) string {
 	return i18n.FormatInput(lang, c.Euros(), 2)
+}
+
+func inOptMoney(lang i18n.Lang, c *domain.Cents) string {
+	if c == nil {
+		return ""
+	}
+	return inMoney(lang, *c)
 }
 
 func inPercent(lang i18n.Lang, r float64) string {

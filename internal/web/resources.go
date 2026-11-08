@@ -183,6 +183,7 @@ func newResources(st *store.Store) map[string]*resource {
 					"name": a.Name, "kind": string(a.Kind), "owner": inOwner(a.OwnerID),
 					"balance": inMoney(lang, a.Balance), "contribution": inMoney(lang, a.MonthlyContribution),
 					"return": inOptPercent(lang, a.AnnualReturn), "contrib_end_ms": inOwner(a.ContributionEndMS),
+					"cost_basis": inOptMoney(lang, a.CostBasis),
 				}
 			},
 			parse: func(p *formParser, now domain.Month) (any, domain.Errors) {
@@ -194,6 +195,10 @@ func newResources(st *store.Store) map[string]*resource {
 					MonthlyContribution: p.money("contribution", false),
 					AnnualReturn:        p.optPercent("return"),
 					ContributionEndMS:   p.owner("contrib_end_ms"),
+					CostBasis:           p.optMoney("cost_basis"),
+				}
+				if !it.Kind.HasCostBasis() {
+					it.CostBasis = nil
 				}
 				p.merge(it.Validate())
 				return it, p.errs

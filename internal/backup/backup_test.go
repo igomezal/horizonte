@@ -37,7 +37,7 @@ func fullSnapshot() store.Snapshot {
 		},
 		Accounts: []domain.Account{
 			{ID: 30, Name: "Cuenta", Kind: domain.AccountCash, OwnerID: ptr(int64(10)), Balance: 1234567},
-			{ID: 31, Name: "Fondo", Kind: domain.AccountInvestment, MonthlyContribution: 50000, AnnualReturn: ptr(0.065), ContributionEndMS: ptr(int64(21))},
+			{ID: 31, Name: "Fondo", Kind: domain.AccountInvestment, MonthlyContribution: 50000, AnnualReturn: ptr(0.065), ContributionEndMS: ptr(int64(21)), CostBasis: ptr(domain.Cents(987650))},
 		},
 		Incomes: []domain.Income{
 			{ID: 40, Name: "Nómina", Kind: domain.IncomeSalary, OwnerID: ptr(int64(11)), Amount: 250099, PaymentsPerYear: 14, EndMS: ptr(int64(20))},

@@ -131,6 +131,62 @@ func TestRedirectsRespectTheBudget(t *testing.T) {
 	}
 }
 
+// spendFrom sells off an account to pay 1.000 € of expenses a month for a year
+// and returns the realised gains the Spanish model recorded in the first full
+// calendar year.
+func spendFrom(acc domain.Account) float64 {
+	a := flat()
+	a.TaxModel, a.TaxRegion = TaxES, "general"
+	first := domain.Month{Year: 2027, Month: 1}
+	birth := domain.Month{Year: 1960, Month: 1}
+	res := Simulate(Input{
+		People:      []domain.Person{{ID: 1, Name: "Ana", Birth: birth, LifeExpectancy: 68}},
+		Accounts:    []domain.Account{acc},
+		Expenses:    []domain.Expense{{Amount: 100000, PaymentsPerYear: 12}},
+		Assumptions: a,
+		Start:       first,
+	})
+	return res.TaxYears[0].People[0].Income.Savings
+}
+
+func TestCostBasisSetsTheGain(t *testing.T) {
+	cents := func(c domain.Cents) *domain.Cents { return &c }
+	inv := domain.Account{ID: 1, Kind: domain.AccountInvestment, Balance: 10000000} // 100.000 €
+
+	if got := spendFrom(inv); got != 0 {
+		t.Errorf("without a basis the balance is the cost: gain = %v", got)
+	}
+	inv.CostBasis = cents(4000000) // 60 % of the balance is gain
+	if got := spendFrom(inv); !near(got, 12000*0.6, 1e-6) {
+		t.Errorf("gain with basis = %v, want 7200", got)
+	}
+	inv.CostBasis = cents(0)
+	if got := spendFrom(inv); !near(got, 12000, 1e-6) {
+		t.Errorf("gain with no cost = %v, want everything", got)
+	}
+	inv.CostBasis = cents(15000000) // bought for more than it is worth
+	if got := spendFrom(inv); got != 0 {
+		t.Errorf("gain at a loss = %v, want 0", got)
+	}
+
+	other := domain.Account{ID: 1, Kind: domain.AccountOther, Balance: 10000000, CostBasis: cents(5000000)}
+	if got := spendFrom(other); !near(got, 6000, 1e-6) {
+		t.Errorf("other account gain = %v, want 6000", got)
+	}
+	cash := domain.Account{ID: 1, Kind: domain.AccountCash, Balance: 10000000, CostBasis: cents(0)}
+	if got := spendFrom(cash); got != 0 {
+		t.Errorf("a current account has no gains: %v", got)
+	}
+}
+
+func TestNegativeCostBasisIsRejected(t *testing.T) {
+	c := domain.Cents(-1)
+	acc := domain.Account{Name: "x", Kind: domain.AccountInvestment, CostBasis: &c}
+	if errs := acc.Validate(); errs["cost_basis"] == "" {
+		t.Errorf("errors = %v", errs)
+	}
+}
+
 func TestNegativeReserveIsRejected(t *testing.T) {
 	a := DefaultAssumptions()
 	a.PrepaymentReserve = -1

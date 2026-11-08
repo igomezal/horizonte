@@ -312,7 +312,8 @@
 
 {{define "accounts-form"}}
 {{template "form-open" .}}
-  <div class="form-grid">
+  {{$kind := index .V "kind"}}
+  <div class="form-grid" x-data="{ kind: '{{$kind}}' }" @change="if ($event.target.name === 'kind') kind = $event.target.value">
     {{template "field" (dict "F" . "name" "name" "label" "field.name" "type" "text" "required" true "placeholder" "accounts.placeholder")}}
     {{template "f-select" (dict "F" . "name" "kind" "label" "field.type" "options" .Opt.AccountKinds "prefix" "account.kind")}}
     {{template "f-owner" .}}
@@ -330,6 +331,9 @@
     </div>
     {{end}}
     {{template "field" (dict "F" . "name" "return" "label" "field.return" "type" "percent" "placeholder" "placeholder.default" "hint" "hint.return")}}
+    <div class="field-group" x-show="['investment', 'other', 'realestate'].includes(kind)"{{if not (or (eq $kind "investment") (eq $kind "other") (eq $kind "realestate"))}} x-cloak{{end}}>
+      {{template "field" (dict "F" . "name" "cost_basis" "label" "field.cost_basis" "type" "money" "placeholder" "placeholder.default" "hint" "hint.cost_basis")}}
+    </div>
   </div>
   {{template "form-actions" .}}
 </form>

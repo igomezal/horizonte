@@ -346,8 +346,13 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 	}
 
 	// Purchase cost of each account, to tax only the gains of a withdrawal.
-	// Starting balances count as cost (existing unrealised gains are unknown).
+	// Starting balances count as cost unless the account says what it cost.
 	basis := append([]float64(nil), balances...)
+	for i, acc := range in.Accounts {
+		if acc.CostBasis != nil && acc.Kind.HasCostBasis() {
+			basis[i] = acc.CostBasis.Euros()
+		}
+	}
 	var tx *taxer
 	if a.TaxModel == TaxES && len(in.People) > 0 {
 		tx = newTaxer(in)

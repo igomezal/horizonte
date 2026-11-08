@@ -126,6 +126,11 @@ const (
 // AccountKinds lists account kinds in display order.
 var AccountKinds = []AccountKind{AccountCash, AccountDeposit, AccountInvestment, AccountPension, AccountRealEstate, AccountOther}
 
+// HasCostBasis reports whether gains on this kind are worked out from a cost.
+func (k AccountKind) HasCostBasis() bool {
+	return k == AccountInvestment || k == AccountOther || k == AccountRealEstate
+}
+
 // Account is something you own that has a balance.
 type Account struct {
 	ID                  int64
@@ -137,6 +142,9 @@ type Account struct {
 	MonthlyContribution Cents
 	AnnualReturn        *float64 // nil = use the plan's default for this kind
 	ContributionEndMS   *int64   // contributions stop when this milestone happens
+	// CostBasis is what the holdings cost, for the gain on investment, other
+	// and real-estate accounts. Nil counts the starting balance as the cost.
+	CostBasis *Cents
 }
 
 // Validate checks the account.
@@ -148,6 +156,9 @@ func (a Account) Validate() Errors {
 	}
 	validateNonNegative("balance", a.Balance, errs)
 	validateNonNegative("contribution", a.MonthlyContribution, errs)
+	if a.CostBasis != nil {
+		validateNonNegative("cost_basis", *a.CostBasis, errs)
+	}
 	validateRate("return", a.AnnualReturn, -0.5, 0.5, errs)
 	return errs
 }

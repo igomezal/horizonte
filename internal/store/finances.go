@@ -68,6 +68,13 @@ func nullFloat(p *float64) any {
 	return *p
 }
 
+func nullCents(p *domain.Cents) any {
+	if p == nil {
+		return nil
+	}
+	return int64(*p)
+}
+
 func nullMonth(m domain.Month) any {
 	if m.IsZero() {
 		return nil
@@ -88,6 +95,14 @@ func floatPtr(n sql.NullFloat64) *float64 {
 		return nil
 	}
 	v := n.Float64
+	return &v
+}
+
+func centsPtr(n sql.NullInt64) *domain.Cents {
+	if !n.Valid {
+		return nil
+	}
+	v := domain.Cents(n.Int64)
 	return &v
 }
 
@@ -199,14 +214,15 @@ func (s *Store) DeletePerson(ctx context.Context, planID, id int64) error {
 // ---------- Accounts ----------
 
 const accountCols = `id, plan_id, name, kind, owner_id, balance_cents, monthly_contribution_cents, annual_return,
-	contribution_end_milestone_id`
+	contribution_end_milestone_id, cost_basis_cents`
 
 func scanAccount(sc interface{ Scan(...any) error }) (domain.Account, error) {
 	var a domain.Account
-	var owner, contribEnd sql.NullInt64
+	var owner, contribEnd, costBasis sql.NullInt64
 	var ret sql.NullFloat64
-	err := sc.Scan(&a.ID, &a.PlanID, &a.Name, &a.Kind, &owner, &a.Balance, &a.MonthlyContribution, &ret, &contribEnd)
+	err := sc.Scan(&a.ID, &a.PlanID, &a.Name, &a.Kind, &owner, &a.Balance, &a.MonthlyContribution, &ret, &contribEnd, &costBasis)
 	a.OwnerID, a.AnnualReturn, a.ContributionEndMS = intPtr(owner), floatPtr(ret), intPtr(contribEnd)
+	a.CostBasis = centsPtr(costBasis)
 	return a, err
 }
 
@@ -248,14 +264,15 @@ func (s *Store) SaveAccount(ctx context.Context, a domain.Account) (int64, error
 	}
 	if a.ID == 0 {
 		return s.insert(ctx, `INSERT INTO accounts (plan_id, name, kind, owner_id, balance_cents, monthly_contribution_cents,
-			annual_return, contribution_end_milestone_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			annual_return, contribution_end_milestone_id, cost_basis_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			a.PlanID, a.Name, a.Kind, nullInt(a.OwnerID), a.Balance, a.MonthlyContribution, nullFloat(a.AnnualReturn),
-			nullInt(a.ContributionEndMS))
+			nullInt(a.ContributionEndMS), nullCents(a.CostBasis))
 	}
 	return a.ID, s.execOne(ctx, `UPDATE accounts SET name = ?, kind = ?, owner_id = ?, balance_cents = ?,
-		monthly_contribution_cents = ?, annual_return = ?, contribution_end_milestone_id = ? WHERE id = ? AND plan_id = ?`,
+		monthly_contribution_cents = ?, annual_return = ?, contribution_end_milestone_id = ?, cost_basis_cents = ?
+		WHERE id = ? AND plan_id = ?`,
 		a.Name, a.Kind, nullInt(a.OwnerID), a.Balance, a.MonthlyContribution, nullFloat(a.AnnualReturn),
-		nullInt(a.ContributionEndMS), a.ID, a.PlanID)
+		nullInt(a.ContributionEndMS), nullCents(a.CostBasis), a.ID, a.PlanID)
 }
 
 // DeleteAccount removes an account.
