@@ -231,6 +231,7 @@
       {{if $err}}<small class="field-error" id="{{$id}}-msg">{{t $err}}</small>
       {{else}}<small class="field-hint" id="{{$id}}-msg">{{t "hint.surplus"}}</small>{{end}}
     </div>
+    {{template "field" (dict "F" . "name" "prepay_reserve" "label" "field.prepay_reserve" "type" "money" "hint" "hint.prepay_reserve")}}
   </div>
   <p class="callout tax-disclaimer">{{t "tax.disclaimer"}}</p>
   <h3 class="form-subhead">{{t "plan.returns"}}</h3>

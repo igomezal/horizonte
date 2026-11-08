@@ -508,6 +508,7 @@ func (s *Server) assumptionsValues(lang i18n.Lang, a engine.Assumptions) map[str
 	}
 	v["wd_order"] = engine.FormatOrder(order)
 	v["pension_from"] = inOwner(a.PensionAvailableMS)
+	v["prepay_reserve"] = inMoney(lang, a.PrepaymentReserve)
 	v["tax_model"], v["tax_region"] = a.TaxModel, a.TaxRegion
 	if v["tax_model"] == "" {
 		v["tax_model"] = engine.TaxES
@@ -546,6 +547,8 @@ func parseAssumptions(p *formParser) (engine.Assumptions, domain.Errors) {
 		TaxRegion:        p.str("tax_region"),
 		Returns:          map[domain.AccountKind]float64{},
 		SurplusAccountID: p.owner("surplus"),
+		// Empty means no reserve; a request without the field keeps the plan's.
+		PrepaymentReserve: p.money("prepay_reserve", false),
 	}
 	for _, k := range domain.AccountKinds {
 		a.Returns[k] = p.percent("return_" + string(k))
@@ -651,6 +654,9 @@ func (s *Server) handleSaveAssumptions(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, ok := r.PostForm["tax_model"]; !ok {
 			a.TaxModel, a.TaxRegion = current.TaxModel, current.TaxRegion
+		}
+		if _, ok := r.PostForm["prepay_reserve"]; !ok {
+			a.PrepaymentReserve = current.PrepaymentReserve
 		}
 		err = s.store.SaveAssumptions(r.Context(), fc.plan, a)
 		if errors.Is(err, store.ErrNotFound) {

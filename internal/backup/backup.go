@@ -162,6 +162,7 @@ type Assumptions struct {
 	Withdrawal         Withdrawal         `json:"withdrawal"`
 	Order              []string           `json:"withdrawal_order,omitempty"`
 	PensionAvailableMS *int64             `json:"pension_available_milestone_id,omitempty"`
+	PrepaymentReserve  float64            `json:"prepayment_reserve,omitempty"`
 }
 
 type Withdrawal struct {
@@ -251,7 +252,7 @@ func planFrom(name string, snap store.Snapshot) Plan {
 		Returns: kindMap(a.Returns), Volatility: kindMap(a.Volatility), MCRuns: a.MCRuns, SurplusAccountID: a.SurplusAccountID,
 		Withdrawal: Withdrawal{Strategy: string(a.Withdrawal.Strategy), StartMS: a.Withdrawal.StartMS,
 			Rate: a.Withdrawal.Rate, Floor: a.Withdrawal.Floor, Ceiling: a.Withdrawal.Ceiling},
-		PensionAvailableMS: a.PensionAvailableMS}
+		PensionAvailableMS: a.PensionAvailableMS, PrepaymentReserve: eur(a.PrepaymentReserve)}
 	for _, k := range a.Order {
 		p.Assumptions.Order = append(p.Assumptions.Order, string(k))
 	}
@@ -593,6 +594,7 @@ func readPlan(p Plan, now domain.Month) (string, store.Snapshot, error) {
 		}
 	}
 	a.SurplusAccountID, a.PensionAvailableMS = x.SurplusAccountID, x.PensionAvailableMS
+	a.PrepaymentReserve = domain.FromEuros(x.PrepaymentReserve)
 	for _, l := range []struct {
 		field string
 		id    *int64

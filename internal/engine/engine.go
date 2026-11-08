@@ -34,6 +34,9 @@ type Assumptions struct {
 	// PensionAvailableMS: pension plans cannot be drawn before this milestone
 	// (nil = always available).
 	PensionAvailableMS *int64
+	// PrepaymentReserve is the money, in today's euros, that the liquid
+	// accounts keep when funding early repayments. It rises with inflation.
+	PrepaymentReserve domain.Cents
 }
 
 // DefaultAssumptions are reasonable long-run nominal values for Spain.
@@ -91,6 +94,9 @@ func (a Assumptions) Validate() domain.Errors {
 	}
 	if !runsOK {
 		errs.Add("mc_runs", domain.ErrChoice)
+	}
+	if a.PrepaymentReserve < 0 {
+		errs.Add("prepay_reserve", domain.ErrNegative)
 	}
 	return errs
 }
@@ -477,16 +483,21 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		}
 
 		// 3b. Early repayments (amortizaciones anticipadas). They are optional,
-		// so each is capped to the money available (this month's surplus plus
-		// drawable savings) and never causes a shortfall.
-		available := math.Max(0, row.Savings())
-		locked := pensionLocked(m)
-		for _, i := range order {
-			if locked && in.Accounts[i].Kind == domain.AccountPension {
-				continue
+		// so together they are capped to this month's surplus plus what the
+		// liquid accounts hold above the reserve once any deficit this month is
+		// covered. Pension plans and property never fund them. A repayment
+		// therefore never causes a shortfall in the month it is made, though
+		// the money it spends is no longer there to cover later months.
+		before := row.Savings()
+		liquidNow := 0.0
+		for i, acc := range in.Accounts {
+			if fundsPrepayments(acc.Kind) {
+				liquidNow += balances[i]
 			}
-			available += balances[i]
 		}
+		available := math.Max(0, before) +
+			math.Max(0, liquidNow+math.Min(0, before)-a.PrepaymentReserve.Euros()*priceIndex[t])
+		locked := pensionLocked(m)
 		for _, pp := range in.Prepayments {
 			i, ok := debtIdx[pp.DebtID]
 			if !ok || !pp.DueIn(resolved, m, in.Start) {
@@ -582,39 +593,50 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 				}
 			}
 		} else if cash < 0 {
-			need := -cash
-			for _, i := range order {
-				if locked && in.Accounts[i].Kind == domain.AccountPension {
-					continue
-				}
-				take := math.Min(balances[i], need)
-				if take <= 0 {
-					continue
-				}
-				if tx != nil {
-					acc := in.Accounts[i]
-					switch acc.Kind {
-					case domain.AccountPension: // taxed as work income
-						tx.addPlanWithdrawal(acc.OwnerID, take)
-					case domain.AccountInvestment, domain.AccountOther: // only the gain is taxed
-						if gain := take * math.Max(0, 1-basis[i]/balances[i]); gain > 0 {
-							tx.addSavings(acc.OwnerID, gain)
+			// draw takes need from the accounts in withdrawal order and returns
+			// what they could not cover.
+			draw := func(need float64, liquidOnly bool) float64 {
+				for _, i := range order {
+					if need <= 0 {
+						break
+					}
+					kind := in.Accounts[i].Kind
+					if (locked && kind == domain.AccountPension) || (liquidOnly && !fundsPrepayments(kind)) {
+						continue
+					}
+					take := math.Min(balances[i], need)
+					if take <= 0 {
+						continue
+					}
+					if tx != nil {
+						acc := in.Accounts[i]
+						switch acc.Kind {
+						case domain.AccountPension: // taxed as work income
+							tx.addPlanWithdrawal(acc.OwnerID, take)
+						case domain.AccountInvestment, domain.AccountOther: // only the gain is taxed
+							if gain := take * math.Max(0, 1-basis[i]/balances[i]); gain > 0 {
+								tx.addSavings(acc.OwnerID, gain)
+							}
 						}
 					}
+					if balances[i] > 0 {
+						basis[i] -= take * basis[i] / balances[i]
+					}
+					balances[i] -= take
+					row.Withdrawals += take
+					if flow != nil {
+						flow.Withdrawals[i] += take
+					}
+					need -= take
 				}
-				if balances[i] > 0 {
-					basis[i] -= take * basis[i] / balances[i]
-				}
-				balances[i] -= take
-				row.Withdrawals += take
-				if flow != nil {
-					flow.Withdrawals[i] += take
-				}
-				need -= take
-				if need <= 0 {
-					break
-				}
+				return need
 			}
+			// The repayments' share of the deficit comes from liquid accounts
+			// only, whatever the withdrawal order says about pension plans.
+			need := -cash
+			prepaid := math.Min(need, math.Max(0, row.Prepayments+row.Redirected-math.Max(0, before)))
+			need += draw(prepaid, true) - prepaid
+			need = draw(need, false)
 			if need > 0.005 {
 				row.Shortfall = need
 				res.Shortfall += need
@@ -765,6 +787,12 @@ func anchorMonth(streamStart, planStart domain.Month) int {
 		return streamStart.Month
 	}
 	return planStart.Month
+}
+
+// fundsPrepayments reports whether money in an account of this kind can pay
+// for an early repayment. Pension plans and property never can.
+func fundsPrepayments(k domain.AccountKind) bool {
+	return k == domain.AccountCash || k == domain.AccountDeposit || k == domain.AccountInvestment || k == domain.AccountOther
 }
 
 // surplusAccount picks the index of the account that receives surplus cash.
