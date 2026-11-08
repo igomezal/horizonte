@@ -45,14 +45,17 @@ type share struct {
 
 // taxer applies Spanish IRPF during a simulation: monthly Social Security and
 // IRPF withholding, yearly calculation per person and a settlement paid in
-// June of the following year. Brackets are indexed to inflation: the tax is
-// computed in today's euros and converted back.
+// June of the following year. By default brackets are indexed to inflation: the
+// tax is computed in today's euros and converted back. With frozen brackets it
+// is computed directly on nominal euros, so only the Social Security maximum
+// base rises with inflation.
 type taxer struct {
 	region   es.Region
 	people   []domain.Person
 	pidx     map[int64]int
 	year     int
 	partial  bool
+	frozen   bool
 	deflator float64 // at the start of the year, for indexing
 
 	acc      []es.Income // this year, nominal
@@ -67,7 +70,7 @@ type taxer struct {
 
 func newTaxer(in Input) *taxer {
 	t := &taxer{region: es.FindRegion(in.Assumptions.TaxRegion), people: in.People, pidx: map[int64]int{},
-		pending: map[domain.Month]float64{}}
+		frozen: in.Assumptions.FreezeIRPF, pending: map[domain.Month]float64{}}
 	for i, p := range in.People {
 		t.pidx[p.ID] = i
 	}
@@ -103,6 +106,24 @@ func (t *taxer) real(x es.Income) es.Income {
 	return x
 }
 
+// compute returns a person's IRPF for a year of nominal income, in nominal euros.
+func (t *taxer) compute(x es.Income) es.Breakdown {
+	if t.frozen {
+		return es.ComputeWithMaxBase(x, t.region, es.SocialSecurityMaxBase*t.deflator)
+	}
+	b := es.Compute(t.real(x), t.region)
+	d := t.deflator
+	b.SocialSecurity *= d
+	b.WorkNet *= d
+	b.GeneralBase *= d
+	b.SavingsBase *= d
+	b.Minimum *= d
+	b.GeneralTax *= d
+	b.SavingsTax *= d
+	b.Tax *= d
+	return b
+}
+
 // beginYear resets the accumulators and sets the withholding rate from the
 // income expected this year (expected[i] per person, nominal).
 func (t *taxer) beginYear(m domain.Month, first bool, deflator float64, expected []es.Income) {
@@ -113,7 +134,7 @@ func (t *taxer) beginYear(m domain.Month, first bool, deflator float64, expected
 	var tax, gross float64
 	for i, e := range expected {
 		e.Age = t.people[i].AgeAt(domain.Month{Year: m.Year, Month: 12})
-		tax += es.Compute(t.real(e), t.region).Tax * deflator
+		tax += t.compute(e).Tax
 		gross += e.Salary + e.Pension + e.SelfEmployed + e.Rental + e.Other
 	}
 	t.rate = 0
@@ -185,18 +206,7 @@ func (t *taxer) endYear() {
 	for i, p := range t.people {
 		inc := t.acc[i]
 		inc.Age = p.AgeAt(domain.Month{Year: t.year, Month: 12})
-		b := es.Compute(t.real(inc), t.region)
-		// Back to nominal euros.
-		d := t.deflator
-		b.SocialSecurity *= d
-		b.WorkNet *= d
-		b.GeneralBase *= d
-		b.SavingsBase *= d
-		b.Minimum *= d
-		b.GeneralTax *= d
-		b.SavingsTax *= d
-		b.Tax *= d
-		y.People = append(y.People, TaxPerson{Name: p.Name, Income: inc, Breakdown: b})
+		y.People = append(y.People, TaxPerson{Name: p.Name, Income: inc, Breakdown: t.compute(inc)})
 	}
 	if !t.partial {
 		y.Settlement = y.IRPF() - t.withheld

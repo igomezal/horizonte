@@ -62,3 +62,26 @@ func TestPrepaymentReserveRoundTrip(t *testing.T) {
 		t.Errorf("copied reserve = %d", got.PrepaymentReserve)
 	}
 }
+
+func TestFreezeIRPFRoundTrip(t *testing.T) {
+	s, plan := openTest(t)
+	ctx := t.Context()
+	a, _ := s.GetAssumptions(ctx, plan)
+	if a.FreezeIRPF {
+		t.Fatal("brackets must be indexed by default")
+	}
+	a.FreezeIRPF = true
+	if err := s.SaveAssumptions(ctx, plan, a); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetAssumptions(ctx, plan); !got.FreezeIRPF {
+		t.Error("not saved")
+	}
+	cp, err := s.CopyPlan(ctx, plan, "Copia")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetAssumptions(ctx, cp); !got.FreezeIRPF {
+		t.Error("not copied")
+	}
+}

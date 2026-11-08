@@ -67,11 +67,17 @@ func WorkReduction(net float64) float64 {
 
 // Compute returns the IRPF of one person for one year (individual filing).
 func Compute(in Income, region Region) Breakdown {
+	return ComputeWithMaxBase(in, region, SocialSecurityMaxBase)
+}
+
+// ComputeWithMaxBase is Compute with another yearly Social Security maximum
+// base, for amounts in euros of a year whose base has moved on from today's.
+func ComputeWithMaxBase(in Income, region Region, maxBase float64) Breakdown {
 	var b Breakdown
 
 	// Work income: salary (minus Social Security), public pensions and
 	// pension plan withdrawals.
-	b.SocialSecurity = math.Min(in.Salary, SocialSecurityMaxBase) * SocialSecurityRate
+	b.SocialSecurity = math.Min(in.Salary, maxBase) * SocialSecurityRate
 	work := in.Salary - b.SocialSecurity + in.Pension + in.PlanWithdrawal
 	if work > 0 {
 		work = math.Max(0, work-WorkOtherExpenses)

@@ -70,6 +70,7 @@ func TestSimKeysSeePlanSettings(t *testing.T) {
 	set := engine.MCSettings{Runs: 10, Seed: 1}
 	for name, change := range map[string]func(*engine.Input){
 		"prepayment reserve": func(in *engine.Input) { in.Assumptions.PrepaymentReserve = 100 },
+		"irpf indexing":      func(in *engine.Input) { in.Assumptions.FreezeIRPF = true },
 		"cost basis": func(in *engine.Input) {
 			c := domain.Cents(100)
 			in.Accounts = []domain.Account{{CostBasis: &c}}
@@ -80,5 +81,35 @@ func TestSimKeysSeePlanSettings(t *testing.T) {
 		if mcKey(in, set) == mcKey(base(), set) || rollingKey(in) == rollingKey(base()) {
 			t.Errorf("%s does not change the simulation keys", name)
 		}
+	}
+}
+
+func TestIRPFIndexingFromPlanForm(t *testing.T) {
+	s, st := newFinanceServer(t)
+	plan, _ := st.CurrentPlan(t.Context(), "x")
+	form := baseAssumptionsForm()
+	form.Set("tax_model", "es")
+	form.Set("tax_region", "general")
+	form.Set("irpf_indexing", "frozen")
+	rec, body := do(s, htmxReq("POST", "/plan/assumptions", form))
+	if rec.Code != http.StatusOK || !strings.Contains(body, `value="frozen" selected`) {
+		t.Fatalf("save: %d %s", rec.Code, body)
+	}
+	if a, _ := st.GetAssumptions(t.Context(), plan); !a.FreezeIRPF {
+		t.Error("frozen not stored")
+	}
+	form.Del("irpf_indexing")
+	do(s, htmxReq("POST", "/plan/assumptions", form))
+	if a, _ := st.GetAssumptions(t.Context(), plan); !a.FreezeIRPF {
+		t.Error("a request without the field must keep the setting")
+	}
+	form.Set("irpf_indexing", "indexed")
+	do(s, htmxReq("POST", "/plan/assumptions", form))
+	if a, _ := st.GetAssumptions(t.Context(), plan); a.FreezeIRPF {
+		t.Error("indexed not stored")
+	}
+	form.Set("irpf_indexing", "bogus")
+	if rec, _ := do(s, htmxReq("POST", "/plan/assumptions", form)); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("bad choice: %d", rec.Code)
 	}
 }

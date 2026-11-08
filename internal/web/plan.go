@@ -484,6 +484,12 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 
 // ---------- assumptions form ----------
 
+// Values of the irpf_indexing field.
+const (
+	irpfIndexed = "indexed"
+	irpfFrozen  = "frozen"
+)
+
 func (s *Server) assumptionsValues(lang i18n.Lang, a engine.Assumptions) map[string]string {
 	v := map[string]string{
 		"inflation": inPercent(lang, a.Inflation),
@@ -509,6 +515,10 @@ func (s *Server) assumptionsValues(lang i18n.Lang, a engine.Assumptions) map[str
 	v["wd_order"] = engine.FormatOrder(order)
 	v["pension_from"] = inOwner(a.PensionAvailableMS)
 	v["prepay_reserve"] = inMoney(lang, a.PrepaymentReserve)
+	v["irpf_indexing"] = irpfIndexed
+	if a.FreezeIRPF {
+		v["irpf_indexing"] = irpfFrozen
+	}
 	v["tax_model"], v["tax_region"] = a.TaxModel, a.TaxRegion
 	if v["tax_model"] == "" {
 		v["tax_model"] = engine.TaxES
@@ -552,6 +562,13 @@ func parseAssumptions(p *formParser) (engine.Assumptions, domain.Errors) {
 	}
 	for _, k := range domain.AccountKinds {
 		a.Returns[k] = p.percent("return_" + string(k))
+	}
+	switch p.str("irpf_indexing") {
+	case "", irpfIndexed:
+	case irpfFrozen:
+		a.FreezeIRPF = true
+	default:
+		p.errs.Add("irpf_indexing", domain.ErrChoice)
 	}
 	// The withdrawal fields are optional in the request: without them the
 	// handler keeps the plan's current withdrawal settings.
@@ -654,6 +671,9 @@ func (s *Server) handleSaveAssumptions(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, ok := r.PostForm["tax_model"]; !ok {
 			a.TaxModel, a.TaxRegion = current.TaxModel, current.TaxRegion
+		}
+		if _, ok := r.PostForm["irpf_indexing"]; !ok {
+			a.FreezeIRPF = current.FreezeIRPF
 		}
 		if _, ok := r.PostForm["prepay_reserve"]; !ok {
 			a.PrepaymentReserve = current.PrepaymentReserve

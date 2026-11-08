@@ -210,6 +210,7 @@
     {{if eq $tcur "flat"}}
     {{template "field" (dict "F" . "name" "tax_rate" "label" "field.tax_rate" "type" "percent" "hint" "hint.tax_rate")}}
     <input type="hidden" name="tax_region" value="{{index .V "tax_region"}}">
+    <input type="hidden" name="irpf_indexing" value="{{index .V "irpf_indexing"}}">
     {{else}}
     {{$rid := printf "%s-tax_region" .DOMID}}{{$rcur := index .V "tax_region"}}
     <div class="field">
@@ -218,6 +219,15 @@
         {{range .Regions}}<option value="{{.}}"{{if eq . $rcur}} selected{{end}}>{{t (printf "tax.region.%s" .)}}</option>{{end}}
       </select>
       <small class="field-hint">{{t "hint.tax_region"}}</small>
+    </div>
+    {{$iid := printf "%s-irpf_indexing" .DOMID}}{{$icur := index .V "irpf_indexing"}}
+    <div class="field">
+      <label for="{{$iid}}">{{t "field.irpf_indexing"}}</label>
+      <select id="{{$iid}}" name="irpf_indexing">
+        <option value="indexed"{{if eq $icur "indexed"}} selected{{end}}>{{t "tax.indexing.indexed"}}</option>
+        <option value="frozen"{{if eq $icur "frozen"}} selected{{end}}>{{t "tax.indexing.frozen"}}</option>
+      </select>
+      <small class="field-hint">{{t "hint.irpf_indexing"}}</small>
     </div>
     <input type="hidden" name="tax_rate" value="{{index .V "tax_rate"}}">
     {{end}}

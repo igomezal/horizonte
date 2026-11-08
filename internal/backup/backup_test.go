@@ -26,6 +26,7 @@ func fullSnapshot() store.Snapshot {
 	a.Order = []domain.AccountKind{domain.AccountCash, domain.AccountInvestment, domain.AccountDeposit, domain.AccountPension, domain.AccountOther}
 	a.PensionAvailableMS = ptr(int64(20))
 	a.PrepaymentReserve = 2500000
+	a.FreezeIRPF = true
 	return store.Snapshot{
 		People: []domain.Person{
 			{ID: 10, Name: "Ana", Birth: domain.Month{Year: 1990, Month: 4}, LifeExpectancy: 90},
@@ -116,7 +117,7 @@ func TestMissingAssumptionsGetDefaults(t *testing.T) {
 	def := engine.DefaultAssumptions()
 	if snap.Assumptions.Inflation != 0.02 || snap.Assumptions.TaxModel != def.TaxModel ||
 		snap.Assumptions.Returns[domain.AccountInvestment] != def.Returns[domain.AccountInvestment] ||
-		snap.Assumptions.PrepaymentReserve != 0 {
+		snap.Assumptions.PrepaymentReserve != 0 || snap.Assumptions.FreezeIRPF {
 		t.Errorf("assumptions = %+v", snap.Assumptions)
 	}
 }

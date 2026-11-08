@@ -37,6 +37,9 @@ type Assumptions struct {
 	// PrepaymentReserve is the money, in today's euros, that the liquid
 	// accounts keep when funding early repayments. It rises with inflation.
 	PrepaymentReserve domain.Cents
+	// FreezeIRPF keeps IRPF scales and personal minimums fixed in nominal euros
+	// instead of rising with inflation (the zero value).
+	FreezeIRPF bool
 }
 
 // DefaultAssumptions are reasonable long-run nominal values for Spain.
