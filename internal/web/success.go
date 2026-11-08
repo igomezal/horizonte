@@ -64,6 +64,7 @@ type successView struct {
 	// placeholder that loads the results from /success/results.
 	Pending   bool
 	Seed      uint64
+	Model     string // the plan's Monte Carlo model, for the method note
 	Runs      int
 	Rate      float64
 	EndAge    int
@@ -112,7 +113,7 @@ func (s *Server) pendingSuccessView(ctx context.Context, lang i18n.Lang, in engi
 	}
 	// What is known before simulating, so the placeholder has the same
 	// layout as the results.
-	v := successView{HasPeople: len(in.People) > 0, Pending: true, Seed: seed, Runs: in.Assumptions.MCRuns, EndAge: endAge(in)}
+	v := successView{HasPeople: len(in.People) > 0, Pending: true, Seed: seed, Model: in.Assumptions.MCModel, Runs: in.Assumptions.MCRuns, EndAge: endAge(in)}
 	for _, m := range in.Milestones {
 		if m.Conditional() {
 			v.Milestones = append(v.Milestones, mcMilestoneRow{Name: m.Name})
@@ -125,7 +126,7 @@ func (s *Server) pendingSuccessView(ctx context.Context, lang i18n.Lang, in engi
 // error is ctx's when the person left before it finished, or engine.ErrPanic.
 func (s *Server) buildSuccessView(ctx context.Context, lang i18n.Lang, in engine.Input, seed uint64) (successView, error) {
 	if len(in.People) == 0 {
-		return successView{Seed: seed}, nil
+		return successView{Seed: seed, Model: in.Assumptions.MCModel}, nil
 	}
 	mc, err := s.monteCarlo(ctx, "success", in, mcSettings(in, seed))
 	if err != nil {
@@ -135,7 +136,7 @@ func (s *Server) buildSuccessView(ctx context.Context, lang i18n.Lang, in engine
 }
 
 func (s *Server) successViewFrom(lang i18n.Lang, in engine.Input, seed uint64, mc engine.MCResult) successView {
-	v := successView{HasPeople: len(in.People) > 0, Seed: seed}
+	v := successView{HasPeople: len(in.People) > 0, Seed: seed, Model: in.Assumptions.MCModel}
 	if !v.HasPeople || mc.Runs == 0 {
 		return v
 	}

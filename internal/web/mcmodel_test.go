@@ -91,6 +91,38 @@ func TestMCModelSetting(t *testing.T) {
 	}
 }
 
+func TestSuccessPageExplainsTheModel(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	seedMC(t, s)
+	const median, parametric, bootstrap = "resultado mediano", "Cada escenario usa rentabilidades mensuales aleatorias", "Modelo de bloques históricos"
+
+	_, page := do(s, httptest.NewRequest("GET", "/success", nil))
+	_, results := do(s, htmxReq("GET", "/success/results", nil))
+	for name, body := range map[string]string{"page": page, "results": results} {
+		if !strings.Contains(body, median) || !strings.Contains(body, "1,4 puntos") || !strings.Contains(body, parametric) || strings.Contains(body, bootstrap) {
+			t.Errorf("parametric %s does not explain its model", name)
+		}
+	}
+
+	mustPost(t, s, "/success/settings", mcForm("bootstrap"))
+	_, page = do(s, httptest.NewRequest("GET", "/success", nil))
+	_, results = do(s, htmxReq("GET", "/success/results", nil))
+	for name, body := range map[string]string{"page": page, "results": results} {
+		if !strings.Contains(body, median) || !strings.Contains(body, bootstrap) || strings.Contains(body, parametric) {
+			t.Errorf("bootstrap %s does not explain its model", name)
+		}
+	}
+}
+
+func TestBacktestSaysItIsUSDollars(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	seedMC(t, s)
+	_, body := do(s, httptest.NewRequest("GET", "/backtest", nil))
+	if !strings.Contains(body, "medidos en dólares") || !strings.Contains(body, "inversor en euros") {
+		t.Error("the backtest page should say it replays US data in dollars")
+	}
+}
+
 func TestMCKeyDependsOnTheModel(t *testing.T) {
 	in := engine.Input{Assumptions: engine.DefaultAssumptions(), Start: domain.Month{Year: 2026, Month: 1}}
 	set := mcSettings(in, defaultSeed)
@@ -130,5 +162,16 @@ func TestWarmUsesThePlansModel(t *testing.T) {
 	direct := engine.MonteCarlo(in, in.Assumptions.Volatility, mcSettings(in, defaultSeed))
 	if warm.Successes != direct.Successes || warm.NetWorth[0] != direct.NetWorth[0] {
 		t.Errorf("the warm-up ran another model: %d vs %d successes", warm.Successes, direct.Successes)
+	}
+}
+
+func TestSuccessResultsWithoutPeopleNamesTheModel(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	rec, body := do(s, htmxReq("GET", "/success/results", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if strings.Contains(body, "mc.method.") {
+		t.Errorf("raw translation key in the page: %s", body)
 	}
 }

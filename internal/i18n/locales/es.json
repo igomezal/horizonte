@@ -276,7 +276,9 @@
   "mc.fan_desc": "En euros de hoy. La línea es el escenario mediano; las bandas recogen la mitad central y el 80 % central de los escenarios. La línea discontinua es tu plan tal como lo calcula la página Plan, con la rentabilidad esperada todos los años.",
   "mc.fan_title": "Patrimonio neto en los distintos escenarios",
   "mc.median": "Mediana",
-  "mc.method": "Cada escenario usa rentabilidades mensuales aleatorias alrededor de las esperadas, con la volatilidad de cada tipo de cuenta y una correlación de 0,6 con el mercado. En el escenario mediano cada cuenta crece a su rentabilidad esperada, así que tu plan queda cerca de la mediana (algo por debajo, porque los años buenos suman más de lo que restan los malos). La inflación se mantiene fija.",
+  "mc.expected_median": "Tu rentabilidad esperada se trata como el resultado mediano: la mitad de los escenarios va mejor y la otra mitad peor. La media queda por encima de la mediana porque los años buenos suman más de lo que restan los malos: cerca de 1,4 puntos más al año con una volatilidad del 16 %.",
+  "mc.method.bootstrap": "Modelo de bloques históricos: cada escenario encadena tramos de 12 meses elegidos al azar de la historia real de EE. UU. desde 1871, con la bolsa, los bonos y la inflación de los mismos meses para que sigan relacionados. Cada serie se desplaza para que su media a largo plazo coincida con tus rentabilidades e inflación esperadas: la historia pone los altibajos y tus supuestos, el nivel. Las volatilidades de abajo no se usan. Las cuentas de inversión siguen a la bolsa; los planes de pensiones, a un 60 % bolsa y 40 % bonos; el efectivo no rinde; depósitos, inmuebles y otras cuentas mantienen su rentabilidad real esperada sobre la inflación de cada escenario.",
+  "mc.method.parametric": "Cada escenario usa rentabilidades mensuales aleatorias alrededor de las esperadas, con la volatilidad de cada tipo de cuenta y una correlación de 0,6 con el mercado. En el escenario mediano cada cuenta crece a su rentabilidad esperada, así que tu plan queda cerca de la mediana (algo por debajo, porque los años buenos suman más de lo que restan los malos). La inflación se mantiene fija.",
   "mc.milestones_desc": "Los hitos que dependen de cómo vayan tus inversiones, del mejor caso (1 de cada 10 escenarios llega antes) al peor (9 de cada 10 llegan antes).",
   "mc.milestones_title": "Cuándo alcanzas tus hitos de independencia financiera",
   "mc.no_conditional": "Añade un hito de independencia financiera (FIRE) en Finanzas actuales para ver cuándo lo alcanzas en cada escenario.",
@@ -301,6 +303,7 @@
   "mc.when": "%s (%d años)",
 
   "backtest.intro": "Tu plan, repetido con lo que de verdad hicieron los mercados y la inflación en el pasado: las grandes crisis y cada año de inicio desde 1871.",
+  "backtest.usd_note": "Repite la bolsa, los bonos y la inflación de EE. UU., medidos en dólares. No es lo que vivió un inversor en euros: quedan fuera los tipos de cambio y los mercados y la inflación europeos.",
   "backtest.title": "Prueba histórica",
 
   "bt.crises_desc": "Tu plan como si hoy empezara cada crisis, desde el máximo de la bolsa antes de la caída. En euros de hoy. En el gráfico, la línea discontinua es tu plan tal como lo calcula la página Plan, con la rentabilidad esperada todos los años.",

@@ -276,7 +276,9 @@
   "mc.fan_desc": "In today's euros. The line is the median scenario; the bands hold the middle half and the middle 80% of scenarios. The dashed line is your plan as the Plan page calculates it, with the expected return every year.",
   "mc.fan_title": "Net worth across scenarios",
   "mc.median": "Median",
-  "mc.method": "Each scenario uses random monthly returns around the expected ones, with each account type's volatility and a 0.6 correlation with the market. In the median scenario each account grows at its expected return, so your plan sits close to the median (a little below it, because good years add more than bad years take away). Inflation stays fixed.",
+  "mc.expected_median": "Your expected return is treated as the median outcome: half of the scenarios do better and half do worse. The average is higher than the median because good years add more than bad years take away: about 1.4 points more a year at 16% volatility.",
+  "mc.method.bootstrap": "Historical blocks model: each scenario strings together randomly chosen 12-month stretches of real US history since 1871, with stocks, bonds and inflation from the same months so they stay related. Each series is shifted so its long-run average matches your expected returns and inflation: history supplies the ups and downs, your assumptions the level. The volatilities below are not used. Investment accounts follow stocks; pension plans 60% stocks and 40% bonds; cash earns nothing; deposits, property and other accounts keep their expected real return on top of each scenario's inflation.",
+  "mc.method.parametric": "Each scenario uses random monthly returns around the expected ones, with each account type's volatility and a 0.6 correlation with the market. In the median scenario each account grows at its expected return, so your plan sits close to the median (a little below it, because good years add more than bad years take away). Inflation stays fixed.",
   "mc.milestones_desc": "Milestones that depend on how your investments do, from the best case (1 in 10 scenarios gets there sooner) to the worst (9 in 10 get there sooner).",
   "mc.milestones_title": "When you reach your financial-independence milestones",
   "mc.no_conditional": "Add a financial-independence (FIRE) milestone in Current finances to see when you reach it in each scenario.",
@@ -301,6 +303,7 @@
   "mc.when": "%s (age %d)",
 
   "backtest.intro": "Your plan, replayed with what markets and inflation actually did in the past: the great crises and every start year since 1871.",
+  "backtest.usd_note": "This replays US stocks, bonds and inflation, measured in dollars. It is not what an investor in euros experienced: exchange rates and European markets and inflation are left out.",
   "backtest.title": "Historical backtest",
 
   "bt.crises_desc": "Your plan as if each crisis started today, from the market peak before the fall. In today's euros. In the chart, the dashed line is your plan as the Plan page calculates it, with the expected return every year.",

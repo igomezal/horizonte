@@ -109,7 +109,8 @@
   {{else}}
   <p class="muted">{{t "mc.no_conditional"}}</p>
   {{end}}
-  <p class="note muted">{{t "mc.method"}}</p>
+  <p class="note muted">{{t "mc.expected_median"}}</p>
+  <p class="note muted">{{t (printf "mc.method.%s" .Model)}}</p>
 </section>
 {{end}}
 
