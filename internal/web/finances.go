@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/igomezal/horizonte/internal/domain"
 	"github.com/igomezal/horizonte/internal/i18n"
@@ -64,6 +65,10 @@ type rowView struct {
 	// HasPrepayments marks debts with early repayments (their payoff date
 	// shown in the row ignores them).
 	HasPrepayments bool
+	// SaleLapsed marks an account whose sale is dated before the plan starts.
+	SaleLapsed bool
+	// SalesAtRisk names the property whose sale deleting this milestone cancels.
+	SalesAtRisk string
 }
 
 // AccountName returns the name of a linked account, or "" when not linked.
@@ -205,6 +210,20 @@ func (s *Server) loadSection(ctx context.Context, fc finCtx, res *resource) (sec
 			sv.CanAdd, sv.EmptyKey = false, "prepayments.need_debt"
 		}
 	}
+	// Sales that have no date of their own are cancelled with their milestone.
+	salesAtRisk := map[int64][]string{}
+	if res.kind == "milestones" {
+		accounts, err := s.store.ListAccounts(ctx, fc.plan)
+		if err != nil {
+			return sectionView{}, err
+		}
+		for _, a := range accounts {
+			if a.Sale != nil && a.Sale.MS != nil && a.Sale.Month.IsZero() {
+				salesAtRisk[*a.Sale.MS] = append(salesAtRisk[*a.Sale.MS], a.Name)
+			}
+		}
+	}
+	resolved := domain.ResolveFixed(milestones, people)
 	for _, it := range items {
 		rv := rowView{Kind: res.kind, ID: itemID(it), Item: it, Now: fc.now, MS: msNames, Accounts: accNames}
 		if o := itemOwner(it); o != nil {
@@ -213,6 +232,9 @@ func (s *Server) loadSection(ctx context.Context, fc finCtx, res *resource) (sec
 		switch v := it.(type) {
 		case domain.Milestone:
 			rv.When, _ = v.FixedMonth(people)
+			rv.SalesAtRisk = strings.Join(salesAtRisk[v.ID], ", ")
+		case domain.Account:
+			rv.SaleLapsed = v.Sale != nil && v.Sale.Lapsed(resolved, fc.now)
 		case domain.Prepayment:
 			rv.Debt = debtNames[v.DebtID]
 		case domain.Debt:

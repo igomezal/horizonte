@@ -26,7 +26,7 @@ type TaxYear struct {
 	People     []TaxPerson
 	Withheld   float64 // IRPF withheld during the year
 	Settlement float64 // paid (or refunded if negative) the following June
-	Partial    bool    // the plan started mid-year: no settlement is computed
+	Partial    bool    // the plan started mid-year: only a property sale's tax is settled
 }
 
 // IRPF of the household for the year.
@@ -60,12 +60,16 @@ type taxer struct {
 
 	acc      []es.Income // this year, nominal
 	ssUsed   []float64   // salary already subject to Social Security this year
+	saleGain []float64   // taxable property gains this year, already in acc
 	monthSS  float64     // Social Security of the current month
 	monthTax float64     // taxable gross of the current month (for withholding)
 	rate     float64     // IRPF withholding rate on taxable gross income
 	withheld float64
 	pending  map[domain.Month]float64
 	years    []TaxYear
+	// Tax on the previous year's property sales and the June it falls due.
+	lastSaleTax float64
+	lastSaleDue domain.Month
 }
 
 func newTaxer(in Input) *taxer {
@@ -130,6 +134,7 @@ func (t *taxer) beginYear(m domain.Month, first bool, deflator float64, expected
 	t.year, t.partial, t.deflator = m.Year, first && m.Month != 1, deflator
 	t.acc = make([]es.Income, len(t.people))
 	t.ssUsed = make([]float64, len(t.people))
+	t.saleGain = make([]float64, len(t.people))
 	t.withheld = 0
 	var tax, gross float64
 	for i, e := range expected {
@@ -177,6 +182,37 @@ func (t *taxer) addSavings(owner *int64, amount float64) {
 	}
 }
 
+// addPropertyGain records the gain of a property sale in month m. A main
+// residence sold by an owner over 65 is exempt (art. 33.4 LIRPF), per owner
+// when it is joint. Age is counted in years completed, so 65 and some months
+// is over 65, as the tax agency reads it.
+func (t *taxer) addPropertyGain(owner *int64, gain float64, mainResidence bool, m domain.Month) {
+	for _, s := range t.shares(owner) {
+		if mainResidence && t.people[s.idx].AgeAt(m) >= 65 {
+			continue
+		}
+		v := gain * s.frac
+		t.acc[s.idx].Savings += v
+		t.saleGain[s.idx] += v
+	}
+}
+
+// saleTax is the tax a year's property gains add, on top of its other income.
+func (t *taxer) saleTax() float64 {
+	var tax float64
+	for i, p := range t.people {
+		if t.saleGain[i] <= 0 {
+			continue
+		}
+		with := t.acc[i]
+		with.Age = p.AgeAt(domain.Month{Year: t.year, Month: 12})
+		without := with
+		without.Savings -= t.saleGain[i]
+		tax += t.compute(with).Tax - t.compute(without).Tax
+	}
+	return tax
+}
+
 func (t *taxer) addPlanWithdrawal(owner *int64, amount float64) {
 	for _, s := range t.shares(owner) {
 		t.acc[s.idx].PlanWithdrawal += amount * s.frac
@@ -208,11 +244,28 @@ func (t *taxer) endYear() {
 		inc.Age = p.AgeAt(domain.Month{Year: t.year, Month: 12})
 		y.People = append(y.People, TaxPerson{Name: p.Name, Income: inc, Breakdown: t.compute(inc)})
 	}
+	june := domain.Month{Year: t.year + 1, Month: 6}
+	t.lastSaleTax, t.lastSaleDue = t.saleTax(), june
 	if !t.partial {
 		y.Settlement = y.IRPF() - t.withheld
-		t.pending[domain.Month{Year: t.year + 1, Month: 6}] += y.Settlement
+		t.pending[june] += y.Settlement
+	} else if t.lastSaleTax > 0 {
+		// A partial year settles nothing else, but a sale's tax is still due.
+		y.Settlement = t.lastSaleTax
+		t.pending[june] += t.lastSaleTax
 	}
 	t.years = append(t.years, y)
+}
+
+// unpaidSaleTax is, in the plan's last month, the tax on property sales whose
+// June settlement falls after the plan ends and so would never be paid. Other
+// settlements left pending when a plan ends stay unpaid.
+func (t *taxer) unpaidSaleTax(last domain.Month) float64 {
+	tax := t.saleTax() // this year's sales settle next June, always after the end
+	if last.Before(t.lastSaleDue) {
+		tax += t.lastSaleTax
+	}
+	return tax
 }
 
 // expectedYear estimates each person's income for a year from the streams

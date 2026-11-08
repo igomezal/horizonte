@@ -191,8 +191,24 @@ func (s *Store) CreatePlanFromSnapshot(ctx context.Context, name string, parent 
 			old := a.ID
 			a.ID, a.PlanID = 0, id
 			a.OwnerID, a.ContributionEndMS = remap(a.OwnerID, personMap), remap(a.ContributionEndMS, msMap)
+			if a.Sale != nil {
+				sale := *a.Sale
+				// The destination may not exist yet: linked below.
+				sale.MS, sale.DestinationID = remap(sale.MS, msMap), nil
+				a.Sale = &sale
+			}
 			if accMap[old], err = tx.SaveAccount(ctx, a); err != nil {
 				return err
+			}
+		}
+		for _, a := range snap.Accounts {
+			if a.Sale == nil {
+				continue
+			}
+			if dest := remap(a.Sale.DestinationID, accMap); dest != nil {
+				if err := tx.setSaleDestination(ctx, id, accMap[a.ID], *dest); err != nil {
+					return err
+				}
 			}
 		}
 		for _, i := range snap.Incomes {

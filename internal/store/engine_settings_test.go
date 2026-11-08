@@ -85,3 +85,74 @@ func TestFreezeIRPFRoundTrip(t *testing.T) {
 		t.Error("not copied")
 	}
 }
+
+func TestPropertySaleRoundTrip(t *testing.T) {
+	s, plan := openTest(t)
+	ctx := t.Context()
+	ms, err := s.SaveMilestone(ctx, domain.Milestone{PlanID: plan, Name: "Venta", Kind: domain.MilestoneDate, Date: domain.Month{Year: 2040, Month: 3}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The destination is created after the property, as in a copy.
+	home, err := s.SaveAccount(ctx, domain.Account{PlanID: plan, Name: "Piso", Kind: domain.AccountRealEstate, Balance: 100,
+		Sale: &domain.PropertySale{MS: &ms, Share: 0.5, CostRate: 0.05, MainResidence: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fund, err := s.SaveAccount(ctx, domain.Account{PlanID: plan, Name: "Fondo", Kind: domain.AccountInvestment})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.GetAccount(ctx, plan, home)
+	if got.Sale == nil || *got.Sale.MS != ms || got.Sale.Share != 0.5 || got.Sale.CostRate != 0.05 || !got.Sale.MainResidence || got.Sale.DestinationID != nil {
+		t.Fatalf("sale = %+v", got.Sale)
+	}
+	got.Sale.DestinationID = &fund
+	if _, err := s.SaveAccount(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+
+	// A copy points at its own milestone and account.
+	cp, err := s.CopyPlan(ctx, plan, "Copia")
+	if err != nil {
+		t.Fatal(err)
+	}
+	copies, _ := s.ListAccounts(ctx, cp)
+	mss, _ := s.ListMilestones(ctx, cp)
+	sale := copies[0].Sale
+	if sale == nil || *sale.MS != mss[0].ID || sale.DestinationID == nil || *sale.DestinationID != copies[1].ID || *sale.DestinationID == fund {
+		t.Fatalf("copied sale = %+v (accounts %+v)", sale, copies)
+	}
+
+	// Deleting the destination goes back to the default.
+	if err := s.DeleteAccount(ctx, plan, fund); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.GetAccount(ctx, plan, home); got.Sale == nil || got.Sale.DestinationID != nil {
+		t.Errorf("after deleting the destination: %+v", got.Sale)
+	}
+	// Deleting the milestone that dates the sale cancels it.
+	if err := s.DeleteMilestone(ctx, plan, ms); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.GetAccount(ctx, plan, home); got.Sale != nil {
+		t.Errorf("sale without a date: %+v", got.Sale)
+	}
+}
+
+func TestPropertySaleRejectsBadLinks(t *testing.T) {
+	s, plan := openTest(t)
+	ctx := t.Context()
+	pension, _ := s.SaveAccount(ctx, domain.Account{PlanID: plan, Name: "Plan", Kind: domain.AccountPension})
+	missing := int64(999)
+	month := domain.Month{Year: 2040, Month: 1}
+	for _, sale := range []*domain.PropertySale{
+		{Month: month, Share: 1, DestinationID: &pension},
+		{Month: month, Share: 1, DestinationID: &missing},
+		{MS: &missing, Share: 1},
+	} {
+		if _, err := s.SaveAccount(ctx, domain.Account{PlanID: plan, Name: "Piso", Kind: domain.AccountRealEstate, Sale: sale}); err == nil {
+			t.Errorf("sale %+v accepted", sale)
+		}
+	}
+}

@@ -53,7 +53,7 @@
 {{define "fin-section"}}
 <section class="section fin-section" id="section-{{.Kind}}" aria-labelledby="h-{{.Kind}}"
   {{- if ne .Kind "people"}} hx-get="/finances/{{.Kind}}" hx-target="this" hx-swap="outerHTML"
-  hx-trigger="people-changed from:body{{if ne .Kind "milestones"}}, milestones-changed from:body{{end}}{{if or (eq .Kind "prepayments") (eq .Kind "debts")}}, debts-changed from:body, accounts-changed from:body{{end}}"{{end}}>
+  hx-trigger="people-changed from:body{{if ne .Kind "milestones"}}, milestones-changed from:body{{end}}{{if or (eq .Kind "prepayments") (eq .Kind "debts")}}, debts-changed from:body, accounts-changed from:body{{else if eq .Kind "milestones"}}, accounts-changed from:body{{end}}"{{end}}>
   <div class="section-head">
     <h2 id="h-{{.Kind}}">{{t (printf "%s.title" .Kind)}}</h2>
     {{if and .Rows .HasTotal}}
@@ -99,7 +99,7 @@
     <button type="button" class="link-btn danger" @click="confirm = true">{{t "form.delete"}}</button>
   </div>
   <div class="entry-actions confirm" x-show="confirm" x-cloak>
-    <span>{{t "form.delete_confirm"}}</span>
+    <span>{{if .SalesAtRisk}}{{t "milestones.delete_cancels_sale" .SalesAtRisk}}{{else}}{{t "form.delete_confirm"}}{{end}}</span>
     <button type="button" class="link-btn danger" hx-delete="/finances/{{.Kind}}/{{.ID}}" hx-target="#section-{{.Kind}}" hx-swap="outerHTML">{{t "form.delete_yes"}}</button>
     <button type="button" class="link-btn" @click="confirm = false">{{t "form.keep"}}</button>
   </div>
@@ -143,6 +143,8 @@
     {{with $.Owner}}<span>{{.}}</span>{{end}}
     {{if .MonthlyContribution}}{{with $.MSName .ContributionEndMS}}<span>{{t "accounts.contributes_until" (eur $.Item.MonthlyContribution) .}}</span>{{else}}<span>{{t "accounts.contributes" (eur .MonthlyContribution)}}</span>{{end}}{{end}}
     {{with .AnnualReturn}}<span>{{t "accounts.return" (pct .)}}</span>{{end}}
+    {{with .Sale}}<span>{{if .MS}}{{t "accounts.sale" (percent .Share 0) ($.MSName .MS)}}{{else}}{{t "accounts.sale" (percent .Share 0) (month .Month)}}{{end}}</span>{{end}}
+    {{if $.SaleLapsed}}<span>{{t "accounts.sale_lapsed"}}</span>{{end}}
   </span>
 </div>
 <div class="entry-amount"><span class="amount">{{eur .Balance}}</span></div>
@@ -313,7 +315,7 @@
 {{define "accounts-form"}}
 {{template "form-open" .}}
   {{$kind := index .V "kind"}}
-  <div class="form-grid" x-data="{ kind: '{{$kind}}' }" @change="if ($event.target.name === 'kind') kind = $event.target.value">
+  <div class="form-grid" x-data="{ kind: '{{$kind}}', sale: {{if index .V "sale_enabled"}}true{{else}}false{{end}} }" @change="if ($event.target.name === 'kind') kind = $event.target.value">
     {{template "field" (dict "F" . "name" "name" "label" "field.name" "type" "text" "required" true "placeholder" "accounts.placeholder")}}
     {{template "f-select" (dict "F" . "name" "kind" "label" "field.type" "options" .Opt.AccountKinds "prefix" "account.kind")}}
     {{template "f-owner" .}}
@@ -333,6 +335,30 @@
     {{template "field" (dict "F" . "name" "return" "label" "field.return" "type" "percent" "placeholder" "placeholder.default" "hint" "hint.return")}}
     <div class="field-group" x-show="['investment', 'other', 'realestate'].includes(kind)"{{if not (or (eq $kind "investment") (eq $kind "other") (eq $kind "realestate"))}} x-cloak{{end}}>
       {{template "field" (dict "F" . "name" "cost_basis" "label" "field.cost_basis" "type" "money" "placeholder" "placeholder.default" "hint" "hint.cost_basis")}}
+    </div>
+    <div class="field-group" x-show="kind === 'realestate'"{{if ne $kind "realestate"}} x-cloak{{end}}>
+      <label class="check">
+        <input type="checkbox" name="sale_enabled" value="on" x-model="sale"{{if index .V "sale_enabled"}} checked{{end}}>
+        <span>{{t "field.sale_enabled"}}<small class="field-hint">{{t "hint.sale_enabled"}}</small></span>
+      </label>
+      <div class="field-group" x-show="sale"{{if not (index .V "sale_enabled")}} x-cloak{{end}}>
+        {{template "f-boundary" (dict "F" . "ms" "sale_ms" "month" "sale_month" "label" "field.sale_when" "hint" "hint.sale_when")}}
+        {{template "field" (dict "F" . "name" "sale_share" "label" "field.sale_share" "type" "percent" "hint" "hint.sale_share")}}
+        {{template "field" (dict "F" . "name" "sale_cost" "label" "field.sale_cost" "type" "percent" "hint" "hint.sale_cost")}}
+        {{$did := printf "%s-sale_destination" .DOMID}}{{$dcur := index .V "sale_destination"}}
+        <div class="field">
+          <label for="{{$did}}">{{t "field.sale_destination"}}</label>
+          <select id="{{$did}}" name="sale_destination" aria-describedby="{{$did}}-msg">
+            <option value="">{{t "sale.destination_default"}}</option>
+            {{range .Accounts}}{{if .Kind.Liquid}}<option value="{{.ID}}"{{if eq (str .ID) $dcur}} selected{{end}}>{{.Name}}</option>{{end}}{{end}}
+          </select>
+          <small class="field-hint" id="{{$did}}-msg">{{t "hint.sale_destination"}}</small>
+        </div>
+        <label class="check">
+          <input type="checkbox" name="sale_main_residence" value="on"{{if index .V "sale_main_residence"}} checked{{end}}>
+          <span>{{t "field.sale_main_residence"}}<small class="field-hint">{{t "hint.sale_main_residence"}}</small></span>
+        </label>
+      </div>
     </div>
   </div>
   {{template "form-actions" .}}

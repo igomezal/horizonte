@@ -67,6 +67,8 @@
   "plan.end_value_nominal": "Patrimonio neto al final del plan, en euros de %d.",
   "plan.end_value_real": "Patrimonio neto al final del plan, en euros de hoy.",
   "plan.event.paid_off": "Deuda pagada: %s",
+  "plan.event.sold": "Venta de %s",
+  "plan.sale_skipped": "No se ha podido vender %s: el plan no tiene ninguna cuenta corriente, depósito, inversión u otra cuenta que reciba el dinero, así que el inmueble sigue en el plan.",
   "plan.fail": "Con estas hipótesis, el dinero se acaba en %s.",
   "plan.go_finances": "Ir a Finanzas actuales",
   "plan.intro": "Tu dinero mes a mes hasta el final del plan, a partir de tus finanzas actuales y de las hipótesis de abajo.",
@@ -452,6 +454,7 @@
 
   "milestones.add": "Añadir hito",
   "milestones.conditional": "Según el plan",
+  "milestones.delete_cancels_sale": "¿Eliminar? Se cancelará la venta de %s, que depende de este hito.",
   "milestones.desc": "Momentos clave como la jubilación o la independencia financiera. Los ingresos, gastos y aportaciones pueden empezar o terminar en un hito: si lo mueves, todo lo que depende de él se mueve con él.",
   "milestones.empty": "Todavía no hay hitos. Empieza por tu jubilación.",
   "milestones.need_person": "Añade antes una persona para crear hitos por edad.",
@@ -480,6 +483,8 @@
   "accounts.empty": "Todavía no hay cuentas. Añade tu cuenta corriente para empezar.",
   "accounts.placeholder": "Cuenta nómina",
   "accounts.return": "Rentabilidad %s",
+  "accounts.sale": "Venta del %s: %s",
+  "accounts.sale_lapsed": "Esta fecha ya ha pasado y la venta no se hará: cámbiala para incluirla en el plan.",
   "accounts.title": "Cuentas",
 
   "incomes.add": "Añadir ingreso",
@@ -580,6 +585,7 @@
 
   "redirect.skip": "No hacer el pago",
   "redirect.unallocated": "Dinero sin asignar",
+  "sale.destination_default": "Cuenta del dinero sin asignar",
 
   "surplus.default": "Primera cuenta corriente",
 
@@ -623,6 +629,12 @@
   "field.prepay_when": "Cuándo",
   "field.rate": "Interés anual (TIN)",
   "field.return": "Rentabilidad anual",
+  "field.sale_cost": "Gastos de venta",
+  "field.sale_destination": "El dinero va a",
+  "field.sale_enabled": "Vender este inmueble",
+  "field.sale_main_residence": "Vivienda habitual",
+  "field.sale_share": "Parte que se vende",
+  "field.sale_when": "Fecha de venta",
   "field.start": "Desde",
   "field.surplus": "Dónde va el dinero sin asignar",
   "field.tax_model": "Impuestos",
@@ -664,6 +676,12 @@
   "hint.prepay_when": "Para un solo pago, el mes en que lo haces. Para pagos periódicos, cuándo empiezan (vacío: ya).",
   "hint.rate": "Tipo nominal, el que aparece en tu contrato.",
   "hint.return": "Déjalo vacío para usar la rentabilidad por defecto de este tipo de cuenta.",
+  "hint.sale_cost": "Porcentaje del precio de venta: notaría, agencia, plusvalía municipal…",
+  "hint.sale_destination": "Solo cuentas corrientes, depósitos, inversiones u otras cuentas.",
+  "hint.sale_enabled": "Con el modelo de IRPF, la ganancia tributa en la base del ahorro y se paga en la declaración de junio del año siguiente. Con el tipo fijo, la venta no paga impuestos.",
+  "hint.sale_main_residence": "Exenta si el titular tiene más de 65 años (art. 33.4 LIRPF). No se modela la exención por reinversión en otra vivienda habitual.",
+  "hint.sale_share": "Vacío: el 100 %.",
+  "hint.sale_when": "Mes en que se vende.",
   "hint.start": "Vacío: ya está activo.",
   "hint.surplus": "Lo que sobra cada mes, después de las aportaciones.",
   "hint.tax_es": "IRPF 2026, cotizaciones a la Seguridad Social, retenciones mensuales y la declaración de la renta en junio. Simplificado: declaración individual, sin hijos ni deducciones autonómicas, autónomos por su rendimiento neto, los bienes conjuntos al 50 % y los saldos iniciales sin plusvalías latentes salvo que indiques su coste de adquisición.",
@@ -672,7 +690,7 @@
   "hint.tax_region": "Cambia la parte autonómica de la escala general. «Estatal» aplica la misma escala que el Estado. País Vasco y Navarra tienen sistemas forales propios que la aplicación no modela.",
   "hint.wd_ceiling": "Lo más que gastarías, en porcentaje de lo previsto.",
   "hint.wd_floor": "Lo menos que gastarías, en porcentaje de lo previsto.",
-  "hint.wd_order": "Cuando falta dinero, se saca de las cuentas en este orden. Los inmuebles no se venden.",
+  "hint.wd_order": "Cuando falta dinero, se saca de las cuentas en este orden. Las retiradas no venden inmuebles: para eso, programa una venta en la cuenta del inmueble.",
   "hint.wd_rate": "Porcentaje de tus ahorros (sin contar inmuebles).",
 
   "placeholder.default": "Por defecto",

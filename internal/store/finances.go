@@ -214,16 +214,59 @@ func (s *Store) DeletePerson(ctx context.Context, planID, id int64) error {
 // ---------- Accounts ----------
 
 const accountCols = `id, plan_id, name, kind, owner_id, balance_cents, monthly_contribution_cents, annual_return,
-	contribution_end_milestone_id, cost_basis_cents`
+	contribution_end_milestone_id, cost_basis_cents,
+	sale_month, sale_milestone_id, sale_share, sale_cost_rate, sale_destination_account_id, sale_main_residence`
 
 func scanAccount(sc interface{ Scan(...any) error }) (domain.Account, error) {
 	var a domain.Account
-	var owner, contribEnd, costBasis sql.NullInt64
+	var owner, contribEnd, costBasis, saleMS, saleDest sql.NullInt64
 	var ret sql.NullFloat64
-	err := sc.Scan(&a.ID, &a.PlanID, &a.Name, &a.Kind, &owner, &a.Balance, &a.MonthlyContribution, &ret, &contribEnd, &costBasis)
+	var saleMonth sql.NullString
+	var sale domain.PropertySale
+	err := sc.Scan(&a.ID, &a.PlanID, &a.Name, &a.Kind, &owner, &a.Balance, &a.MonthlyContribution, &ret, &contribEnd, &costBasis,
+		&saleMonth, &saleMS, &sale.Share, &sale.CostRate, &saleDest, &sale.MainResidence)
 	a.OwnerID, a.AnnualReturn, a.ContributionEndMS = intPtr(owner), floatPtr(ret), intPtr(contribEnd)
 	a.CostBasis = centsPtr(costBasis)
-	return a, err
+	if err != nil || (!saleMonth.Valid && !saleMS.Valid) {
+		return a, err
+	}
+	if sale.Month, err = scanMonth(saleMonth); err != nil {
+		return a, err
+	}
+	sale.MS, sale.DestinationID = intPtr(saleMS), intPtr(saleDest)
+	a.Sale = &sale
+	return a, nil
+}
+
+// saleArgs are the values of the sale columns.
+func saleArgs(a domain.Account) []any {
+	s := a.Sale
+	if s == nil || a.Kind != domain.AccountRealEstate {
+		return []any{nil, nil, 1.0, 0.0, nil, false}
+	}
+	return []any{nullMonth(s.Month), nullInt(s.MS), s.Share, s.CostRate, nullInt(s.DestinationID), s.MainResidence}
+}
+
+// checkSale verifies that a sale's links belong to the plan and that the
+// destination can hold the money.
+func (s *Store) checkSale(ctx context.Context, planID int64, sale *domain.PropertySale) error {
+	if sale == nil {
+		return nil
+	}
+	if err := s.checkMilestones(ctx, planID, sale.MS); err != nil {
+		return err
+	}
+	if sale.DestinationID == nil {
+		return nil
+	}
+	dest, err := s.GetAccount(ctx, planID, *sale.DestinationID)
+	if err != nil {
+		return err
+	}
+	if !dest.Kind.Liquid() {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // ListAccounts returns the plan's accounts.
@@ -262,17 +305,30 @@ func (s *Store) SaveAccount(ctx context.Context, a domain.Account) (int64, error
 	if err := s.checkMilestones(ctx, a.PlanID, a.ContributionEndMS); err != nil {
 		return 0, err
 	}
-	if a.ID == 0 {
-		return s.insert(ctx, `INSERT INTO accounts (plan_id, name, kind, owner_id, balance_cents, monthly_contribution_cents,
-			annual_return, contribution_end_milestone_id, cost_basis_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			a.PlanID, a.Name, a.Kind, nullInt(a.OwnerID), a.Balance, a.MonthlyContribution, nullFloat(a.AnnualReturn),
-			nullInt(a.ContributionEndMS), nullCents(a.CostBasis))
+	if err := s.checkSale(ctx, a.PlanID, a.Sale); err != nil {
+		return 0, err
 	}
+	if a.ID == 0 {
+		args := append([]any{a.PlanID, a.Name, a.Kind, nullInt(a.OwnerID), a.Balance, a.MonthlyContribution, nullFloat(a.AnnualReturn),
+			nullInt(a.ContributionEndMS), nullCents(a.CostBasis)}, saleArgs(a)...)
+		return s.insert(ctx, `INSERT INTO accounts (plan_id, name, kind, owner_id, balance_cents, monthly_contribution_cents,
+			annual_return, contribution_end_milestone_id, cost_basis_cents,
+			sale_month, sale_milestone_id, sale_share, sale_cost_rate, sale_destination_account_id, sale_main_residence)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, args...)
+	}
+	args := append([]any{a.Name, a.Kind, nullInt(a.OwnerID), a.Balance, a.MonthlyContribution, nullFloat(a.AnnualReturn),
+		nullInt(a.ContributionEndMS), nullCents(a.CostBasis)}, saleArgs(a)...)
+	args = append(args, a.ID, a.PlanID)
 	return a.ID, s.execOne(ctx, `UPDATE accounts SET name = ?, kind = ?, owner_id = ?, balance_cents = ?,
-		monthly_contribution_cents = ?, annual_return = ?, contribution_end_milestone_id = ?, cost_basis_cents = ?
-		WHERE id = ? AND plan_id = ?`,
-		a.Name, a.Kind, nullInt(a.OwnerID), a.Balance, a.MonthlyContribution, nullFloat(a.AnnualReturn),
-		nullInt(a.ContributionEndMS), nullCents(a.CostBasis), a.ID, a.PlanID)
+		monthly_contribution_cents = ?, annual_return = ?, contribution_end_milestone_id = ?, cost_basis_cents = ?,
+		sale_month = ?, sale_milestone_id = ?, sale_share = ?, sale_cost_rate = ?, sale_destination_account_id = ?,
+		sale_main_residence = ?
+		WHERE id = ? AND plan_id = ?`, args...)
+}
+
+// setSaleDestination links a sale to the account receiving the money.
+func (s *Store) setSaleDestination(ctx context.Context, planID, id, destination int64) error {
+	return s.execOne(ctx, `UPDATE accounts SET sale_destination_account_id = ? WHERE id = ? AND plan_id = ?`, destination, id, planID)
 }
 
 // DeleteAccount removes an account.

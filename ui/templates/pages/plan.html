@@ -45,6 +45,7 @@
     {{if .WdActive}}<p class="muted">{{if eq .WdMin .WdMax}}{{t "plan.wd_constant" (t (printf "wd.strategy.%s" .WdStrategy)) (percent .WdMin 0)}}{{else}}{{t "plan.wd_range" (t (printf "wd.strategy.%s" .WdStrategy)) (percent .WdMin 0) (percent .WdMax 0) .WdMinYear}}{{end}}</p>{{end}}
   </div>
 
+  {{range .SalesSkipped}}<p class="callout">{{t "plan.sale_skipped" .}}</p>{{end}}
   {{if .Timeline}}
   <ol class="timeline" aria-label="{{t "plan.timeline"}}">
     {{range .Timeline}}

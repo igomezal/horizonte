@@ -88,7 +88,7 @@ type chartMark struct {
 // timelineItem is one entry of the milestone timeline under the verdict.
 type timelineItem struct {
 	Label   string
-	Kind    string // "milestone", "debt" or "fail"
+	Kind    string // "milestone", "debt", "sale" or "fail"
 	Month   domain.Month
 	Age     int
 	Reached bool // false: a conditional milestone the plan never reaches
@@ -117,6 +117,8 @@ type planView struct {
 	Rows       []planRow
 	NoAccounts bool
 	Timeline   []timelineItem
+	// SalesSkipped names property whose sale could not happen: no account to receive the money.
+	SalesSkipped []string
 	// Withdrawal strategy outcome: spending as a share of the plan once it starts.
 	WdActive     bool
 	WdStrategy   string
@@ -470,6 +472,15 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 		v.Timeline = append(v.Timeline, timelineItem{Label: label, Kind: "debt", Month: d.Month,
 			Age: main.AgeAt(d.Month), Reached: true})
 		addMark(d.Month, label, "debt")
+	}
+	for _, a := range res.SalesSkipped {
+		v.SalesSkipped = append(v.SalesSkipped, a.Name)
+	}
+	for _, sale := range res.Sales {
+		label := s.catalog.T(lang, "plan.event.sold", sale.Account.Name)
+		v.Timeline = append(v.Timeline, timelineItem{Label: label, Kind: "sale", Month: sale.Month,
+			Age: main.AgeAt(sale.Month), Reached: true})
+		addMark(sale.Month, label, "sale")
 	}
 	if res.Failed() {
 		v.Timeline = append(v.Timeline, timelineItem{Label: s.catalog.T(lang, "plan.chart.fail"), Kind: "fail",

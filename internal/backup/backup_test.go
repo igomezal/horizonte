@@ -38,6 +38,8 @@ func fullSnapshot() store.Snapshot {
 		},
 		Accounts: []domain.Account{
 			{ID: 30, Name: "Cuenta", Kind: domain.AccountCash, OwnerID: ptr(int64(10)), Balance: 1234567},
+			{ID: 29, Name: "Piso", Kind: domain.AccountRealEstate, Balance: 20000000, CostBasis: ptr(domain.Cents(9000000)),
+				Sale: &domain.PropertySale{Share: 0.5, CostRate: 0.06, MS: ptr(int64(20)), DestinationID: ptr(int64(31)), MainResidence: true}},
 			{ID: 31, Name: "Fondo", Kind: domain.AccountInvestment, MonthlyContribution: 50000, AnnualReturn: ptr(0.065), ContributionEndMS: ptr(int64(21)), CostBasis: ptr(domain.Cents(987650))},
 		},
 		Incomes: []domain.Income{
@@ -153,6 +155,13 @@ func TestReadRejectsBadFiles(t *testing.T) {
 		}), nil, "people", "count"},
 		{"bad surplus", valid(func(f *File) { f.Plan.Assumptions.SurplusAccountID = ptr(int64(99)) }), nil, "assumptions", "surplus_account_id"},
 		{"bad inflation", valid(func(f *File) { f.Plan.Assumptions.Inflation = 3 }), nil, "assumptions", "inflation"},
+		{"sale to a missing account", valid(func(f *File) { f.Plan.Accounts[1].Sale.DestinationAccountID = ptr(int64(99)) }), nil, "accounts", "sale.destination_account_id"},
+		{"sale to a pension plan", valid(func(f *File) {
+			f.Plan.Accounts[2].Kind = "pension"
+		}), nil, "accounts", "sale.destination_account_id"},
+		{"sale without a date", valid(func(f *File) { f.Plan.Accounts[1].Sale.MilestoneID = nil }), nil, "accounts", "sale_month"},
+		{"sale of a current account", valid(func(f *File) { f.Plan.Accounts[1].Kind = "cash" }), nil, "accounts", "sale_enabled"},
+		{"sale at a missing milestone", valid(func(f *File) { f.Plan.Accounts[1].Sale.MilestoneID = ptr(int64(99)) }), nil, "accounts", "sale.milestone_id"},
 	}
 	for _, c := range cases {
 		_, err := Read(strings.NewReader(c.doc), now)
@@ -223,5 +232,18 @@ func TestBundleValidation(t *testing.T) {
 	out, err := Read(strings.NewReader(bundle(func(b *Bundle) { b.Plans[1].ParentID = ptr(int64(9)) })), now)
 	if err != nil || out[1].ParentID != nil {
 		t.Errorf("dangling parent: %v %+v", err, out[1].ParentID)
+	}
+}
+
+func TestSaleWithoutShareDefaultsToAll(t *testing.T) {
+	doc := `{"format":"horizonte/plan","version":1,"plan":{"name":"Mano","people":[{"id":1,"name":"Eva","birth":"1980-01","life_expectancy":90}],
+		"accounts":[{"id":1,"name":"Piso","kind":"realestate","balance":1000,"sale":{"date":"2040-01"}}],
+		"assumptions":{"inflation":0.02,"tax_rate":0.2}}}`
+	entries, err := Read(strings.NewReader(doc), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := entries[0].Snapshot.Accounts[0].Sale; s == nil || s.Share != 1 || s.CostRate != 0 || s.MainResidence {
+		t.Errorf("sale = %+v", s)
 	}
 }

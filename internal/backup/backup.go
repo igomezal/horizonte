@@ -99,6 +99,17 @@ type Account struct {
 	AnnualReturn        *float64 `json:"annual_return,omitempty"`
 	ContributionEndMS   *int64   `json:"contribution_end_milestone_id,omitempty"`
 	CostBasis           *float64 `json:"cost_basis,omitempty"`
+	Sale                *Sale    `json:"sale,omitempty"`
+}
+
+// Sale is the planned sale of a real-estate account. A missing share means 100 %.
+type Sale struct {
+	Date                 string  `json:"date,omitempty"`
+	MilestoneID          *int64  `json:"milestone_id,omitempty"`
+	Share                float64 `json:"share,omitempty"`
+	CostRate             float64 `json:"cost_rate,omitempty"`
+	DestinationAccountID *int64  `json:"destination_account_id,omitempty"`
+	MainResidence        bool    `json:"main_residence,omitempty"`
 }
 
 // span is the start and end shared by streams and repayments.
@@ -244,7 +255,7 @@ func planFrom(name string, snap store.Snapshot) Plan {
 	for _, x := range snap.Accounts {
 		p.Accounts = append(p.Accounts, Account{ID: x.ID, Name: x.Name, Kind: string(x.Kind), OwnerID: x.OwnerID,
 			Balance: eur(x.Balance), MonthlyContribution: eur(x.MonthlyContribution), AnnualReturn: x.AnnualReturn,
-			ContributionEndMS: x.ContributionEndMS, CostBasis: optEur(x.CostBasis)})
+			ContributionEndMS: x.ContributionEndMS, CostBasis: optEur(x.CostBasis), Sale: saleFrom(x.Sale)})
 	}
 	for _, x := range snap.Incomes {
 		p.Incomes = append(p.Incomes, Income{ID: x.ID, Name: x.Name, Kind: string(x.Kind), OwnerID: x.OwnerID,
@@ -275,6 +286,14 @@ func planFrom(name string, snap store.Snapshot) Plan {
 		p.Assumptions.Order = append(p.Assumptions.Order, string(k))
 	}
 	return p
+}
+
+func saleFrom(s *domain.PropertySale) *Sale {
+	if s == nil {
+		return nil
+	}
+	return &Sale{Date: month(s.Month), MilestoneID: s.MS, Share: s.Share, CostRate: s.CostRate,
+		DestinationAccountID: s.DestinationID, MainResidence: s.MainResidence}
 }
 
 func kindMap(m map[domain.AccountKind]float64) map[string]float64 {
@@ -484,10 +503,37 @@ func readPlan(p Plan, now domain.Month) (string, store.Snapshot, error) {
 		d := domain.Account{ID: x.ID, Name: x.Name, Kind: domain.AccountKind(x.Kind), OwnerID: x.OwnerID,
 			Balance: domain.FromEuros(x.Balance), MonthlyContribution: domain.FromEuros(x.MonthlyContribution),
 			AnnualReturn: x.AnnualReturn, ContributionEndMS: x.ContributionEndMS, CostBasis: optCents(x.CostBasis)}
+		if s := x.Sale; s != nil {
+			if err := link("accounts", x.Name, "sale.milestone_id", s.MilestoneID, mss); err != nil {
+				return "", snap, err
+			}
+			date, err := parseMonth("accounts", x.Name, "sale.date", s.Date)
+			if err != nil {
+				return "", snap, err
+			}
+			d.Sale = &domain.PropertySale{Month: date, MS: s.MilestoneID, Share: s.Share, CostRate: s.CostRate,
+				DestinationID: s.DestinationAccountID, MainResidence: s.MainResidence}
+			if d.Sale.Share == 0 {
+				d.Sale.Share = 1
+			}
+		}
 		if err := invalid("accounts", x.Name, d.Validate()); err != nil {
 			return "", snap, err
 		}
 		snap.Accounts = append(snap.Accounts, d)
+	}
+	// Checked once every account is known: a destination can come later in the file.
+	kinds := map[int64]domain.AccountKind{}
+	for _, d := range snap.Accounts {
+		kinds[d.ID] = d.Kind
+	}
+	for _, d := range snap.Accounts {
+		if d.Sale == nil || d.Sale.DestinationID == nil {
+			continue
+		}
+		if kind, ok := kinds[*d.Sale.DestinationID]; !ok || !kind.Liquid() {
+			return "", snap, &InvalidError{Section: "accounts", Name: d.Name, Field: "sale.destination_account_id"}
+		}
 	}
 	spanOf := func(section, name string, s span) (domain.Month, domain.Month, error) {
 		if err := link(section, name, "start_milestone_id", s.StartMS, mss); err != nil {

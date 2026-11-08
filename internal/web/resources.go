@@ -176,15 +176,24 @@ func newResources(st *store.Store) map[string]*resource {
 			},
 			values: func(lang i18n.Lang, item any) map[string]string {
 				if item == nil {
-					return map[string]string{"kind": string(domain.AccountCash)}
+					return map[string]string{"kind": string(domain.AccountCash), "sale_share": inPercent(lang, 1)}
 				}
 				a := item.(domain.Account)
-				return map[string]string{
+				v := map[string]string{
 					"name": a.Name, "kind": string(a.Kind), "owner": inOwner(a.OwnerID),
 					"balance": inMoney(lang, a.Balance), "contribution": inMoney(lang, a.MonthlyContribution),
 					"return": inOptPercent(lang, a.AnnualReturn), "contrib_end_ms": inOwner(a.ContributionEndMS),
-					"cost_basis": inOptMoney(lang, a.CostBasis),
+					"cost_basis": inOptMoney(lang, a.CostBasis), "sale_share": inPercent(lang, 1),
 				}
+				if s := a.Sale; s != nil {
+					v["sale_enabled"], v["sale_ms"], v["sale_month"] = "on", inOwner(s.MS), s.Month.String()
+					v["sale_share"], v["sale_cost"] = inPercent(lang, s.Share), inPercent(lang, s.CostRate)
+					v["sale_destination"] = inOwner(s.DestinationID)
+					if s.MainResidence {
+						v["sale_main_residence"] = "on"
+					}
+				}
+				return v
 			},
 			parse: func(p *formParser, now domain.Month) (any, domain.Errors) {
 				it := domain.Account{
@@ -200,6 +209,7 @@ func newResources(st *store.Store) map[string]*resource {
 				if !it.Kind.HasCostBasis() {
 					it.CostBasis = nil
 				}
+				it.Sale = parseSale(p, it.Kind)
 				p.merge(it.Validate())
 				return it, p.errs
 			},

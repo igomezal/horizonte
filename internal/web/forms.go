@@ -182,3 +182,20 @@ func inOwner(id *int64) string {
 	}
 	return strconv.FormatInt(*id, 10)
 }
+
+// parseSale reads a real-estate account's planned sale; nil when it has none.
+func parseSale(p *formParser, kind domain.AccountKind) *domain.PropertySale {
+	if kind != domain.AccountRealEstate || p.str("sale_enabled") == "" {
+		return nil
+	}
+	ms, month := p.boundary("sale_ms", "sale_month")
+	s := &domain.PropertySale{Month: month, MS: ms, Share: 1, DestinationID: p.owner("sale_destination"),
+		MainResidence: p.str("sale_main_residence") != ""}
+	if v := p.optPercent("sale_share"); v != nil {
+		s.Share = *v
+	}
+	if v := p.optPercent("sale_cost"); v != nil {
+		s.CostRate = *v
+	}
+	return s
+}

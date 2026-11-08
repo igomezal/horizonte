@@ -131,6 +131,39 @@ func (k AccountKind) HasCostBasis() bool {
 	return k == AccountInvestment || k == AccountOther || k == AccountRealEstate
 }
 
+// Liquid reports whether money in this kind of account can be spent freely,
+// which excludes pension plans and property.
+func (k AccountKind) Liquid() bool {
+	return k == AccountCash || k == AccountDeposit || k == AccountInvestment || k == AccountOther
+}
+
+// PropertySale is the planned sale of part or all of a real-estate account.
+type PropertySale struct {
+	Month Month  // month of the sale; a milestone overrides it
+	MS    *int64 // sold when this milestone happens
+	Share float64
+	// CostRate is the selling costs as a share of the sale price.
+	CostRate float64
+	// DestinationID receives the money. Nil means the surplus account.
+	DestinationID *int64
+	// MainResidence makes the gain exempt for an owner over 65 (art. 33.4 LIRPF).
+	MainResidence bool
+}
+
+// DueIn returns whether the sale happens in month now. Like one-off early
+// repayments, sales dated before the plan starts never happen.
+func (s PropertySale) DueIn(r Resolved, now, planStart Month) bool {
+	start, _, ok := r.Window(s.Month, Month{}, s.MS, nil)
+	return ok && !start.IsZero() && start == now && !now.Before(planStart)
+}
+
+// Lapsed reports whether the sale's month is before the plan starts, so it
+// will never happen.
+func (s PropertySale) Lapsed(r Resolved, planStart Month) bool {
+	start, _, ok := r.Window(s.Month, Month{}, s.MS, nil)
+	return ok && !start.IsZero() && start.Before(planStart)
+}
+
 // Account is something you own that has a balance.
 type Account struct {
 	ID                  int64
@@ -145,6 +178,7 @@ type Account struct {
 	// CostBasis is what the holdings cost, for the gain on investment, other
 	// and real-estate accounts. Nil counts the starting balance as the cost.
 	CostBasis *Cents
+	Sale      *PropertySale // real-estate accounts only; nil = never sold
 }
 
 // Validate checks the account.
@@ -160,6 +194,20 @@ func (a Account) Validate() Errors {
 		validateNonNegative("cost_basis", *a.CostBasis, errs)
 	}
 	validateRate("return", a.AnnualReturn, -0.5, 0.5, errs)
+	if s := a.Sale; s != nil {
+		if a.Kind != AccountRealEstate {
+			errs.Add("sale_enabled", ErrChoice)
+		}
+		if s.Month.IsZero() && s.MS == nil {
+			errs.Add("sale_month", ErrRequired)
+		}
+		if s.Share <= 0 || s.Share > 1 {
+			errs.Add("sale_share", ErrRange)
+		}
+		if s.CostRate < 0 || s.CostRate > 0.5 {
+			errs.Add("sale_cost", ErrRange)
+		}
+	}
 	return errs
 }
 

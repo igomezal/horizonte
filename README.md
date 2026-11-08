@@ -99,6 +99,10 @@ Session Replay records 10% of browser sessions (all of them with `-dev` or `SENT
 All text and input values are masked and all media is blocked, charts included, so a replay shows the page layout and where you clicked, never your figures.
 Network requests keep only method, status and size, and query strings are stripped from URLs.
 
+## Selling property
+
+A real-estate account can be sold, fully or partly, at a date or milestone. The money, less selling costs, goes to the account you choose (by default the one that receives surplus money). With the Spanish tax model the gain over its cost goes to the savings base and is paid with the tax return the following June, and if the plan ends before that June, the tax is charged in its last month. A main residence sold by an owner over 65 is exempt; reinvestment relief is not modelled. The flat tax model does not tax the sale.
+
 ## Test
 
 ```sh

@@ -248,17 +248,29 @@ type DebtPaidOff struct {
 	Month domain.Month
 }
 
+// PropertySold is an event the engine detects: a real-estate account sold,
+// fully or in part, in nominal euros.
+type PropertySold struct {
+	Account domain.Account
+	Month   domain.Month
+	Net     float64 // what reached the destination account, after selling costs
+	Costs   float64 // selling costs
+	Gain    float64 // over the cost of the share sold, 0 at a loss
+}
+
 // Result is a full projection.
 type Result struct {
 	Accounts       []domain.Account
 	Months         []MonthRow
-	Milestones     []MilestoneHit // in the order given in Input
-	PaidOff        []DebtPaidOff  // in payoff order
-	SurplusAccount int            // index of the account receiving surplus money, -1 if none
-	WithdrawalFrom domain.Month   // month the withdrawal strategy started (zero if never)
-	TaxYears       []TaxYear      // IRPF per calendar year (TaxModel "es")
-	FailMonth      domain.Month   // first month with a shortfall; zero if the money lasts
-	Shortfall      float64        // total uncovered deficit, nominal euros
+	Milestones     []MilestoneHit   // in the order given in Input
+	PaidOff        []DebtPaidOff    // in payoff order
+	Sales          []PropertySold   // property sold, in order
+	SalesSkipped   []domain.Account // property due for sale with no liquid account to receive the money
+	SurplusAccount int              // index of the account receiving surplus money, -1 if none
+	WithdrawalFrom domain.Month     // month the withdrawal strategy started (zero if never)
+	TaxYears       []TaxYear        // IRPF per calendar year (TaxModel "es")
+	FailMonth      domain.Month     // first month with a shortfall; zero if the money lasts
+	Shortfall      float64          // total uncovered deficit, nominal euros
 }
 
 // Failed reports whether the money ran out at some point.
@@ -314,12 +326,13 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 	for i, acc := range in.Accounts {
 		accIdx[acc.ID] = i
 	}
+	gone := make([]bool, len(in.Accounts)) // property sold in full: it takes no more money
 	target := func(id *int64) (int, bool) {
 		if id == nil {
 			return 0, false
 		}
 		i, ok := accIdx[*id]
-		return i, ok
+		return i, ok && !gone[i]
 	}
 	freed := make([]float64, len(in.Debts)) // instalment freed by a paid-off debt, for its redirect account
 	for i, d := range in.Debts {
@@ -370,6 +383,23 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		}
 	}
 	effTax := a.TaxRate // share of gross income lost to tax, for withdrawal strategies
+	// saleDestination picks the account receiving a sale's money: the one
+	// chosen, or the surplus account, or else the first that can hold it.
+	// -1 when none can.
+	saleDestination := func(s *domain.PropertySale) int {
+		if to, ok := target(s.DestinationID); ok && in.Accounts[to].Kind.Liquid() {
+			return to
+		}
+		if surplusIdx >= 0 && in.Accounts[surplusIdx].Kind.Liquid() {
+			return surplusIdx
+		}
+		for _, i := range order {
+			if in.Accounts[i].Kind.Liquid() {
+				return i
+			}
+		}
+		return -1
+	}
 
 	res.Months = make([]MonthRow, 0, n)
 	deflator := 1.0
@@ -407,6 +437,35 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 			}
 		}
 
+		// 1b. Property sales. The money moves between accounts, so it is
+		// neither income nor a contribution; the tax falls due with the year's
+		// settlement.
+		for i, acc := range in.Accounts {
+			s := acc.Sale
+			if s == nil || acc.Kind != domain.AccountRealEstate || balances[i] <= 0 || !s.DueIn(resolved, m, in.Start) {
+				continue
+			}
+			to := saleDestination(s)
+			if to < 0 {
+				res.SalesSkipped = append(res.SalesSkipped, acc)
+				continue
+			}
+			sold, costBasis := balances[i]*s.Share, basis[i]*s.Share
+			costs := sold * s.CostRate
+			net := sold - costs
+			gain := math.Max(0, net-costBasis)
+			balances[i] -= sold
+			basis[i] -= costBasis
+			if s.Share >= 1 {
+				balances[i], basis[i], gone[i] = 0, 0, true
+			}
+			if tx != nil && gain > 0 {
+				tx.addPropertyGain(acc.OwnerID, gain, s.MainResidence, m)
+			}
+			deposit(to, net)
+			res.Sales = append(res.Sales, PropertySold{Account: acc, Month: m, Net: net, Costs: costs, Gain: gain})
+		}
+
 		// 2. Income, tax and expenses.
 		var spendingRate float64 // average monthly spending, for financial independence
 		for k, inc := range in.Incomes {
@@ -421,6 +480,9 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		}
 		if tx != nil {
 			row.Tax = tx.monthCharge(m)
+			if t == n-1 {
+				row.Tax += tx.unpaidSaleTax(m)
+			}
 		} else {
 			row.Tax = row.Income * a.TaxRate
 		}
@@ -499,7 +561,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		before := row.Savings()
 		liquidNow := 0.0
 		for i, acc := range in.Accounts {
-			if fundsPrepayments(acc.Kind) {
+			if acc.Kind.Liquid() {
 				liquidNow += balances[i]
 			}
 		}
@@ -563,7 +625,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 		row.Contributions += row.Redirected
 		if cash > 0 {
 			for i, acc := range in.Accounts {
-				if !resolved.ContributingIn(acc, m) {
+				if gone[i] || !resolved.ContributingIn(acc, m) {
 					continue
 				}
 				c := math.Min(acc.MonthlyContribution.Euros(), cash)
@@ -609,7 +671,7 @@ func simulate(in Input, rate func(t, i int) float64) Result {
 						break
 					}
 					kind := in.Accounts[i].Kind
-					if (locked && kind == domain.AccountPension) || (liquidOnly && !fundsPrepayments(kind)) {
+					if (locked && kind == domain.AccountPension) || (liquidOnly && !kind.Liquid()) {
 						continue
 					}
 					take := math.Min(balances[i], need)
@@ -795,12 +857,6 @@ func anchorMonth(streamStart, planStart domain.Month) int {
 		return streamStart.Month
 	}
 	return planStart.Month
-}
-
-// fundsPrepayments reports whether money in an account of this kind can pay
-// for an early repayment. Pension plans and property never can.
-func fundsPrepayments(k domain.AccountKind) bool {
-	return k == domain.AccountCash || k == domain.AccountDeposit || k == domain.AccountInvestment || k == domain.AccountOther
 }
 
 // surplusAccount picks the index of the account that receives surplus cash.

@@ -67,6 +67,8 @@
   "plan.end_value_nominal": "Net worth at the end of the plan, in %d euros.",
   "plan.end_value_real": "Net worth at the end of the plan, in today's euros.",
   "plan.event.paid_off": "Paid off: %s",
+  "plan.event.sold": "Sold: %s",
+  "plan.sale_skipped": "%s could not be sold: the plan has no current account, deposit, investment or other account to receive the money, so the property stays in the plan.",
   "plan.fail": "With these assumptions, the money runs out in %s.",
   "plan.go_finances": "Go to Current finances",
   "plan.intro": "Your money month by month until the end of the plan, based on your current finances and the assumptions below.",
@@ -452,6 +454,7 @@
 
   "milestones.add": "Add milestone",
   "milestones.conditional": "Depends on the plan",
+  "milestones.delete_cancels_sale": "Delete? The sale of %s depends on this milestone and will be cancelled.",
   "milestones.desc": "Key moments such as retirement or financial independence. Income, expenses and contributions can start or end on a milestone: move it and everything that depends on it moves too.",
   "milestones.empty": "No milestones yet. Start with your retirement.",
   "milestones.need_person": "Add a person first to create age milestones.",
@@ -480,6 +483,8 @@
   "accounts.empty": "No accounts yet. Add your current account to start.",
   "accounts.placeholder": "Main account",
   "accounts.return": "Return %s",
+  "accounts.sale": "Sale of %s: %s",
+  "accounts.sale_lapsed": "This date has passed and the sale will not happen: change it to include the sale in the plan.",
   "accounts.title": "Accounts",
 
   "incomes.add": "Add income",
@@ -580,6 +585,7 @@
 
   "redirect.skip": "Skip the payment",
   "redirect.unallocated": "Unallocated money",
+  "sale.destination_default": "Account for unallocated money",
 
   "surplus.default": "First current account",
 
@@ -623,6 +629,12 @@
   "field.prepay_when": "When",
   "field.rate": "Annual interest (nominal)",
   "field.return": "Annual return",
+  "field.sale_cost": "Selling costs",
+  "field.sale_destination": "The money goes to",
+  "field.sale_enabled": "Sell this property",
+  "field.sale_main_residence": "Main residence",
+  "field.sale_share": "Share sold",
+  "field.sale_when": "Sale date",
   "field.start": "From",
   "field.surplus": "Where unallocated money goes",
   "field.tax_model": "Taxes",
@@ -664,6 +676,12 @@
   "hint.prepay_when": "For a single payment, the month you make it. For regular payments, when they start (empty: now).",
   "hint.rate": "The nominal rate in your contract.",
   "hint.return": "Leave empty to use the default return for this account type.",
+  "hint.sale_cost": "As a percentage of the sale price: notary, agency, municipal capital gains tax…",
+  "hint.sale_destination": "Only current accounts, deposits, investments or other accounts.",
+  "hint.sale_enabled": "With the IRPF model, the gain goes to the savings base and is paid with the tax return the following June. With the flat rate, the sale pays no tax.",
+  "hint.sale_main_residence": "Exempt when the owner is over 65 (art. 33.4 LIRPF). Reinvestment relief for buying another main residence is not modelled.",
+  "hint.sale_share": "Empty: 100%.",
+  "hint.sale_when": "Month of the sale.",
   "hint.start": "Empty: already active.",
   "hint.surplus": "What is left each month, after contributions.",
   "hint.tax_es": "2026 Spanish income tax (IRPF), Social Security contributions, monthly withholding and the tax return in June. Simplified: individual filing, no children or regional deductions, self-employment as net profit, joint assets split 50/50 and starting balances with no unrealised gains unless you enter a cost basis.",
@@ -672,7 +690,7 @@
   "hint.tax_region": "Changes the regional half of the general scale. “State” uses the same scale as the State. The Basque Country and Navarre have their own foral tax systems, which the app does not model.",
   "hint.wd_ceiling": "The most you would spend, as a share of the plan.",
   "hint.wd_floor": "The least you would spend, as a share of the plan.",
-  "hint.wd_order": "When money is short, accounts are drawn in this order. Property is never sold.",
+  "hint.wd_order": "When money is short, accounts are drawn in this order. Withdrawals never sell property: to sell it, plan a sale on the property account.",
   "hint.wd_rate": "Share of your savings (not counting property).",
 
   "placeholder.default": "Default",
