@@ -28,7 +28,16 @@ func main() {
 	dbPath := flag.String("db", "horizonte.db", "path to the SQLite database file")
 	dev := flag.Bool("dev", false, "development mode: read templates and static files from ./ui on every request")
 	health := flag.Bool("healthcheck", false, "check that a server listening on -addr is healthy, then exit (for container health checks)")
+	backups := backupSettings{}
+	flag.StringVar(&backups.Dir, "backup-dir", "", `directory for automatic database backups (default "backups" next to the database)`)
+	flag.DurationVar(&backups.Interval, "backup-interval", 24*time.Hour, "time between automatic database backups, 0 to disable the schedule")
+	flag.IntVar(&backups.Keep, "backup-keep", 7, "number of automatic database backups to keep")
 	flag.Parse()
+
+	if err := backups.validate(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 
 	if *health {
 		if err := healthcheck(*addr); err != nil {
@@ -45,7 +54,7 @@ func main() {
 	} else if snt.DSN != "" {
 		log.Info("sentry enabled", "horizonte.sentry.environment", snt.Environment, "horizonte.sentry.release", snt.Release)
 	}
-	err := run(*addr, *dbPath, *dev, snt, log, access)
+	err := run(*addr, *dbPath, *dev, backups, snt, log, access)
 	if err != nil {
 		log.Error("server stopped with an error", "error.message", err.Error())
 		sentry.CaptureException(err)
@@ -59,11 +68,11 @@ func main() {
 // testWebConfig, when set, adjusts the server's configuration. Only tests set it.
 var testWebConfig func(*web.Config)
 
-func run(addr, dbPath string, dev bool, snt sentrySettings, log, access *slog.Logger) error {
+func run(addr, dbPath string, dev bool, backups backupSettings, snt sentrySettings, log, access *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	st, err := store.Open(ctx, dbPath)
+	st, err := store.OpenWithSnapshots(ctx, dbPath, store.SnapshotOptions{Dir: backups.Dir, Keep: backups.Keep})
 	if err != nil {
 		return err
 	}
@@ -76,6 +85,9 @@ func run(addr, dbPath string, dev bool, snt sentrySettings, log, access *slog.Lo
 		"horizonte.db.schema_version", mig.To,
 		"horizonte.db.migrations_applied", mig.Applied,
 		"horizonte.db.schema_version_before", mig.From)
+	if mig.Backup != nil {
+		reportBackup(ctx, log, backupTriggerMigration, *mig.Backup, nil)
+	}
 	recordStartupGauges(ctx, st, dbPath)
 
 	catalog, err := i18n.Load()
@@ -112,6 +124,12 @@ func run(addr, dbPath string, dev bool, snt sentrySettings, log, access *slog.Lo
 		log.Info("shutting down", "horizonte.server.reason", "signal")
 		return nil
 	}
+
+	// Runs before st.Close too, for the same reason as StopWarm.
+	stopBackups := st.StartSnapshotSchedule(ctx, backups.Interval, func(res store.SnapshotResult, err error) {
+		reportBackup(context.WithoutCancel(ctx), log, backupTriggerSchedule, res, err)
+	})
+	defer stopBackups()
 
 	httpSrv := &http.Server{
 		Addr:              addr,

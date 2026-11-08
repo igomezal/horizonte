@@ -5,6 +5,7 @@
 *.db-wal
 *.db-shm
 data/
+backups/
 .env
 .git/
 bin/

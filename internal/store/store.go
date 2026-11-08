@@ -32,12 +32,16 @@ type Store struct {
 	DB        *sql.DB
 	q         querier // DB, or the transaction of an InTx call
 	migration MigrationResult
+	snapshots *snapshotter // nil unless opened with OpenWithSnapshots
 }
 
 // MigrationResult describes what Open did to the database schema.
 type MigrationResult struct {
 	From, To int // schema version before and after Open
 	Applied  int // number of migrations applied
+
+	// Backup is the copy taken before migrating, if one was needed.
+	Backup *SnapshotResult
 }
 
 // Migration reports the schema migrations run by Open.
@@ -64,6 +68,10 @@ func (s *Store) InTx(ctx context.Context, fn func(tx *Store) error) error {
 // Open opens (creating if needed) the database at path and applies pending migrations.
 // Use ":memory:" for an in-memory database in tests.
 func Open(ctx context.Context, dbPath string) (*Store, error) {
+	return open(ctx, dbPath, nil, loadMigrations)
+}
+
+func open(ctx context.Context, dbPath string, snapshots *snapshotter, load func() ([]migration, error)) (*Store, error) {
 	dsn := "file:" + dbPath +
 		"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 	db, err := sql.Open("sqlite", dsn)
@@ -78,8 +86,8 @@ func Open(ctx context.Context, dbPath string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("store: ping %s: %w", dbPath, err)
 	}
-	s := &Store{DB: db, q: db}
-	if err := s.migrate(ctx); err != nil {
+	s := &Store{DB: db, q: db, snapshots: snapshots}
+	if err := s.migrate(ctx, load); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -127,8 +135,9 @@ func loadMigrations() ([]migration, error) {
 }
 
 // migrate applies every migration newer than the recorded schema version,
-// each in its own transaction.
-func (s *Store) migrate(ctx context.Context) error {
+// each in its own transaction. With backups configured, an existing database
+// with migrations pending is copied first, and left alone if the copy fails.
+func (s *Store) migrate(ctx context.Context, load func() ([]migration, error)) error {
 	if _, err := s.DB.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version    INTEGER PRIMARY KEY,
 		name       TEXT NOT NULL,
@@ -144,9 +153,14 @@ func (s *Store) migrate(ctx context.Context) error {
 	}
 	s.migration = MigrationResult{From: current, To: current}
 
-	ms, err := loadMigrations()
+	ms, err := load()
 	if err != nil {
 		return err
+	}
+	if s.snapshots != nil && len(ms) > 0 && ms[len(ms)-1].version > current {
+		if err := s.backupBeforeMigrating(ctx, current); err != nil {
+			return err
+		}
 	}
 	for _, m := range ms {
 		if m.version <= current {

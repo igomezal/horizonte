@@ -69,6 +69,32 @@ behind an authenticating reverse proxy. Back up by copying `/data` while the
 container is stopped. Set `SENTRY_DSN` in the environment to enable error
 reporting.
 
+## Automatic backups
+
+While it runs, Horizonte copies the database with SQLite's `VACUUM INTO`, which is safe with the app in use: when the app starts if a copy is due, and then every 24 hours. It also makes a copy before applying pending schema migrations to an existing database; if that copy fails, the app does not migrate and refuses to start. A failed scheduled copy is logged and reported, and the app keeps serving.
+
+The last 7 copies are kept in a `backups` directory next to the database, named `<database>-<UTC time>.db` (with `-pre-vNNNN` for a copy taken before migrating from schema version NNNN). In Docker that is `/data/backups`, inside the volume, so **copy that directory somewhere else too**: it protects against mistakes and bad upgrades, not against losing the disk.
+
+| Flag | Default | Description |
+|---|---|---|
+| `-backup-dir` | `backups` next to the database | Where copies are kept |
+| `-backup-interval` | `24h` | Time between copies; `0` disables the schedule (the pre-migration copy still happens) |
+| `-backup-keep` | `7` | Number of copies to keep |
+
+To restore, stop the app, replace the database with the copy, delete the old `-wal` and `-shm` files if there are any, and start it again. A copy from an older schema version is migrated on start:
+
+```sh
+cp backups/horizonte-20261109T030000.000Z.db horizonte.db
+rm -f horizonte.db-wal horizonte.db-shm
+```
+
+With the Docker volume, while the container is stopped:
+
+```sh
+docker run --rm -v horizonte-data:/data alpine sh -c 'cd /data && cp backups/<copy>.db horizonte.db \
+  && rm -f horizonte.db-wal horizonte.db-shm && chown 65532:65532 horizonte.db'
+```
+
 ## Error reporting (optional)
 
 Horizonte can report errors and performance data to [Sentry](https://sentry.io), from both the server and the browser.

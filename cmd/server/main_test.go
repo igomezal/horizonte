@@ -125,7 +125,7 @@ func TestRunEndsTheBackgroundWarmUpBeforeClosingTheDatabase(t *testing.T) {
 	t.Cleanup(func() { testWebConfig = nil })
 
 	logger := slog.New(logs)
-	err = run(held.Addr().String(), dbPath, false, sentrySettings{}, logger, logger)
+	err = run(held.Addr().String(), dbPath, false, backupSettings{Keep: 7}, sentrySettings{}, logger, logger)
 
 	var opErr *net.OpError
 	if !errors.As(err, &opErr) || opErr.Op != "listen" {
