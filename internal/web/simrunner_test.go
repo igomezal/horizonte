@@ -469,8 +469,8 @@ func TestSimRunnerEvictsOldest(t *testing.T) {
 
 func TestSimKeyChangesWithInput(t *testing.T) {
 	type in struct{ A int }
-	if simKey("mc", in{1}) == simKey("mc", in{2}) || simKey("mc", in{1}) != simKey("mc", in{1}) ||
-		simKey("mc", in{1}) == simKey("rolling", in{1}) {
+	first, again := simKey("mc", in{1}), simKey("mc", in{1})
+	if first == simKey("mc", in{2}) || first != again || first == simKey("rolling", in{1}) {
 		t.Error("keys must depend on kind and input, and be stable")
 	}
 }
