@@ -16,34 +16,42 @@ Built with Go + htmx, server-rendered, single binary, local SQLite storage.
 
 ## Stack
 
-- **Backend:** Go 1.22, standard-library `net/http` router, `html/template`
+- **Backend:** Go 1.27, standard-library `net/http` router, `html/template`
 - **Frontend:** htmx, Alpine.js, Apache ECharts (line, area, Sankey, fan charts), Pico.css + custom theme (light/dark)
 - **Storage:** SQLite via `modernc.org/sqlite` (pure Go, no CGO)
-- **i18n:** JSON message catalogs (`locales/es.json`, `locales/en.json`) with a template `t` function
+- **i18n:** JSON message catalogs (`internal/i18n/locales/es.json`, `en.json`) with a template `t` function
 - **Packaging:** all static assets kept in the repo and embedded with `go:embed`; no outside CDNs at runtime
 
 ## Architecture
 
 ```
-cmd/server/main.go
+cmd/
+  server/        HTTP entrypoint, logging and Sentry setup
+  dataset/       regenerates the embedded historical market data
 internal/
-  domain/      Plan, Person, Account, IncomeStream, Expense, Debt, Milestone, Assumptions
-  engine/      pure simulation engine (no HTTP, unit-tested)
-    projection.go   monthly simulation + yearly rollup
-    milestones.go   fixed and conditional milestone resolution
+  domain/        Person, Account, Income, Expense, Debt, Prepayment, Milestone, Month and their validation
+  engine/        pure simulation engine (no I/O, unit-tested)
+    engine.go       monthly simulation + yearly rollup
     withdrawal.go   withdrawal order and strategies
+    tax.go          tax models: flat rate and Spanish IRPF
     montecarlo.go   parallel randomized runs, percentile bands
     backtest.go     historical sequences
-    tax/            TaxModel interface: flat/, es/ (phase 9)
-  i18n/        message catalogs, locale middleware, number/currency/date formatting
-  store/       SQLite repositories + migrations
-  web/         handlers, htmx partials, view models
-web/templates/ layouts, pages, partials
-web/static/    vendored JS/CSS
-data/          historical monthly returns and inflation (Shiller dataset)
+    fire.go         what-if: stop working at a milestone
+  tax/es/        Spanish IRPF: general and savings bases, regional scales
+  pension/es/    Spanish public pension estimate
+  history/       historical monthly returns and inflation (Shiller dataset, embedded CSV)
+  backup/        JSON import and export of a plan
+  xls/           minimal .xls reader used by cmd/dataset
+  i18n/          message catalogs, number/currency formatting
+  store/         SQLite repositories + migrations
+  web/           routes, handlers, middleware, simulation cache, rendering
+ui/
+  templates/     layout, pages, partials
+  static/        CSS, JS, fonts and vendored libraries
+perf/            k6 load tests and a process sampler
 ```
 
-The engine is a pure function, `Simulate(plan, assumptions, returnSeq) -> Result`. The deterministic
+The engine is a pure function, `Simulate(Input) -> Result`. The deterministic
 projection, Monte Carlo and backtests all reuse it.
 
 ## Phases

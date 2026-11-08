@@ -116,13 +116,13 @@ SENTRY_DSN=https://<key>@<org>.ingest.de.sentry.io/<project> go run ./cmd/server
 | `SENTRY_ENVIRONMENT` | `production` (`development` with `-dev`) | Environment tag |
 | `SENTRY_RELEASE` | git revision | Release tag; can also be set with `-ldflags "-X main.release=horizonte@1.2.3"` |
 
-Because the app holds personal financial data, collection is restricted: no IP addresses, cookies, request bodies or query strings, no browser console output, and only a few harmless request headers.
+Because the app holds personal financial data, collection is restricted: no IP addresses, cookies, request bodies or query strings, no browser console output on error events or in replays, and only a few harmless request headers.
 Stack traces, route names and timings are sent.
 
 With Sentry enabled, server logs at info level and above (startup, schema migrations, plan created/activated/deleted, imports and exports, blocked cross-origin posts, server errors) and a few browser logs (failed htmx requests, broken charts) are also sent to Sentry Logs, linked to their traces.
 Logs carry IDs, counts and categories only, never amounts or names you typed; the conventions are documented in `cmd/server/logging.go`.
 Per-request access lines stay on stdout.
-Browser console output (from the app, htmx and Alpine) is sent too, but only when it can't contain figures: a console message with a currency, a decimal or grouped number, four or more digits in a row, HTML or a serialized object is not sent at all, and query strings are stripped from the rest.
+Browser console output (from the app, htmx and Alpine) goes to Sentry Logs only, and only when it can't contain figures: a console message with a currency, a decimal or grouped number, four or more digits in a row, HTML or a serialized object is not sent at all, and query strings are stripped from the rest.
 
 Sentry Metrics cover what traces and issues can't show: Monte Carlo and backtest run time (with runs, horizon and CPU count), import and export outcomes, rejected forms per route, blocked cross-origin posts, database size and plan count at startup, and in the browser the time of htmx requests and chart rendering.
 Plan results such as success rates, ages or amounts are never sent; the conventions are in `internal/web/metrics.go`.
@@ -144,12 +144,22 @@ go test ./...
 ## Project layout
 
 ```
-cmd/server/          entrypoint
+.github/workflows/   CI: build, vet, tests, staticcheck, govulncheck
+cmd/server/          web server entrypoint, logging and Sentry setup
+cmd/dataset/         refreshes the embedded historical market data
+internal/domain/     plan model: people, accounts, income, expenses, debts, prepayments, milestones
+internal/engine/     pure simulation: monthly projection, withdrawals, taxes, Monte Carlo, backtests
+internal/tax/es/     Spanish IRPF
+internal/pension/es/ Spanish public pension estimate
+internal/history/    embedded historical market data (Shiller)
+internal/backup/     JSON import and export of a plan
+internal/xls/        minimal .xls reader used by cmd/dataset
 internal/i18n/       message catalogs (locales/*.json) and EUR/number formatting
-internal/store/      SQLite connection and SQL migrations
-internal/web/        routes, handlers, middleware, template rendering
+internal/store/      SQLite connection, repositories and SQL migrations
+internal/web/        routes, handlers, middleware, simulation cache, template rendering
 ui/templates/        layout, partials and pages
-ui/static/           CSS, JS and vendored libraries
+ui/static/           CSS, JS, fonts and vendored libraries
+perf/                k6 load tests and a process sampler (see perf/README.md)
 ```
 
 ## Historical market data
