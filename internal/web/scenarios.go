@@ -1,10 +1,12 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"github.com/getsentry/sentry-go"
+	"io"
 	"maps"
 	"net/http"
 	"slices"
@@ -529,28 +531,41 @@ func (s *Server) handleImportPlan(w http.ResponseWriter, r *http.Request) {
 	// File size spread tells whether the backup.MaxSize limit fits real files.
 	meter(r.Context()).Distribution("horizonte.import.file_size", float64(header.Size),
 		sentry.WithUnit(sentry.UnitByte))
-	entries, err := backup.Read(file, fc.now)
+	data, err := io.ReadAll(io.LimitReader(file, backup.MaxSize+1))
+	if err != nil {
+		fail(s.catalog.T(fc.lang, "import.error.no_file"), importReject{Reason: "no_file"})
+		return
+	}
+	entries, err := backup.Read(bytes.NewReader(data), fc.now)
 	if err != nil {
 		fail(s.importErrorMessage(fc.lang, err), classifyImportError(err))
 		return
 	}
-	ids, err := s.importEntries(r.Context(), entries)
+	tracking, err := backup.ReadTracking(data, fc.now)
+	if err != nil {
+		fail(s.importErrorMessage(fc.lang, err), classifyImportError(err))
+		return
+	}
+	imported, err := s.importEntries(r.Context(), entries, tracking)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
 	countImport(r.Context(), "completed", "")
 	s.log.InfoContext(r.Context(), "import completed",
-		"horizonte.import.plans", len(ids),
+		"horizonte.import.plans", len(imported.ids),
+		"horizonte.import.tracking_months_added", imported.monthsAdded,
+		"horizonte.import.tracking_baseline_added", imported.baselineAdded,
 		"horizonte.import.format_version", backup.Version)
 	http.Redirect(w, r, "/scenarios", http.StatusSeeOther)
 }
 
 // importEntries creates every plan of a file in one transaction, keeping the
 // scenario links between them, and activates the plan marked active (or the
-// first one). It returns the new plan IDs in file order.
-func (s *Server) importEntries(ctx context.Context, entries []backup.Entry) ([]int64, error) {
-	var ids []int64
+// first one). Net worth history is merged in the same transaction, never
+// overwriting what is already there.
+func (s *Server) importEntries(ctx context.Context, entries []backup.Entry, tracking *backup.TrackingData) (importResult, error) {
+	var res importResult
 	err := s.store.InTx(ctx, func(tx *store.Store) error {
 		newID := map[int64]int64{}
 		active := int64(0)
@@ -571,11 +586,25 @@ func (s *Server) importEntries(ctx context.Context, entries []backup.Entry) ([]i
 			if e.Active || active == 0 {
 				active = id
 			}
-			ids = append(ids, id)
+			res.ids = append(res.ids, id)
+		}
+		if tracking != nil {
+			var err error
+			if res.monthsAdded, res.baselineAdded, err = tx.MergeNetWorthHistory(ctx, tracking.Entries, tracking.Baseline); err != nil {
+				return err
+			}
 		}
 		return tx.SetCurrentPlan(ctx, active)
 	})
-	return ids, err
+	return res, err
+}
+
+// importResult says what an import added: the new plan IDs in file order and
+// the net worth history that was missing.
+type importResult struct {
+	ids           []int64
+	monthsAdded   int
+	baselineAdded bool
 }
 
 // GET /scenarios/export: every plan in one JSON file.
@@ -599,12 +628,24 @@ func (s *Server) handleExportAll(w http.ResponseWriter, r *http.Request) {
 		}
 		entries = append(entries, backup.Entry{ID: p.ID, ParentID: p.ParentID, Active: p.ID == fc.plan, Name: p.Name, Snapshot: snap})
 	}
+	history, err := s.store.ListNetWorthEntries(r.Context())
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	baseline, err := s.store.GetNetWorthBaseline(r.Context())
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	now := time.Now()
+	bundle := backup.FromEntries(entries, now)
+	bundle.Tracking = backup.TrackingFrom(history, baseline)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-%s.json"`,
 		slug(s.catalog.T(fc.lang, "scenarios.export_all_file")), now.Format("2006-01-02")))
 	w.Header().Set("Cache-Control", "no-store")
-	if err := backup.Write(w, backup.FromEntries(entries, now)); err != nil {
+	if err := backup.Write(w, bundle); err != nil {
 		countExport(r.Context(), "all", false)
 		s.log.ErrorContext(r.Context(), "export failed",
 			"horizonte.export.scope", "all", "horizonte.export.plans", len(entries),

@@ -1318,6 +1318,13 @@ table.irpf-table tr.total td {
 .crumb a::before {
   content: "‹ ";
 }
+.tracking-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1.25rem;
+  margin-bottom: 1rem;
+}
 .tool-link {
   display: inline-block;
   margin: 1rem 0 0 1.25rem;

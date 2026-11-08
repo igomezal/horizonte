@@ -689,6 +689,43 @@
     return opt;
   };
 
+  // Recorded net worth against the saved baseline. The baseline is a plan's
+  // projection, so it takes the dashed orange of "Tu plan". Months can be
+  // missing from the record: the line carries across them, and a dot marks each
+  // month that was actually recorded.
+  builders.tracking = function (spec) {
+    const opt = baseOption();
+    const fmt = moneyFormatter(false);
+    const ink = cssVar("--app-text"), plan = slotColor(1);
+    const hasValue = (v) => v != null;
+    opt.xAxis.data = spec.categories;
+    opt.tooltip.formatter = (items) => {
+      if (!items.length) return "";
+      const i = items[0].dataIndex, actual = spec.actual[i], baseline = spec.baseline[i];
+      let out = tipHeader(spec.categories[i]);
+      if (hasValue(actual)) out += tipRow(ink, spec.labels.actual, fmt.format(actual));
+      if (hasValue(baseline)) out += tipRow(plan, spec.labels.baseline, fmt.format(baseline), { dashed: true });
+      if (hasValue(actual) && hasValue(baseline)) out += tipRule() + tipRow(null, spec.labels.diff, fmt.format(actual - baseline));
+      return out;
+    };
+    const negative = spec.actual.concat(spec.baseline).some((v) => hasValue(v) && v < 0);
+    opt.series = [];
+    if (spec.actual.some(hasValue)) {
+      opt.series.push({ name: spec.labels.actual, type: "line", data: spec.actual, connectNulls: true,
+        symbol: "circle", symbolSize: 6, showAllSymbol: true, color: ink, legendIcon: LINE_ICON,
+        lineStyle: { width: 2.25, color: ink }, z: 5 });
+    }
+    if (spec.baseline.some(hasValue)) {
+      opt.series.push({ name: spec.labels.baseline, type: "line", data: spec.baseline, symbol: "none", color: plan,
+        legendIcon: DASH_ICON, lineStyle: { width: 2, type: [6, 4], color: plan } });
+    }
+    if (negative && opt.series.length) {
+      opt.series[0].markLine = { symbol: "none", silent: true, animation: false, data: [zeroLine()] };
+    }
+    opt.legend.show = opt.series.length > 1;
+    return opt;
+  };
+
   // Charts that select a year: clicking a bar moves the year picker.
   function wireYearSelect(chart, spec) {
     chart.off("click");

@@ -133,6 +133,14 @@ func New(cfg Config) (*Server, error) {
 	mux.HandleFunc("GET /backtest/summary", s.handleBacktestRolling("bt-summary"))
 	mux.HandleFunc("GET /backtest/heat", s.handleBacktestRolling("bt-heat"))
 
+	mux.HandleFunc("GET /tracking", s.handleTracking)
+	mux.HandleFunc("GET /tracking/entries/new", s.handleTrackingNew)
+	mux.HandleFunc("POST /tracking/entries", s.handleTrackingSave)
+	mux.HandleFunc("GET /tracking/entries/{month}/edit", s.handleTrackingEdit)
+	mux.HandleFunc("PUT /tracking/entries/{month}", s.handleTrackingSave)
+	mux.HandleFunc("DELETE /tracking/entries/{month}", s.handleTrackingDelete)
+	mux.HandleFunc("POST /tracking/baseline", s.handleTrackingBaseline)
+
 	mux.HandleFunc("GET /scenarios", s.handleScenarios)
 	mux.HandleFunc("POST /scenarios", s.handleCreateScenario)
 	mux.HandleFunc("GET /scenarios/{id}/odds", s.handlePlanOdds)

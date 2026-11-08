@@ -95,6 +95,12 @@ docker run --rm -v horizonte-data:/data alpine sh -c 'cd /data && cp backups/<co
   && rm -f horizonte.db-wal horizonte.db-shm && chown 65532:65532 horizonte.db'
 ```
 
+## Net worth tracking
+
+The Tracking page (`/tracking`) records what you really own and owe, one entry per calendar month, and compares it with a baseline: a plan's projected month-by-month path, saved on purpose, with one baseline at a time. History and baseline belong to the household, not to a plan, so copying or deleting plans leaves them alone. Everything is in nominal euros, since the app has no record of actual inflation.
+
+The history is included in the all-plans JSON export. Importing such a file only adds months that are missing and keeps the existing baseline unless there is none.
+
 ## Error reporting (optional)
 
 Horizonte can report errors and performance data to [Sentry](https://sentry.io), from both the server and the browser.

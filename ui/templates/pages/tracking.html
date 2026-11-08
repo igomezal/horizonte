@@ -1,0 +1,131 @@
+{{define "content"}}
+<header class="page-head">
+  <h1>{{t "tracking.title"}}</h1>
+  <p class="muted prose">{{t "tracking.intro"}}</p>
+  <p class="muted prose note">{{t "tracking.nominal"}}</p>
+</header>
+{{template "tracking-body" .Data}}
+{{end}}
+
+{{define "tracking-body"}}
+<div id="tracking-body">
+  {{with .Latest}}
+  <div class="lead-figure verdict">
+    <p class="lead">
+      {{- if neg .Diff}}{{t "tracking.verdict.below" (month .Month)}}
+      {{- else if .Diff}}{{t "tracking.verdict.above" (month .Month)}}
+      {{- else}}{{t "tracking.verdict.on_track" (month .Month)}}{{end -}}
+    </p>
+    <span class="figure{{if neg .Diff}} negative{{end}}">{{eur .Diff}}</span>
+  </div>
+  {{end}}
+
+  {{if .Chart}}
+  <section class="section" aria-labelledby="h-tracking-chart">
+    <h2 id="h-tracking-chart" class="chart-title">{{t "tracking.chart.title"}}</h2>
+    <div class="chart" data-chart="tracking-chart" role="img" aria-label="{{t "tracking.chart.title"}}"></div>
+    <script type="application/json" id="tracking-chart">{{json .Chart}}</script>
+    {{if not .Baseline}}<p class="empty">{{t "tracking.empty.no_baseline"}}</p>{{end}}
+  </section>
+  {{end}}
+
+  <section class="section" aria-labelledby="h-tracking-entries">
+    <h2 id="h-tracking-entries">{{t "tracking.entries.title"}}</h2>
+    {{if not .Rows}}
+    <p class="empty">{{if .Baseline}}{{t "tracking.empty.no_entries"}}{{else}}{{t "tracking.empty.nothing"}}{{end}}</p>
+    {{end}}
+    <div class="tracking-actions">
+      {{if .HasThisMonth}}
+      <button type="button" class="add-btn" hx-get="/tracking/entries/{{.Now.String}}/edit" hx-target="#tracking-form" hx-swap="innerHTML show:top">{{t "tracking.edit_this_month"}}</button>
+      {{else}}
+      <button type="button" class="add-btn" hx-get="/tracking/entries/new?prefill=1" hx-target="#tracking-form" hx-swap="innerHTML show:top">{{t "tracking.record"}}</button>
+      {{end}}
+      <button type="button" class="link-btn" hx-get="/tracking/entries/new" hx-target="#tracking-form" hx-swap="innerHTML show:top">{{t "tracking.add_past"}}</button>
+    </div>
+    <div id="tracking-form" class="new-slot"></div>
+    {{if .Rows}}
+    <div class="table-wrap" tabindex="0" role="region" aria-labelledby="h-tracking-entries">
+      <table class="projection">
+        <thead><tr>
+          <th scope="col">{{t "tracking.col.month"}}</th>
+          <th scope="col" class="num">{{t "tracking.col.actual"}}</th>
+          <th scope="col" class="num">{{t "tracking.col.baseline"}}</th>
+          <th scope="col" class="num">{{t "tracking.col.diff"}}</th>
+          <th scope="col"><span class="visually-hidden">{{t "tracking.col.actions"}}</span></th>
+        </tr></thead>
+        <tbody>
+          {{range .Rows}}
+          <tr>
+            <th scope="row">{{month .Month}}</th>
+            <td class="num{{if neg .Actual}} negative{{end}}">{{eur .Actual}}</td>
+            {{if .HasBaseline}}
+            <td class="num{{if neg .Baseline}} negative{{end}}">{{eur .Baseline}}</td>
+            <td class="num{{if neg .Diff}} negative{{end}}">{{eur .Diff}}</td>
+            {{else}}
+            <td class="num muted">–</td>
+            <td class="num muted">–</td>
+            {{end}}
+            <td x-data="{ confirm: false }">
+              <span x-show="!confirm">
+                <button type="button" class="link-btn" hx-get="/tracking/entries/{{.Month.String}}/edit" hx-target="#tracking-form" hx-swap="innerHTML show:top">{{t "form.edit"}}</button>
+                <button type="button" class="link-btn danger" @click="confirm = true">{{t "form.delete"}}</button>
+              </span>
+              <span x-show="confirm" x-cloak>
+                <span>{{t "form.delete_confirm"}}</span>
+                <button type="button" class="link-btn danger" hx-delete="/tracking/entries/{{.Month.String}}" hx-target="#tracking-body" hx-swap="outerHTML">{{t "form.delete_yes"}}</button>
+                <button type="button" class="link-btn" @click="confirm = false">{{t "form.keep"}}</button>
+              </span>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
+  </section>
+
+  <section class="section" aria-labelledby="h-tracking-baseline" x-data="{ confirm: false }">
+    <h2 id="h-tracking-baseline">{{t "tracking.baseline.title"}}</h2>
+    <p class="section-desc muted">{{t "tracking.baseline.desc"}}</p>
+    {{with .BaselineError}}<p class="field-error form-error" role="alert">{{t .}}</p>{{end}}
+    {{if .Baseline}}<p>{{t "tracking.baseline.saved" .BaselineSavedOn .Baseline.PlanName}}</p>{{end}}
+    {{if not .CanSaveBaseline}}
+    <p class="empty">{{t "tracking.baseline.need_people"}}</p>
+    {{else if .Baseline}}
+    <button type="button" class="outline secondary" x-show="!confirm" @click="confirm = true">{{t "tracking.baseline.replace"}}</button>
+    <form hx-post="/tracking/baseline" hx-target="#tracking-body" hx-swap="outerHTML" x-show="confirm" x-cloak>
+      <input type="hidden" name="replace" value="1">
+      <span class="confirm-text">{{t "tracking.baseline.replace_confirm"}}</span>
+      <button type="submit" class="link-btn danger">{{t "tracking.baseline.replace_yes"}}</button>
+      <button type="button" class="link-btn" @click="confirm = false">{{t "form.keep"}}</button>
+    </form>
+    {{else}}
+    <form hx-post="/tracking/baseline" hx-target="#tracking-body" hx-swap="outerHTML">
+      <button type="submit">{{t "tracking.baseline.save"}}</button>
+    </form>
+    {{end}}
+  </section>
+</div>
+{{end}}
+
+{{define "tracking-form"}}
+<form id="{{.DOMID}}" class="entry-form" novalidate
+  {{- if .Edit.IsZero}} hx-post="/tracking/entries"{{else}} hx-put="/tracking/entries/{{.Edit.String}}"{{end}}
+  hx-target="#tracking-body" hx-swap="outerHTML">
+  {{if not .Edit.IsZero}}<h3>{{t "tracking.form.editing" (month .Edit)}}</h3>{{end}}
+  {{if .Prefilled}}<p class="muted note">{{t "tracking.form.prefilled"}}</p>{{end}}
+  <div class="form-grid">
+    {{if .Edit.IsZero}}{{template "field" (dict "F" . "name" "month" "label" "tracking.col.month" "type" "month" "required" true)}}{{end}}
+    {{$f := .}}
+    {{range .Kinds}}
+    {{template "field" (dict "F" $f "name" (printf "balance_%s" .) "label" (printf "account.kind.%s" .) "type" "money")}}
+    {{end}}
+    {{template "field" (dict "F" . "name" "debt" "label" "tracking.field.debt" "type" "money" "hint" "tracking.hint.debt")}}
+  </div>
+  {{with index .E "_form"}}<p class="field-error form-error" role="alert">{{t .}}</p>{{end}}
+  <div class="form-actions">
+    <button type="submit">{{if .Edit.IsZero}}{{t "tracking.form.add"}}{{else}}{{t "form.save"}}{{end}}</button>
+    <button type="button" class="outline secondary" @click="$el.closest('form').remove()">{{t "form.cancel"}}</button>
+  </div>
+</form>
+{{end}}

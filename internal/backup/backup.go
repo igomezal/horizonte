@@ -51,6 +51,8 @@ type Bundle struct {
 	Version    int    `json:"version"`
 	ExportedAt string `json:"exported_at,omitempty"`
 	Plans      []Plan `json:"plans"`
+	// Tracking is the household's net worth history; absent in older files.
+	Tracking *Tracking `json:"tracking,omitempty"`
 }
 
 // Plan is a plan's records and assumptions. In a bundle, ID identifies the
