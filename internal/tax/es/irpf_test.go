@@ -87,3 +87,48 @@ func TestRegionsDiffer(t *testing.T) {
 		t.Error("unknown region should fall back to general")
 	}
 }
+
+// Expected tax is worked by hand from the published scale: the cumulative
+// amount at the last threshold passed plus the rest at that bracket's rate.
+func TestAddedRegionScales(t *testing.T) {
+	cases := []struct {
+		key               string
+		at30000, at250000 float64
+	}{
+		{"andalucia", 3542.00, 51660.00},
+		{"aragon", 3536.89, 56593.29},
+		{"asturias", 3472.35, 56627.62},
+		{"baleares", 3510.00, 53640.00},
+		{"canarias", 3370.75, 57039.40},
+		{"cantabria", 3290.00, 54458.00},
+		{"castilla_la_mancha", 3582.75, 51700.75},
+		{"castilla_leon", 3422.50, 49786.28},
+		{"extremadura", 3375.50, 56395.50},
+		{"galicia", 3441.16, 51529.16},
+		{"murcia", 3354.15, 51290.15},
+		{"rioja", 3150.30, 58241.90},
+		{"valencia", 3394.00, 61789.00},
+	}
+	for _, c := range cases {
+		r := FindRegion(c.key)
+		if r.Key != c.key {
+			t.Errorf("%s: region not found", c.key)
+			continue
+		}
+		// The published cumulative amounts are rounded, so allow a few cents.
+		if got := r.Scale.Apply(30000); !near(got, c.at30000, 0.05) {
+			t.Errorf("%s: tax on 30.000 = %.2f, want %.2f", c.key, got, c.at30000)
+		}
+		if got := r.Scale.Apply(250000); !near(got, c.at250000, 0.05) {
+			t.Errorf("%s: tax on 250.000 = %.2f, want %.2f", c.key, got, c.at250000)
+		}
+	}
+}
+
+func TestForalRegionsAreNotScales(t *testing.T) {
+	for _, r := range Regions {
+		if r.Key == "pais_vasco" || r.Key == "navarra" {
+			t.Errorf("%s has a foral system and must not be an ordinary scale", r.Key)
+		}
+	}
+}
