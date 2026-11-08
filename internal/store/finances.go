@@ -17,18 +17,8 @@ const settingCurrentPlan = "current_plan_id"
 
 // CurrentPlan returns the active plan's ID, creating a default plan on first use.
 func (s *Store) CurrentPlan(ctx context.Context, defaultName string) (int64, error) {
-	v, err := s.GetSetting(ctx, settingCurrentPlan, "")
-	if err != nil {
-		return 0, err
-	}
-	if id, err := strconv.ParseInt(v, 10, 64); err == nil {
-		var exists int
-		if err := s.q.QueryRowContext(ctx, `SELECT COUNT(*) FROM plans WHERE id = ?`, id).Scan(&exists); err != nil {
-			return 0, err
-		}
-		if exists == 1 {
-			return id, nil
-		}
+	if id, ok, err := s.ActivePlanID(ctx); err != nil || ok {
+		return id, err
 	}
 	res, err := s.q.ExecContext(ctx, `INSERT INTO plans (name) VALUES (?)`, defaultName)
 	if err != nil {
@@ -39,6 +29,27 @@ func (s *Store) CurrentPlan(ctx context.Context, defaultName string) (int64, err
 		return 0, err
 	}
 	return id, s.SetSetting(ctx, settingCurrentPlan, strconv.FormatInt(id, 10))
+}
+
+// ActivePlanID returns the saved active plan, with ok=false when none is saved
+// or it no longer exists. Unlike CurrentPlan it never writes.
+func (s *Store) ActivePlanID(ctx context.Context) (id int64, ok bool, err error) {
+	v, err := s.GetSetting(ctx, settingCurrentPlan, "")
+	if err != nil {
+		return 0, false, err
+	}
+	id, perr := strconv.ParseInt(v, 10, 64)
+	if perr != nil {
+		return 0, false, nil
+	}
+	var exists int
+	if err := s.q.QueryRowContext(ctx, `SELECT COUNT(*) FROM plans WHERE id = ?`, id).Scan(&exists); err != nil {
+		return 0, false, err
+	}
+	if exists != 1 {
+		return 0, false, nil
+	}
+	return id, true, nil
 }
 
 // ---------- helpers for nullable columns ----------

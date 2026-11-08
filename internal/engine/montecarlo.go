@@ -2,15 +2,94 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"math"
 	"math/rand/v2"
 	"runtime"
 	"slices"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"github.com/igomezal/horizonte/internal/domain"
 )
+
+// ErrPanic matches every PanicError. The text is fixed on purpose: a panic's
+// value could hold a person's data.
+var ErrPanic = errors.New("engine: simulation panicked")
+
+// PanicError is a recovered panic: where it happened and nothing about what
+// it was. Error reporters read the location through StackTrace.
+type PanicError struct{ pcs []uintptr }
+
+// NewPanicError records the current stack. Call it from the deferred function
+// that recovered, while the panicking frames are still on the stack.
+func NewPanicError() *PanicError {
+	pcs := make([]uintptr, 64)
+	return &PanicError{pcs: pcs[:runtime.Callers(2, pcs)]}
+}
+
+func (e *PanicError) Error() string { return ErrPanic.Error() }
+
+// Is makes errors.Is(err, ErrPanic) true.
+func (e *PanicError) Is(target error) bool { return target == ErrPanic }
+
+// StackTrace returns the program counters of the panic's stack.
+func (e *PanicError) StackTrace() []uintptr { return e.pcs }
+
+// TestHook, when set, is called at the points where tests inject a panic:
+// "<kind>.start" before the workers start and "<kind>.item" inside them, with
+// kind "monte_carlo" or "rolling". Production code never sets it.
+var TestHook func(point string, in Input)
+
+func testPoint(point string, in Input) {
+	if TestHook != nil {
+		TestHook(point, in)
+	}
+}
+
+// forEach calls work for every index in [0, n) on one goroutine per CPU. It
+// stops early when ctx is done, returning ctx's error, or when an item panics,
+// returning a PanicError for the first panic only: a broken plan panics on
+// every run, and one report is enough.
+func forEach(ctx context.Context, n int, work func(i int)) error {
+	var panicked atomic.Pointer[PanicError]
+	item := func(i int) {
+		defer func() {
+			if recover() != nil {
+				panicked.CompareAndSwap(nil, NewPanicError())
+			}
+		}()
+		work(i)
+	}
+
+	var wg sync.WaitGroup
+	next := make(chan int)
+	for range runtime.GOMAXPROCS(0) {
+		wg.Go(func() {
+			for i := range next {
+				item(i)
+			}
+		})
+	}
+feed:
+	for i := range n {
+		if panicked.Load() != nil {
+			break
+		}
+		select {
+		case next <- i:
+		case <-ctx.Done():
+			break feed
+		}
+	}
+	close(next)
+	wg.Wait()
+	if e := panicked.Load(); e != nil {
+		return e
+	}
+	return ctx.Err()
+}
 
 // MCRunsOptions are the scenario counts offered in the UI.
 var MCRunsOptions = []int{250, 500, 1000, 2000}
@@ -95,13 +174,15 @@ func MonteCarlo(in Input, vol map[domain.AccountKind]float64, s MCSettings) MCRe
 }
 
 // MonteCarloContext is MonteCarlo that stops early when ctx is done (the
-// person left the page), returning ctx's error and an empty result.
+// person left the page), returning ctx's error and an empty result. A panic
+// in a run comes back as a PanicError.
 func MonteCarloContext(ctx context.Context, in Input, vol map[domain.AccountKind]float64, s MCSettings) (MCResult, error) {
 	in.Detail = false
 	end := in.EndMonth()
 	if end.IsZero() || end.Before(in.Start) || s.Runs <= 0 {
 		return MCResult{}, nil
 	}
+	testPoint("monte_carlo.start", in)
 	n := in.Start.MonthsUntil(end) + 1
 
 	// Per-account monthly drift and volatility.
@@ -176,27 +257,10 @@ func MonteCarloContext(ctx context.Context, in Input, vol map[domain.AccountKind
 
 	// Run in parallel; each run has its own deterministic random stream.
 	runs := make([]runSummary, s.Runs)
-	workers := runtime.GOMAXPROCS(0)
-	var wg sync.WaitGroup
-	next := make(chan int)
-	for range workers {
-		wg.Go(func() {
-			for r := range next {
-				runs[r] = runOne(r)
-			}
-		})
-	}
-feed:
-	for r := range s.Runs {
-		select {
-		case next <- r:
-		case <-ctx.Done():
-			break feed
-		}
-	}
-	close(next)
-	wg.Wait()
-	if err := ctx.Err(); err != nil {
+	if err := forEach(ctx, s.Runs, func(r int) {
+		testPoint("monte_carlo.item", in)
+		runs[r] = runOne(r)
+	}); err != nil {
 		return MCResult{}, err
 	}
 

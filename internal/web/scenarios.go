@@ -101,7 +101,8 @@ func (s *Server) cachedOdds(ctx context.Context, id int64, in engine.Input) plan
 }
 
 // buildOdds runs (or takes from the cache) a plan's Monte Carlo and rolling
-// backtest. The error is ctx's when the person left before it finished.
+// backtest. The error is ctx's when the person left before it finished, or
+// engine.ErrPanic.
 func (s *Server) buildOdds(ctx context.Context, id int64, in engine.Input, hs *history.Series) (planOdds, error) {
 	mc, err := s.monteCarlo(ctx, "scenarios", in, compareSettings())
 	if err != nil {
@@ -271,7 +272,8 @@ func (s *Server) handlePlanOdds(w http.ResponseWriter, r *http.Request) {
 	}
 	odds, err := s.buildOdds(r.Context(), id, in, hs)
 	if err != nil {
-		return // the person left; nobody is waiting for the response
+		s.simFailed(w, r, err)
+		return
 	}
 	if err := s.render.render(w, r, http.StatusOK, "scenarios", "scen-odds", odds); err != nil {
 		s.serverError(w, r, err)

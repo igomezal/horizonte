@@ -25,6 +25,8 @@ Flags:
 | `-db` | `horizonte.db` | SQLite database file (git-ignored) |
 | `-dev` | `false` | Read templates and static files from `./ui` on every request, so edits show up without restarting. Without it, static files are minified, compressed (gzip, and brotli for browsers that ask for it, which over plain HTTP Chrome and Firefox don't) and cached by browsers (versioned URLs). Pages, partials and exports are compressed on the fly in both modes |
 
+After every start or restart, the app first prepares your plans' simulations, and until the port opens it does not answer. The port opens when that finishes, usually within seconds; past about 60 s it opens anyway and the remaining plans carry on in the background. Any plan left unprepared is calculated the first time you open it.
+
 ## Build
 
 ```sh

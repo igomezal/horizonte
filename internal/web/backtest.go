@@ -200,7 +200,8 @@ func (v *btRolling) histNote(in engine.Input, hs *history.Series) {
 }
 
 // buildRolling replays the plan from every start year (or takes it from the
-// cache). The error is ctx's when the person left before it finished.
+// cache). The error is ctx's when the person left before it finished, or
+// engine.ErrPanic.
 func (s *Server) buildRolling(ctx context.Context, lang i18n.Lang, in engine.Input, hs *history.Series) (btRolling, error) {
 	all, err := s.rolling(ctx, "backtest", in, hs)
 	if err != nil {
@@ -377,7 +378,8 @@ func (s *Server) handleBacktestRolling(block string) http.HandlerFunc {
 		}
 		v, err := s.buildRolling(r.Context(), fc.lang, in, hs)
 		if err != nil {
-			return // the person left; nobody is waiting for the response
+			s.simFailed(w, r, err)
+			return
 		}
 		if err := s.render.render(w, r, http.StatusOK, "backtest", block, v); err != nil {
 			s.serverError(w, r, err)

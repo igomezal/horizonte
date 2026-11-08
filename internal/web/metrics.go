@@ -68,7 +68,8 @@ const (
 // shared and limited) and records how long it took when it actually ran. Its
 // cost grows with runs × months and depends on the CPU, so these attributes
 // are what tell a slow machine apart from a plan with a very long horizon.
-// The error is ctx's when the person left before it finished.
+// The error is ctx's when the person left before it finished, or
+// engine.ErrPanic if the simulation panicked.
 func (s *Server) monteCarlo(ctx context.Context, source string, in engine.Input, set engine.MCSettings) (engine.MCResult, error) {
 	key := mcKey(in, set)
 	if mc, ok := cachedSim[engine.MCResult](s.sims, key); ok {
@@ -76,7 +77,13 @@ func (s *Server) monteCarlo(ctx context.Context, source string, in engine.Input,
 		return mc, nil
 	}
 	countSimCache(ctx, "monte_carlo", source, servedResults, false)
-	return runSim(ctx, s.sims, key, func(ctx context.Context) (engine.MCResult, error) {
+	return s.runMonteCarlo(ctx, source, in, set)
+}
+
+// runMonteCarlo is monteCarlo without the cache accounting, for callers (the
+// warm-up) whose calculations would otherwise look like cache misses.
+func (s *Server) runMonteCarlo(ctx context.Context, source string, in engine.Input, set engine.MCSettings) (engine.MCResult, error) {
+	return runSim(ctx, s.sims, mcKey(in, set), func(ctx context.Context) (engine.MCResult, error) {
 		start := time.Now()
 		mc, err := engine.MonteCarloContext(ctx, in, in.Assumptions.Volatility, set)
 		if err != nil {
@@ -104,7 +111,12 @@ func (s *Server) rolling(ctx context.Context, source string, in engine.Input, hs
 		return starts, nil
 	}
 	countSimCache(ctx, "rolling_backtest", source, servedResults, false)
-	return runSim(ctx, s.sims, key, func(ctx context.Context) ([]engine.RollingStart, error) {
+	return s.runRolling(ctx, source, in, hs)
+}
+
+// runRolling is rolling without the cache accounting, like runMonteCarlo.
+func (s *Server) runRolling(ctx context.Context, source string, in engine.Input, hs *history.Series) ([]engine.RollingStart, error) {
+	return runSim(ctx, s.sims, rollingKey(in), func(ctx context.Context) ([]engine.RollingStart, error) {
 		start := time.Now()
 		starts, err := engine.RollingContext(ctx, in, hs)
 		if err != nil {
@@ -133,6 +145,22 @@ func horizonMonths(in engine.Input) int {
 
 func msSince(t time.Time) float64 {
 	return float64(time.Since(t).Microseconds()) / 1000
+}
+
+// recordWarmup records how long a phase of the warm-up took. It runs after the
+// warm-up's context may have been cancelled, which must not lose the metric.
+func recordWarmup(ctx context.Context, phase string, r WarmResult) {
+	meter(context.WithoutCancel(ctx)).Distribution("horizonte.warmup.duration", float64(r.Duration.Microseconds())/1000,
+		sentry.WithUnit(sentry.UnitMillisecond),
+		sentry.WithAttributes(
+			attribute.String("horizonte.warmup.phase", phase),
+			attribute.String("horizonte.warmup.outcome", r.Outcome),
+			// The plans this phase considered; the background's are also in the
+			// startup's, so don't sum this across phases.
+			attribute.Int("horizonte.warmup.plans", r.Plans),
+			attribute.Int("horizonte.warmup.simulations", r.Simulations),
+			attribute.Int("horizonte.simulation.workers", runtime.GOMAXPROCS(0)),
+		))
 }
 
 // countImport counts plan imports by outcome, so a rise in rejections after a
