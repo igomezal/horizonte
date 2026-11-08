@@ -59,9 +59,8 @@ backtest), which run the engine on every request and get slow under load.
 When `DURATION` is over, visits stop clicking and close their browser on their
 own, so k6 exits cleanly instead of interrupting them mid-click.
 
-Each user is a Chromium process: 30 of them take about 7 GB of RAM. With k6
-0.49 and a recent Chrome, k6 logs harmless `unknown target type "browser_ui"`
-warnings; filter them out with `grep -v 'unknown target type'`.
+The script uses the stable `k6/browser` API, so it needs k6 0.52 or newer.
+Each user is a Chromium process: 30 of them take about 7 GB of RAM.
 
 To record the server's CPU and memory during the run (Windows):
 

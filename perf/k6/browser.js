@@ -14,7 +14,7 @@
 // Each iteration is one visit: a fresh browser context (new cookies, so a new
 // Sentry session and replay sample), CLICKS link clicks with think time, then
 // the context is closed.
-import { browser } from "k6/experimental/browser";
+import { browser } from "k6/browser";
 import { check, sleep } from "k6";
 import { Counter, Trend } from "k6/metrics";
 
@@ -134,15 +134,16 @@ export default async function (data) {
     sleep(1);
     return;
   }
-  const context = browser.newContext({ userAgent: USER_AGENT, viewport: { width: 1440, height: 900 } });
-  const page = context.newPage();
+  const context = await browser.newContext({ userAgent: USER_AGENT, viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
   try {
     const res = await page.goto(`${BASE_URL}/`, { waitUntil: "networkidle", timeout: 30000 });
-    check(res, { "home loads": (r) => r && r.status() === 200 });
+    const status = res ? await res.status() : 0;
+    check(status, { "home loads": (s) => s === 200 });
     think();
 
     for (let i = 0; i < CLICKS && !timeUp(data); i++) {
-      const path = pickLink(page);
+      const path = await pickLink(page);
       if (!path) {
         await page.goto(`${BASE_URL}/`, { waitUntil: "networkidle" });
         continue;
@@ -151,7 +152,9 @@ export default async function (data) {
         await page.locator('[data-synthetic="next"]').click({ timeout: 10000 });
         await settled(page, path);
         clicks.add(1, { path });
-        check(page, { "page rendered": (p) => p.evaluate(() => !!document.querySelector("main h1")) });
+        // k6's check does not await, so read the page first.
+        const rendered = await page.evaluate(() => !!document.querySelector("main h1"));
+        check(rendered, { "page rendered": (r) => r });
       } catch (e) {
         failedClicks.add(1, { path });
         console.warn(`click on ${path} failed: ${e}`);
@@ -164,12 +167,12 @@ export default async function (data) {
     // segment, then close; a failed close must not stop the VU's next visit.
     try {
       await page.waitForTimeout(2000);
-      page.close();
+      await page.close();
     } catch (e) {
       console.warn(`closing the page failed: ${e}`);
     }
     try {
-      context.close();
+      await context.close();
     } catch (e) {
       console.warn(`closing the browser context failed: ${e}`);
     }

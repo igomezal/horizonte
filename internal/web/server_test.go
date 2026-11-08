@@ -2,11 +2,13 @@ package web
 
 import (
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -210,5 +212,59 @@ func TestBusyOverlayHiddenWithoutCSS(t *testing.T) {
 	_, body := do(s, htmxReq("GET", "/success/results", nil))
 	if !strings.Contains(body, `<div class="sim-busy" hidden>`) || !strings.Contains(body, `<span class="when-busy" hidden>`) {
 		t.Error("loading labels must be hidden by markup, not only by CSS")
+	}
+}
+
+func TestContentSecurityPolicy(t *testing.T) {
+	s := newTestServer(t)
+	rec, body := do(s, httptest.NewRequest("GET", "/", nil))
+	csp := rec.Header().Get("Content-Security-Policy")
+	for _, want := range []string{"script-src 'self' 'unsafe-eval'", "connect-src 'self'", "frame-ancestors 'none'"} {
+		if !strings.Contains(csp, want) {
+			t.Errorf("CSP %q missing %q", csp, want)
+		}
+	}
+	if strings.Contains(csp, "worker-src") {
+		t.Errorf("CSP without Sentry allows workers: %q", csp)
+	}
+	if strings.Contains(body, `src="/static/vendor/echarts.min.js`) {
+		t.Error("ECharts should be loaded on demand, not by the layout")
+	}
+
+	got := contentSecurityPolicy("https://key@o1.ingest.de.sentry.io/42")
+	for _, want := range []string{"connect-src 'self' https://o1.ingest.de.sentry.io", "worker-src 'self' blob:"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("CSP with Sentry %q missing %q", got, want)
+		}
+	}
+	if strings.Contains(got, "key@") {
+		t.Errorf("CSP leaks the DSN key: %q", got)
+	}
+}
+
+// The CSP blocks inline scripts, so these would silently stop working.
+func TestTemplatesHaveNoInlineScripts(t *testing.T) {
+	scriptTag := regexp.MustCompile(`<script\b[^>]*>`)
+	handler := regexp.MustCompile(`(?i)\son[a-z]+\s*=`)
+	err := fs.WalkDir(ui.FS, "templates", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := fs.ReadFile(ui.FS, p)
+		if err != nil {
+			return err
+		}
+		for _, tag := range scriptTag.FindAllString(string(b), -1) {
+			if !strings.Contains(tag, " src=") && !strings.Contains(tag, `type="application/json"`) {
+				t.Errorf("%s: inline script %s", p, tag)
+			}
+		}
+		if m := handler.FindString(string(b)); m != "" {
+			t.Errorf("%s: inline event handler %q", p, m)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

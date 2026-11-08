@@ -824,8 +824,43 @@
     }
   }
 
+  // ECharts is about 1 MB, so it is only fetched once a page has a chart. This
+  // file runs once per full load; boosted navigation arrives through htmx:load.
+  const echartsUrl = document.currentScript.dataset.echarts;
+  let echartsLoading = null;
+
+  function loadECharts() {
+    if (!echartsLoading) {
+      echartsLoading = new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = echartsUrl;
+        s.onload = resolve;
+        s.onerror = () => {
+          echartsLoading = null; // the next page with a chart tries again
+          reject(new Error("echarts failed to load"));
+        };
+        document.head.appendChild(s);
+      });
+    }
+    return echartsLoading;
+  }
+
   function renderAll(root) {
-    (root || document).querySelectorAll("[data-chart]").forEach(render);
+    const els = (root || document).querySelectorAll("[data-chart]");
+    if (!els.length) return;
+    if (typeof echarts !== "undefined") {
+      els.forEach(render);
+      return;
+    }
+    loadECharts().then(
+      // A swap may have replaced these while the library was loading; the new
+      // elements get their own renderAll from htmx:load.
+      () => els.forEach((el) => { if (el.isConnected) render(el); }),
+      () => {
+        const sent = logError("chart library failed to load", { "horizonte.page": location.pathname });
+        if (!sent) console.error("chart: could not load ECharts");
+      }
+    );
   }
 
   window.Charts = { renderAll: renderAll };
@@ -841,6 +876,7 @@
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+      if (typeof echarts === "undefined") return;
       document.querySelectorAll("[data-chart]").forEach((el) => {
         const c = echarts.getInstanceByDom(el);
         if (c) c.resize();

@@ -197,24 +197,31 @@ function bookkeeper() {
 }
 
 const JOURNEYS = [
-  { weight: 40, run: planner },
-  { weight: 20, run: cashflow },
-  { weight: 20, run: backtester },
-  { weight: 20, run: bookkeeper },
+  { weight: 40, run: planner, charts: true },
+  { weight: 20, run: cashflow, charts: true },
+  { weight: 20, run: backtester, charts: true },
+  { weight: 20, run: bookkeeper, charts: false },
 ];
 const TOTAL_WEIGHT = JOURNEYS.reduce((n, j) => n + j.weight, 0);
+
+const staticRequest = (p) => ["GET", BASE + p, null, { tags: { name: "static", kind: "static" } }];
+let echartsCached = false; // per VU: ECharts is only fetched by pages with a chart
 
 export default function (data) {
   // First iteration of each VU: load static assets once, like a cold cache.
   if (__ITER === 0) {
     http.batch(
       ["/static/css/app.css", "/static/vendor/pico.min.css", "/static/vendor/htmx.min.js",
-        "/static/vendor/echarts.min.js", "/static/js/charts.js", "/static/js/app.js",
-        "/static/vendor/alpine.min.js"].map((p) => ["GET", BASE + p, null, { tags: { name: "static", kind: "static" } }])
+        "/static/js/charts.js", "/static/js/app.js",
+        "/static/vendor/alpine.min.js"].map(staticRequest)
     );
   }
   let r = Math.random() * TOTAL_WEIGHT;
   const journey = JOURNEYS.find((j) => (r -= j.weight) < 0) || JOURNEYS[0];
+  if (journey.charts && !echartsCached) {
+    echartsCached = true;
+    http.batch([staticRequest("/static/vendor/echarts.min.js")]);
+  }
   const start = Date.now();
   journey.run(data);
   journeyDuration.add(Date.now() - start, { journey: journey.run.name });

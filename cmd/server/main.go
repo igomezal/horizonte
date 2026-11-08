@@ -135,6 +135,9 @@ func run(addr, dbPath string, dev bool, backups backupSettings, snt sentrySettin
 		Addr:              addr,
 		Handler:           srv,
 		ReadHeaderTimeout: 10 * time.Second,
+		// Closes keep-alive connections nobody is using. There is deliberately
+		// no WriteTimeout: it would cut off long simulations.
+		IdleTimeout: 120 * time.Second,
 	}
 
 	errCh := make(chan error, 1)

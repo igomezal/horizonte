@@ -156,7 +156,7 @@ func New(cfg Config) (*Server, error) {
 	var h http.Handler = mux
 	h = i18n.Middleware(h)
 	h = sameOriginWrites(cfg.Logger, h)
-	h = securityHeaders(h)
+	h = securityHeaders(contentSecurityPolicy(cfg.Sentry.DSN), h)
 	// Sentry sits inside recoverPanics: it reports the panic and re-panics so
 	// recoverPanics still renders the 500 page. It is a no-op without a DSN.
 	h = sentryhttp.New(sentryhttp.Options{Repanic: true}).Handle(h)

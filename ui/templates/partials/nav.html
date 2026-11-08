@@ -33,7 +33,7 @@
   <form method="post" action="/plans/switch" class="plan-switch">
     <input type="hidden" name="next" value="{{.Path}}">
     <label for="plan-switch-select">{{t "plans.active"}}</label>
-    <select id="plan-switch-select" name="plan" onchange="this.form.requestSubmit()">
+    <select id="plan-switch-select" name="plan" @change="$el.form.requestSubmit()">
       {{$cur := .CurrentPlan}}
       {{range .Plans}}<option value="{{.ID}}"{{if eq .ID $cur}} selected{{end}}>{{.Name}}</option>{{end}}
     </select>

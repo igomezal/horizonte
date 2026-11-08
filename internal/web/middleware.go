@@ -6,6 +6,8 @@ import (
 	"github.com/getsentry/sentry-go/attribute"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -53,13 +55,50 @@ func (s *Server) recoverPanics(next http.Handler) http.Handler {
 	})
 }
 
+// contentSecurityPolicy returns the Content-Security-Policy for every response.
+//
+// What the app needs beyond 'self':
+//   - script-src 'unsafe-eval': the standard Alpine build compiles its
+//     expressions with new Function.
+//   - style-src 'unsafe-inline': chart tooltips are HTML with style attributes,
+//     and htmx adds a <style> element for its indicators.
+//   - img-src data:: Pico.css draws its form icons with data: URIs.
+//
+// Scripts are never inline: templates must use files and Alpine directives
+// instead of <script> blocks and on* attributes (TestTemplatesHaveNoInlineScripts).
+//
+// With a Sentry DSN the browser SDK also posts to the project's ingest origin,
+// and Session Replay compresses its recording in a worker started from a blob: URL.
+func contentSecurityPolicy(sentryDSN string) string {
+	connect := "'self'"
+	directives := []string{
+		"default-src 'self'",
+		"script-src 'self' 'unsafe-eval'",
+		"style-src 'self' 'unsafe-inline'",
+		"img-src 'self' data:",
+		"font-src 'self'",
+		"object-src 'none'",
+		"base-uri 'self'",
+		"form-action 'self'",
+		"frame-ancestors 'none'",
+	}
+	if sentryDSN != "" {
+		directives = append(directives, "worker-src 'self' blob:")
+		if u, err := url.Parse(sentryDSN); err == nil && u.Host != "" && (u.Scheme == "https" || u.Scheme == "http") {
+			connect += " " + u.Scheme + "://" + u.Host
+		}
+	}
+	return strings.Join(append(directives, "connect-src "+connect), "; ")
+}
+
 // securityHeaders sets conservative browser security headers.
-func securityHeaders(next http.Handler) http.Handler {
+func securityHeaders(csp string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
+		h.Set("Content-Security-Policy", csp)
 		next.ServeHTTP(w, r)
 	})
 }

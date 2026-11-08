@@ -75,7 +75,7 @@
   <button type="button" class="outline secondary"
           hx-get="/finances/{{.Kind}}/{{.ID}}" hx-target="#{{.DOMID}}" hx-swap="outerHTML">{{t "form.cancel"}}</button>
   {{else}}
-  <button type="button" class="outline secondary" onclick="this.closest('form').remove()">{{t "form.cancel"}}</button>
+  <button type="button" class="outline secondary" @click="$el.closest('form').remove()">{{t "form.cancel"}}</button>
   {{end}}
 </div>
 {{end}}
