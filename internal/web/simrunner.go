@@ -6,7 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"net/http"
 	"sync"
+
+	"github.com/getsentry/sentry-go"
+
+	"github.com/igomezal/horizonte/internal/engine"
 )
 
 // simRunner runs the heavy simulations (Monte Carlo, rolling backtests) so
@@ -106,17 +112,18 @@ func (r *simRunner) do(ctx context.Context, key string, fn func(context.Context)
 			return nil, ctx.Err()
 		}
 		defer func() { <-r.sem }()
-		return fn(ctx)
+		return callSim(ctx, fn)
 	}
 
 	r.mu.Lock()
 	if el, ok := r.cache[key]; ok {
 		r.order.MoveToFront(el)
+		val := el.Value.(*simEntry).val
 		r.mu.Unlock()
-		return el.Value.(*simEntry).val, nil
+		return val, nil
 	}
 	f, ok := r.flights[key]
-	if !ok {
+	if !ok || f.waiters == 0 { // with no waiters it is being cancelled: start afresh
 		// The calculation outlives the request that started it (others may
 		// join), but keeps its values (trace, logger) for telemetry.
 		fctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
@@ -145,18 +152,55 @@ func (r *simRunner) run(ctx context.Context, key string, f *simFlight, fn func(c
 	defer f.cancel()
 	select {
 	case r.sem <- struct{}{}:
-		f.val, f.err = fn(ctx)
+		f.val, f.err = callSim(ctx, fn)
 		<-r.sem
 	case <-ctx.Done():
 		f.err = ctx.Err()
 	}
 	r.mu.Lock()
-	delete(r.flights, key)
-	if f.err == nil {
+	// A flight replaced while it wound down leaves the map to its replacement,
+	// and only adds its result if the replacement hasn't stored one.
+	current := r.flights[key] == f
+	if current {
+		delete(r.flights, key)
+	}
+	if _, cached := r.cache[key]; f.err == nil && (current || !cached) {
 		r.store(key, f.val)
 	}
 	r.mu.Unlock()
 	close(f.done)
+}
+
+// callSim runs fn, turning a panic into an error: a calculation runs on its
+// own goroutine, where a panic would take the whole server down. Panics are
+// reported here, whether fn panicked or the engine's workers recovered one.
+func callSim(ctx context.Context, fn func(context.Context) (any, error)) (val any, err error) {
+	defer func() {
+		if recover() != nil {
+			val, err = nil, engine.NewPanicError()
+		}
+		if errors.Is(err, engine.ErrPanic) {
+			capturePanic(ctx, err)
+		}
+	}()
+	return fn(ctx)
+}
+
+func capturePanic(ctx context.Context, err error) {
+	hub := sentry.GetHubFromContext(ctx)
+	if hub == nil {
+		hub = sentry.CurrentHub()
+	}
+	hub.CaptureException(err)
+}
+
+// simFailed ends a results request whose simulation returned err. A panic
+// (already reported by callSim) gets the error page, so the page can offer a
+// retry; otherwise the person left and nobody is waiting for the response.
+func (s *Server) simFailed(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, engine.ErrPanic) {
+		s.serverError(w, r, nil)
+	}
 }
 
 // runSim is the typed form of simRunner.do.

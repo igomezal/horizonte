@@ -46,7 +46,8 @@ EXPOSE 8347
 # private by publishing the port on localhost only (see compose.yaml).
 ENTRYPOINT ["/usr/local/bin/horizonte", "-addr", "0.0.0.0:8347", "-db", "/data/horizonte.db"]
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+# The port opens after the simulation warm-up (60 s at most), plus a margin.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
   CMD ["/usr/local/bin/horizonte", "-healthcheck", "-addr", "0.0.0.0:8347"]
 
 # On `docker stop` the server gets SIGTERM, finishes in-flight requests and

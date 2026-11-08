@@ -3,8 +3,6 @@ package engine
 import (
 	"context"
 	"math"
-	"runtime"
-	"sync"
 
 	"github.com/igomezal/horizonte/internal/domain"
 	"github.com/igomezal/horizonte/internal/history"
@@ -109,12 +107,13 @@ func Rolling(in Input, s *history.Series) []RollingStart {
 }
 
 // RollingContext is Rolling that stops early when ctx is done, returning
-// ctx's error and no starts.
+// ctx's error and no starts. A panic in a start comes back as a PanicError.
 func RollingContext(ctx context.Context, in Input, s *history.Series) ([]RollingStart, error) {
 	end := in.EndMonth()
 	if end.IsZero() || end.Before(in.Start) {
 		return nil, nil
 	}
+	testPoint("rolling.start", in)
 	var years []int
 	for y := s.Start.Year; y <= s.End().Year; y++ {
 		if s.Index(domain.Month{Year: y, Month: 1}) >= 0 {
@@ -123,29 +122,13 @@ func RollingContext(ctx context.Context, in Input, s *history.Series) ([]Rolling
 	}
 
 	starts := make([]RollingStart, len(years))
-	var wg sync.WaitGroup
-	next := make(chan int)
-	for range runtime.GOMAXPROCS(0) {
-		wg.Go(func() {
-			for k := range next {
-				res, covered := Backtest(in, s, domain.Month{Year: years[k], Month: 1})
-				starts[k] = summarizeStart(years[k], res)
-				starts[k].Covered = covered
-				starts[k].Partial = covered < len(res.Months)
-			}
-		})
-	}
-feed:
-	for k := range years {
-		select {
-		case next <- k:
-		case <-ctx.Done():
-			break feed
-		}
-	}
-	close(next)
-	wg.Wait()
-	if err := ctx.Err(); err != nil {
+	if err := forEach(ctx, len(years), func(k int) {
+		testPoint("rolling.item", in)
+		res, covered := Backtest(in, s, domain.Month{Year: years[k], Month: 1})
+		starts[k] = summarizeStart(years[k], res)
+		starts[k].Covered = covered
+		starts[k].Partial = covered < len(res.Months)
+	}); err != nil {
 		return nil, err
 	}
 	return starts, nil

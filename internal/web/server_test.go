@@ -33,6 +33,7 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(s.StopWarm) // runs before st.Close above
 	return s
 }
 

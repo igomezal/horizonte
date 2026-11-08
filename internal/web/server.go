@@ -30,6 +30,8 @@ type Config struct {
 	Now func() time.Time
 	// Sentry configures browser error reporting; empty DSN disables it.
 	Sentry BrowserSentry
+	// WarmTimeout limits how long Warm blocks (defaults to 60 seconds).
+	WarmTimeout time.Duration
 }
 
 // BrowserSentry is passed to the page so the browser SDK reports to the same
@@ -48,6 +50,9 @@ type Server struct {
 	now       func() time.Time
 	handler   http.Handler
 	sims      *simRunner
+	warmBG    warmBackground
+
+	warmTimeout time.Duration
 }
 
 // Simulation runner limits (see simrunner.go): each simulation already uses
@@ -80,9 +85,14 @@ func New(cfg Config) (*Server, error) {
 		resources: newResources(cfg.Store),
 		now:       cfg.Now,
 		sims:      newSimRunner(simConcurrency, simCacheSize),
+
+		warmTimeout: cfg.WarmTimeout,
 	}
 	if s.now == nil {
 		s.now = time.Now
+	}
+	if s.warmTimeout == 0 {
+		s.warmTimeout = warmTimeout
 	}
 
 	mux := http.NewServeMux()

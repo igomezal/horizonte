@@ -33,6 +33,36 @@ func seedFull(t *testing.T, s *Store, plan int64) {
 	}
 }
 
+func TestActivePlanIDNeverWrites(t *testing.T) {
+	s, plan := openTest(t)
+	ctx := t.Context()
+	other, err := s.CopyPlan(ctx, plan, "Otro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetCurrentPlan(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	if id, ok, err := s.ActivePlanID(ctx); err != nil || !ok || id != other {
+		t.Fatalf("saved plan = %d, %v, %v; want %d", id, ok, err, other)
+	}
+
+	for name, value := range map[string]string{"unparsable": "abc", "missing plan": "9999", "empty": ""} {
+		if err := s.SetSetting(ctx, settingCurrentPlan, value); err != nil {
+			t.Fatal(err)
+		}
+		if id, ok, err := s.ActivePlanID(ctx); err != nil || ok || id != 0 {
+			t.Errorf("%s: got %d, %v, %v; want no plan", name, id, ok, err)
+		}
+		if v, _ := s.GetSetting(ctx, settingCurrentPlan, ""); v != value {
+			t.Errorf("%s: setting rewritten to %q", name, v)
+		}
+		if plans, _ := s.ListPlans(ctx); len(plans) != 2 {
+			t.Errorf("%s: %d plans, want 2 (none created)", name, len(plans))
+		}
+	}
+}
+
 func TestCopyPlanRemapsEveryLink(t *testing.T) {
 	s, plan := openTest(t)
 	ctx := t.Context()

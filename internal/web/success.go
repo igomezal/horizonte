@@ -120,7 +120,7 @@ func (s *Server) pendingSuccessView(ctx context.Context, lang i18n.Lang, in engi
 }
 
 // buildSuccessView runs the simulation (or takes it from the cache). The
-// error is ctx's when the person left before it finished.
+// error is ctx's when the person left before it finished, or engine.ErrPanic.
 func (s *Server) buildSuccessView(ctx context.Context, lang i18n.Lang, in engine.Input, seed uint64) (successView, error) {
 	if len(in.People) == 0 {
 		return successView{Seed: seed}, nil
@@ -241,7 +241,8 @@ func (s *Server) handleSuccessResults(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := s.buildSuccessView(r.Context(), fc.lang, in, parseSeed(r))
 	if err != nil {
-		return // the person left; nobody is waiting for the response
+		s.simFailed(w, r, err)
+		return
 	}
 	if err := s.render.render(w, r, http.StatusOK, "success", "mc-results", v); err != nil {
 		s.serverError(w, r, err)

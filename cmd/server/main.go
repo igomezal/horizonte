@@ -56,6 +56,9 @@ func main() {
 	}
 }
 
+// testWebConfig, when set, adjusts the server's configuration. Only tests set it.
+var testWebConfig func(*web.Config)
+
 func run(addr, dbPath string, dev bool, snt sentrySettings, log, access *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -86,12 +89,28 @@ func run(addr, dbPath string, dev bool, snt sentrySettings, log, access *slog.Lo
 		log.Info("dev mode: serving templates and static files from ./ui", "horizonte.server.dev", true)
 	}
 
-	srv, err := web.New(web.Config{
+	cfg := web.Config{
 		Store: st, Catalog: catalog, Logger: log, AccessLog: access, Assets: assets, Dev: dev,
 		Sentry: web.BrowserSentry{DSN: snt.DSN, Environment: snt.Environment, Release: snt.Release},
-	})
+	}
+	if testWebConfig != nil {
+		testWebConfig(&cfg)
+	}
+	srv, err := web.New(cfg)
 	if err != nil {
 		return err
+	}
+	// Runs before st.Close on every way out of this function: the background
+	// warm-up reads the database.
+	defer srv.StopWarm()
+
+	// Before listening, so the port normally opens with the simulations ready
+	// and nobody reaches a page that is still calculating them. Past its time
+	// limit it returns and the remaining plans carry on in the background.
+	srv.Warm(ctx)
+	if ctx.Err() != nil {
+		log.Info("shutting down", "horizonte.server.reason", "signal")
+		return nil
 	}
 
 	httpSrv := &http.Server{
