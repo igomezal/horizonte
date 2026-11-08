@@ -128,6 +128,14 @@
       </select>
       <small class="field-hint">{{t "hint.mc_runs"}}</small>
     </div>
+    {{$mid := printf "%s-mc_model" .DOMID}}{{$model := index .V "mc_model"}}
+    <div class="field">
+      <label for="{{$mid}}">{{t "field.mc_model"}}</label>
+      <select id="{{$mid}}" name="mc_model">
+        {{range .Models}}<option value="{{.}}"{{if eq . $model}} selected{{end}}>{{t (printf "mc.model.%s" .)}}</option>{{end}}
+      </select>
+      <small class="field-hint">{{t "hint.mc_model"}}</small>
+    </div>
   </div>
   <button type="submit" class="visually-hidden">{{t "plan.recalculate"}}</button>
   <p class="note muted" aria-live="polite">{{if .Saved}}{{t "plan.saved"}}{{else}}{{t "plan.autosave"}}{{end}}</p>

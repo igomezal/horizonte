@@ -170,6 +170,7 @@ type Assumptions struct {
 	Returns            map[string]float64 `json:"returns"`
 	Volatility         map[string]float64 `json:"volatility"`
 	MCRuns             int                `json:"monte_carlo_runs"`
+	MCModel            string             `json:"monte_carlo_model,omitempty"`
 	SurplusAccountID   *int64             `json:"surplus_account_id,omitempty"`
 	Withdrawal         Withdrawal         `json:"withdrawal"`
 	Order              []string           `json:"withdrawal_order,omitempty"`
@@ -278,7 +279,7 @@ func planFrom(name string, snap store.Snapshot) Plan {
 	}
 	a := snap.Assumptions
 	p.Assumptions = Assumptions{Inflation: a.Inflation, TaxModel: a.TaxModel, TaxRegion: a.TaxRegion, TaxRate: a.TaxRate,
-		Returns: kindMap(a.Returns), Volatility: kindMap(a.Volatility), MCRuns: a.MCRuns, SurplusAccountID: a.SurplusAccountID,
+		Returns: kindMap(a.Returns), Volatility: kindMap(a.Volatility), MCRuns: a.MCRuns, MCModel: a.MCModel, SurplusAccountID: a.SurplusAccountID,
 		Withdrawal: Withdrawal{Strategy: string(a.Withdrawal.Strategy), StartMS: a.Withdrawal.StartMS,
 			Rate: a.Withdrawal.Rate, Floor: a.Withdrawal.Floor, Ceiling: a.Withdrawal.Ceiling},
 		PensionAvailableMS: a.PensionAvailableMS, PrepaymentReserve: eur(a.PrepaymentReserve), FreezeIRPF: a.FreezeIRPF}
@@ -646,6 +647,9 @@ func readPlan(p Plan, now domain.Month) (string, store.Snapshot, error) {
 	}
 	if x.MCRuns > 0 {
 		a.MCRuns = x.MCRuns
+	}
+	if x.MCModel != "" {
+		a.MCModel = x.MCModel
 	}
 	if x.Withdrawal.Strategy != "" {
 		a.Withdrawal = engine.WithdrawalSettings{Strategy: engine.WithdrawalStrategy(x.Withdrawal.Strategy),

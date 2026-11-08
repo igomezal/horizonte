@@ -676,7 +676,7 @@ func (s *Server) handleSaveAssumptions(w http.ResponseWriter, r *http.Request) {
 			s.serverError(w, r, err)
 			return
 		}
-		a.Volatility, a.MCRuns = current.Volatility, current.MCRuns
+		a.Volatility, a.MCRuns, a.MCModel = current.Volatility, current.MCRuns, current.MCModel
 		if _, ok := r.PostForm["wd_strategy"]; !ok {
 			a.Withdrawal, a.Order, a.PensionAvailableMS = current.Withdrawal, current.Order, current.PensionAvailableMS
 		}

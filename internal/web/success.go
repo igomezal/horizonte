@@ -84,7 +84,9 @@ type mcSettingsForm struct {
 	E     domain.Errors
 	Kinds []domain.AccountKind
 	Runs  []int
-	Saved bool
+	// Models are the Monte Carlo models to choose from.
+	Models []string
+	Saved  bool
 }
 
 // DOMID is the form's element id (also the prefix of its field ids).
@@ -187,7 +189,7 @@ func (s *Server) successViewFrom(lang i18n.Lang, in engine.Input, seed uint64, m
 }
 
 func (s *Server) mcSettingsValues(lang i18n.Lang, a engine.Assumptions) map[string]string {
-	v := map[string]string{"mc_runs": strconv.Itoa(a.MCRuns)}
+	v := map[string]string{"mc_runs": strconv.Itoa(a.MCRuns), "mc_model": a.MCModel}
 	for _, k := range domain.AccountKinds {
 		v["vol_"+string(k)] = inPercent(lang, a.Volatility[k])
 	}
@@ -195,7 +197,7 @@ func (s *Server) mcSettingsValues(lang i18n.Lang, a engine.Assumptions) map[stri
 }
 
 func newMCForm(v map[string]string, e domain.Errors) mcSettingsForm {
-	return mcSettingsForm{V: v, E: e, Kinds: domain.AccountKinds, Runs: engine.MCRunsOptions}
+	return mcSettingsForm{V: v, E: e, Kinds: domain.AccountKinds, Runs: engine.MCRunsOptions, Models: engine.MCModels}
 }
 
 func parseSeed(r *http.Request) uint64 {
@@ -249,7 +251,8 @@ func (s *Server) handleSuccessResults(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// POST /success/settings: volatility per account kind and number of scenarios.
+// POST /success/settings: volatility per account kind, number of scenarios and
+// Monte Carlo model.
 func (s *Server) handleSaveMCSettings(w http.ResponseWriter, r *http.Request) {
 	fc, err := s.finCtx(r)
 	if err != nil {
@@ -271,6 +274,9 @@ func (s *Server) handleSaveMCSettings(w http.ResponseWriter, r *http.Request) {
 		a.Volatility[k] = p.percent("vol_" + string(k))
 	}
 	a.MCRuns, _ = strconv.Atoi(p.str("mc_runs"))
+	if m := p.str("mc_model"); m != "" { // absent: keep the plan's model
+		a.MCModel = m
+	}
 	p.merge(a.Validate())
 	errs := p.errs
 	if len(errs) == 0 {

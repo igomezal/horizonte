@@ -139,6 +139,14 @@ Then rebuild. The command checks the converted data (no gaps, plausible values) 
 replacing the CSV, and `go test ./internal/history` checks it against well-known years
 (1931, 1974, 2008…).
 
+### Monte Carlo market models
+
+Each plan chooses its model on the Chance of Success page. `Random` (the default) draws
+independent normal monthly returns with fixed inflation. `Historical blocks` strings together
+contiguous 12-month blocks of this data, taking stocks, bonds and inflation from the same
+months, with each series shifted so its long-run mean matches the plan's expected return and
+inflation.
+
 ## Adding translations
 
 Add the key to **both** `internal/i18n/locales/es.json` and `en.json`. A test fails if the catalogs differ.

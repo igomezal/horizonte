@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/igomezal/horizonte/internal/domain"
+	"github.com/igomezal/horizonte/internal/history"
 )
 
 // ErrPanic matches every PanicError. The text is fixed on purpose: a panic's
@@ -113,6 +114,9 @@ type MCSettings struct {
 	// Correlation of every account's returns with a common market factor
 	// (0 = independent, 1 = all accounts move together).
 	Correlation float64
+	// History is the data MCBootstrap samples; nil means the embedded series.
+	// It is not part of the simulation cache key, and the pages leave it nil.
+	History *history.Series `json:"-"`
 }
 
 // Percentiles holds the 10th, 25th, 50th, 75th and 90th percentiles.
@@ -164,10 +168,17 @@ type runSummary struct {
 	hits      []domain.Month // per conditional milestone (zero = not reached)
 }
 
-// MonteCarlo runs the plan s.Runs times with random monthly returns.
-// Monthly log returns are normal with mean ln(1+μ)/12 and standard deviation
-// σ/√12, where μ is the account's expected return and σ its volatility, so the
-// median scenario follows the deterministic projection. Inflation stays fixed.
+// MonteCarlo runs the plan s.Runs times with random monthly returns, using the
+// plan's model (Assumptions.MCModel).
+//
+// MCParametric: monthly log returns are normal with mean ln(1+μ)/12 and
+// standard deviation σ/√12, where μ is the account's expected return and σ its
+// volatility, so the median scenario follows the deterministic projection.
+// Inflation stays fixed.
+//
+// MCBootstrap: each run strings together blocks of historical months, shifted
+// to the plan's expected returns and inflation (see bootstrapSampler). vol and
+// s.Correlation are not used: history brings its own.
 func MonteCarlo(in Input, vol map[domain.AccountKind]float64, s MCSettings) MCResult {
 	res, _ := MonteCarloContext(context.Background(), in, vol, s)
 	return res
@@ -184,6 +195,20 @@ func MonteCarloContext(ctx context.Context, in Input, vol map[domain.AccountKind
 	}
 	testPoint("monte_carlo.start", in)
 	n := in.Start.MonthsUntil(end) + 1
+
+	var boot *bootstrapSampler
+	if in.Assumptions.MCModel == MCBootstrap {
+		var err error
+		hs := s.History
+		if hs == nil {
+			if hs, err = history.Load(); err != nil {
+				return MCResult{}, err
+			}
+		}
+		if boot, err = newBootstrapSampler(in, hs); err != nil {
+			return MCResult{}, err
+		}
+	}
 
 	// Per-account monthly drift and volatility.
 	drift := make([]float64, len(in.Accounts))
@@ -219,24 +244,30 @@ func MonteCarloContext(ctx context.Context, in Input, vol map[domain.AccountKind
 
 	runOne := func(run int) runSummary {
 		rng := rand.New(rand.NewPCG(s.Seed, uint64(run)))
-		rates := make([]float64, len(in.Accounts))
-		lastT := -1
-		rate := func(t, i int) float64 {
-			if t != lastT {
-				z := rng.NormFloat64()
-				for j := range rates {
-					if sigma[j] == 0 {
-						rates[j] = math.Exp(drift[j]) - 1
-						continue
+		runIn := in
+		var rate func(t, i int) float64
+		if boot != nil {
+			runIn.InflationPath, rate = boot.scenario(rng, n)
+		} else {
+			rates := make([]float64, len(in.Accounts))
+			lastT := -1
+			rate = func(t, i int) float64 {
+				if t != lastT {
+					z := rng.NormFloat64()
+					for j := range rates {
+						if sigma[j] == 0 {
+							rates[j] = math.Exp(drift[j]) - 1
+							continue
+						}
+						shock := common*z + own*rng.NormFloat64()
+						rates[j] = math.Exp(drift[j]+sigma[j]*shock) - 1
 					}
-					shock := common*z + own*rng.NormFloat64()
-					rates[j] = math.Exp(drift[j]+sigma[j]*shock) - 1
+					lastT = t
 				}
-				lastT = t
+				return rates[i]
 			}
-			return rates[i]
 		}
-		res := simulate(in, rate)
+		res := simulate(runIn, rate)
 		sum := runSummary{yearReal: make([]float64, len(years)), hits: make([]domain.Month, len(conditional))}
 		for y, t := range yearLastIdx {
 			row := res.Months[t]

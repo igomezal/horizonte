@@ -5,6 +5,7 @@ package engine
 
 import (
 	"math"
+	"slices"
 
 	"github.com/igomezal/horizonte/internal/domain"
 )
@@ -27,6 +28,8 @@ type Assumptions struct {
 	Volatility map[domain.AccountKind]float64
 	// MCRuns is the number of Monte Carlo scenarios.
 	MCRuns int
+	// MCModel is how Monte Carlo draws its scenarios (MCParametric when empty).
+	MCModel string
 	// Withdrawal is the retirement withdrawal strategy.
 	Withdrawal WithdrawalSettings
 	// Order is the order accounts are drawn down in (DefaultOrder when nil).
@@ -59,6 +62,7 @@ func DefaultAssumptions() Assumptions {
 		},
 		Volatility: DefaultVolatility(),
 		MCRuns:     1000,
+		MCModel:    MCParametric,
 		Withdrawal: DefaultWithdrawal(),
 		Order:      append([]domain.AccountKind(nil), DefaultOrder...),
 	}
@@ -100,6 +104,9 @@ func (a Assumptions) Validate() domain.Errors {
 	}
 	if a.PrepaymentReserve < 0 {
 		errs.Add("prepay_reserve", domain.ErrNegative)
+	}
+	if a.MCModel != "" && !slices.Contains(MCModels, a.MCModel) {
+		errs.Add("mc_model", domain.ErrChoice)
 	}
 	return errs
 }
