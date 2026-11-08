@@ -25,13 +25,7 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./... -count=1
-      # These tool versions need a newer Go than go.mod asks for; setup-go
-      # turns automatic toolchain switching off, so turn it back on here.
       - name: Staticcheck
-        env:
-          GOTOOLCHAIN: auto
         run: go run honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION} ./...
       - name: Govulncheck
-        env:
-          GOTOOLCHAIN: auto
         run: go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} ./...
