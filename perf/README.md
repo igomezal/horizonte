@@ -2,18 +2,21 @@
 
 [k6](https://k6.io) script that simulates people using Horizonte: 15 virtual
 users for 20 minutes by default, each repeating one of four journeys with
-1–6 s of think time between steps.
+0.5 to 6 s of think time between steps.
 
 | Journey    | Weight | Steps |
 |------------|--------|-------|
 | planner    | 40 %   | home → plan → month/year and real/nominal toggles → success odds (Monte Carlo) → reseed → scenario comparison |
 | cashflow   | 20 %   | cash flow → year slider moved 4 times → monthly nominal view |
 | backtester | 20 %   | historical backtest → 3 crises → a start year |
-| bookkeeper | 20 %   | finances → each section → summary → pension tool |
+| bookkeeper | 20 %   | finances → each section → summary → pension tool → health tool (`/finances/health`) → tracking (`/tracking`) |
 
 Requests send the same `HX-Request`/`HX-Boosted` headers htmx does, and are
 tagged `kind` = `page`, `partial`, `simulation` or `static` (thresholds are
-set per kind) and `name` (per-endpoint latency in the summary).
+set per kind) and `name` (per-endpoint latency in the summary). The script
+sends `Accept-Encoding: gzip`, follows the requests that a page's placeholders
+make for their simulation results, and also covers `/tracking` and
+`/finances/health`.
 
 ## Running it
 
@@ -51,15 +54,39 @@ server:
 k6 run -e BASE_URL=http://192.168.1.128:8347 perf/k6/browser.js
 # -e VUS=30 -e DURATION=1h -e CLICKS=15 -e THINK_MIN=2 -e THINK_MAX=8
 # -e SETTLE_TIMEOUT=15 -e SLOW_SETTLE_TIMEOUT=60   (seconds per click)
+# -e SIMULATION_P95=10   (seconds, p95 limit for the simulation pages)
+# -e CLICK_FAILURE_RATE=0.05   (highest share of clicks that may fail, 0 for none)
 ```
 
-A click fails if its page hasn't finished loading within `SETTLE_TIMEOUT`, or
-`SLOW_SETTLE_TIMEOUT` for the simulation pages (Monte Carlo, scenarios,
-backtest), which run the engine on every request and get slow under load.
-When `DURATION` is over, visits stop clicking and close their browser on their
-own, so k6 exits cleanly instead of interrupting them mid-click.
+`SIMULATION_P95` must be lower than `SLOW_SETTLE_TIMEOUT`, or the script refuses
+to start: a click over the timeout records no time, so the limit could never be
+crossed.
 
-The script uses the stable `k6/browser` API, so it needs k6 0.52 or newer.
+A click fails if an htmx request during the click gets an error response, loses
+its connection or times out, if its swap fails, if a full page load it starts
+(`hx-boost="false"` links) ends with status 400 or above, or if its page hasn't
+finished loading within `SETTLE_TIMEOUT`, or `SLOW_SETTLE_TIMEOUT` for the simulation
+pages (Monte Carlo, scenarios, backtest). A failed click records no settle time
+and no "page rendered" check. Simulation results are cached and warmed at
+startup. When a result is ready the page renders it straight away; otherwise the
+page renders a placeholder and the browser fetches the result, which can be slow
+under load. When `DURATION` is over, visits stop clicking and close their browser
+on their own, so k6 exits cleanly instead of interrupting them mid-click.
+
+The run fails if more than `CLICK_FAILURE_RATE` of clicks fail (5 % by default,
+0 allows none; `synthetic_click_failed`), or if the p95 of
+`synthetic_click_settle` is over 5 s for ordinary pages or over
+`SIMULATION_P95` for simulation pages. A home page that can't be loaded counts
+as a failed visit (`synthetic_visit_failures`) and a failed check, and ends
+that visit.
+
+`synthetic_click_settle` runs from the click to the swap being finished, with
+no fixed wait inside it. Values from runs before this change included a floor
+of about 200 ms and are not directly comparable.
+
+The script uses the stable `k6/browser` API, so it needs k6 0.52 or newer. The
+scripts were last run on k6 2.3.0. The k6 REST API is off in k6 2.x unless you
+pass `--address 127.0.0.1:6565`.
 Each user is a Chromium process: 30 of them take about 7 GB of RAM.
 
 To record the server's CPU and memory during the run (Windows):
@@ -74,6 +101,7 @@ powershell -File perf/sample-process.ps1 -ProcessId <server pid> -Out perf/resul
 |--------|-------|
 | failed requests | < 1 % |
 | checks (status 200, page rendered) | > 99 % |
-| p95 pages and partials | < 800 ms |
-| p95 simulation pages (Monte Carlo, backtest, scenarios) | < 3 s |
+| checks on static assets (`checks{kind:static}`) | > 99 % |
+| p95 pages (including `/success`, `/backtest` and `/scenarios`) and partials | < 800 ms |
+| p95 simulation requests (deferred results and reseed) | < 3 s |
 | p95 whole journey (think time included) | < 60 s |
