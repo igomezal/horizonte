@@ -546,6 +546,9 @@ h3 {
   color: var(--app-text);
   text-align: right;
 }
+.ledger.compact .ledger-row dd.negative {
+  color: var(--app-negative);
+}
 .ledger.compact .ledger-row.total {
   border-top: 1px solid var(--app-text);
   border-bottom: 0;
@@ -554,7 +557,7 @@ h3 {
   font-weight: 600;
 }
 .ledger.compact .ledger-row.total dd.positive {
-  color: var(--app-positive);
+  color: var(--app-text);
 }
 .ledger.compact .ledger-row.total dd.negative {
   color: var(--app-negative);

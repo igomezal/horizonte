@@ -33,6 +33,7 @@
     {{template "field" (dict "F" . "name" "base" "label" "pension.base" "type" "money" "hint" "pension.hint.base")}}
     {{template "field" (dict "F" . "name" "until" "label" "pension.until" "type" "int" "hint" "pension.hint.until")}}
     {{template "field" (dict "F" . "name" "retire" "label" "pension.retire" "type" "int" "hint" "pension.hint.retire")}}
+    {{template "field" (dict "F" . "name" "retire_months" "label" "pension.retire_months" "type" "int" "hint" "pension.hint.retire_months")}}
     {{$rid := printf "%s-regime" .DOMID}}{{$reg := index .V "regime"}}
     <div class="field">
       <label for="{{$rid}}">{{t "pension.regime"}}</label>
@@ -56,28 +57,33 @@
 <div id="pension-result" class="tool-result" aria-live="polite">
   {{if .Result}}{{with .Result}}
   {{if not .Entitled}}
-  <p class="lead negative">{{t "pension.not_entitled" (number .Years 1)}}</p>
+  {{if eq .NotEntitledWhy "recent"}}<p class="lead negative">{{t "pension.not_entitled_recent"}}</p>
+  <p class="note">{{t "pension.not_entitled_alta"}}</p>
+  {{else}}<p class="lead negative">{{t "pension.not_entitled" (number .Years 1)}}</p>{{end}}
   {{else if .AlreadyRetired}}
-  <p class="lead">{{t "pension.already_retired" .Person .RetireAge}}</p>
+  <p class="lead">{{t "pension.already_retired" .Person .OrdinaryText}}</p>
   {{else}}
   <div class="lead-figure">
-    <p class="lead">{{t "pension.result_lead" .Person (month .Start) .RetireAge}}</p>
+    <p class="lead">{{t "pension.result_lead" .Person (month .Start) .RetireText}}</p>
     <span class="figure">{{money2 .Monthly}}</span>
     <p class="breakdown"><span>{{t "pension.per_month_14"}}</span><span>{{t "pension.per_year" (money .Annual)}}</span></p>
   </div>
   <dl class="ledger compact">
     <div class="ledger-row"><dt>{{t "pension.r.years"}}</dt><dd>{{number .Years 1}}</dd></div>
-    <div class="ledger-row"><dt>{{t "pension.r.ordinary"}}</dt><dd>{{t "pension.age" .OrdinaryAge}}</dd></div>
+    <div class="ledger-row"><dt>{{t "pension.r.ordinary"}}</dt><dd>{{.OrdinaryText}}</dd></div>
     <div class="ledger-row"><dt>{{t "pension.r.base"}}</dt><dd class="amount">{{money2 .BaseUsed}}</dd></div>
     <div class="ledger-row"><dt>{{t "pension.r.br"}}</dt><dd class="amount">{{money2 .BaseReguladora}}</dd></div>
     <div class="ledger-row"><dt>{{t "pension.r.percent"}}</dt><dd>{{percent .Percent 2}}</dd></div>
     {{if lt .Adjustment 0.0}}<div class="ledger-row"><dt>{{t "pension.r.early"}}</dt><dd class="negative">{{percent .Adjustment 2}}</dd></div>{{end}}
     {{if gt .Adjustment 0.0}}<div class="ledger-row"><dt>{{t "pension.r.late"}}</dt><dd class="positive">+{{percent .Adjustment 0}}</dd></div>{{end}}
   </dl>
-  {{if .Capped}}<p class="note">{{t "pension.capped"}}</p>{{end}}
+  {{if .Capped}}<p class="note">{{if lt .Adjustment 0.0}}{{if .CapPhased}}{{t "pension.capped_early"}}{{else}}{{t "pension.capped_early_final"}}{{end}}{{else}}{{t "pension.capped"}}{{end}}</p>{{end}}
   {{if .ToppedUp}}<p class="note">{{t "pension.topped"}}</p>{{end}}
   {{end}}
-  {{if .EarlyNotAllowed}}<p class="note negative">{{t "pension.early_not_allowed" .OrdinaryAge}}</p>{{end}}
+  {{if .EarlyNotAllowed}}
+  {{if eq .EarlyWhy "below_minimum"}}<p class="note negative">{{t "pension.early_below_minimum" (money2 .MinPension) .OrdinaryText}}</p>
+  {{else}}<p class="note negative">{{t "pension.early_not_allowed" .OrdinaryText}}</p>{{end}}
+  {{end}}
   {{end}}
   {{if .Result.Addable}}
   {{if $.Error}}<p class="field-error" role="alert">{{t $.Error}}</p>{{end}}
@@ -86,7 +92,7 @@
   {{end}}
   {{else}}
   <p class="muted">{{t "pension.fix_fields"}}</p>
-  {{range $k, $v := .Form.E}}<p class="field-error">{{t (printf "pension.%s" $k)}}: {{t $v}}</p>{{end}}
+  {{range $k, $v := .Errs}}<p class="field-error">{{t (printf "pension.%s" $k)}}: {{t $v}}</p>{{end}}
   {{end}}
   <p class="callout">{{t "pension.disclaimer"}}</p>
 </div>
