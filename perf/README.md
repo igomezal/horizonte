@@ -84,10 +84,11 @@ that visit.
 no fixed wait inside it. Values from runs before this change included a floor
 of about 200 ms and are not directly comparable.
 
-The script uses the stable `k6/browser` API, so it needs k6 0.52 or newer. The
-scripts were last run on k6 2.3.0. The k6 REST API is off in k6 2.x unless you
-pass `--address 127.0.0.1:6565`.
-Each user is a Chromium process: 30 of them take about 7 GB of RAM.
+The scripts were tested on k6 2.3.0; other versions are untested. On that
+version the k6 REST API is off unless you pass `--address 127.0.0.1:6565`.
+Each user runs its own Chromium, which is about 8 processes. With 30 users at the
+script's 1440x900 viewport, Chromium used about 10 GB of private memory (11 to 13 GB
+at peak) and k6 about 250 MB.
 
 To record the server's CPU and memory during the run (Windows):
 

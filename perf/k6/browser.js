@@ -37,8 +37,27 @@ const THINK_MAX = parseFloat(__ENV.THINK_MAX || "8");
 const SETTLE_TIMEOUT = parseFloat(__ENV.SETTLE_TIMEOUT || "15") * 1000;
 const SLOW_SETTLE_TIMEOUT = parseFloat(__ENV.SLOW_SETTLE_TIMEOUT || "60") * 1000;
 const SIMULATION_P95 = parseFloat(__ENV.SIMULATION_P95 || "10") * 1000;
-const CLICK_FAILURE_RATE = Number(__ENV.CLICK_FAILURE_RATE || "0.05");
+// Number("  ") is 0, which would silently mean that no click may fail, so a value
+// of only spaces becomes NaN and is refused below like any other invalid value.
+const CLICK_FAILURE_RATE = Number((__ENV.CLICK_FAILURE_RATE || "0.05").trim() || NaN);
 const SLOW_PATHS = /^\/(success|scenarios|backtest)/;
+
+// parseInt and parseFloat give NaN for a blank or non-numeric value. Left alone
+// it is not an error: CLICKS would make visits with no clicks and the think times
+// and timeouts would stop applying, so refuse it here.
+for (const [name, value] of Object.entries({
+  VUS,
+  CLICKS,
+  THINK_MIN,
+  THINK_MAX,
+  SETTLE_TIMEOUT,
+  SLOW_SETTLE_TIMEOUT,
+  SIMULATION_P95,
+})) {
+  if (Number.isNaN(value)) {
+    throw new Error(`${name} ("${__ENV[name]}") must be a number`);
+  }
+}
 
 if (!(CLICK_FAILURE_RATE >= 0 && CLICK_FAILURE_RATE <= 1)) {
   throw new Error(
@@ -98,6 +117,7 @@ const failedClicks = new Counter("synthetic_click_failures");
 const clickFailed = new Rate("synthetic_click_failed"); // every click attempt, so failures can fail the run
 const failedVisits = new Counter("synthetic_visit_failures");
 const settle = new Trend("synthetic_click_settle", true); // click to htmx swap finished
+const contextRetries = new Counter("synthetic_context_retries"); // waits restarted because a navigation replaced the document
 
 async function think(page) {
   await page.waitForTimeout(1000 * (THINK_MIN + Math.random() * (THINK_MAX - THINK_MIN)));
@@ -242,6 +262,39 @@ function armClick(page) {
   });
 }
 
+// The errors Chromium and k6 give when the JavaScript context k6 was using has
+// gone, because a full navigation replaced the document. They say nothing about
+// the click: the new document carries on from sessionStorage.
+const LOST_CONTEXT = /Cannot find context with specified id|Execution context was destroyed|execution context \S+ not found/;
+
+// Reads the tracker's result once it has finished, starting the wait again if a
+// navigation takes the context away, always within the same limit. Anything else
+// (a timeout, for example) still ends the click. The result is read together
+// with finished because the document can change between the wait and the read,
+// and a new document that has not finished has no result yet.
+async function clickResult(page, limit) {
+  const deadline = Date.now() + limit;
+  for (;;) {
+    const left = deadline - Date.now();
+    if (left <= 0) throw new Error(`not settled within ${limit} ms`);
+    try {
+      await page.waitForFunction(() => !!window.__syntheticClick && window.__syntheticClick.finished, {
+        timeout: left,
+        polling: 25,
+      });
+      const result = await page.evaluate(() => {
+        const s = window.__syntheticClick;
+        return s && s.finished ? { ms: s.ms, failed: s.failed } : null;
+      });
+      if (result) return result;
+    } catch (e) {
+      if (!LOST_CONTEXT.test(String(e))) throw e;
+      contextRetries.add(1);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 // Waits until clickTracker says the page is finished, which is what the person
 // is waiting for, and records the time it measured. The timeout is checked
 // against that time too: the page can finish before k6 starts waiting, and then
@@ -249,14 +302,7 @@ function armClick(page) {
 async function settled(page, path) {
   const slow = SLOW_PATHS.test(path);
   const limit = slow ? SLOW_SETTLE_TIMEOUT : SETTLE_TIMEOUT;
-  await page.waitForFunction(() => !!window.__syntheticClick && window.__syntheticClick.finished, {
-    timeout: limit,
-    polling: 25,
-  });
-  const { ms, failed } = await page.evaluate(() => {
-    const s = window.__syntheticClick;
-    return { ms: s.ms, failed: s.failed };
-  });
+  const { ms, failed } = await clickResult(page, limit);
   if (failed) throw new Error(`request failed: ${failed}`);
   if (ms === null) return;
   if (ms > limit) throw new Error(`settled after ${ms} ms, over the ${limit} ms limit`);
