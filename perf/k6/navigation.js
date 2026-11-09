@@ -4,11 +4,21 @@
 //   k6 run -e BASE_URL=http://127.0.0.1:8090 -e VUS=15 -e DURATION=20m perf/k6/navigation.js
 //
 // Each virtual user (VU) repeats one of four journeys, picked by weight, with
-// 1–4 s of think time between steps. Full pages are requested like a boosted
+// 0.5 to 6 s of think time between steps and journeys. Full pages are requested like a boosted
 // htmx navigation; partial updates (plan view toggles, Monte Carlo reseed,
 // cash-flow year slider, backtest scenarios) send the same HX-Request header
 // htmx sends. The run is read-only apart from seeding an empty database in
 // setup(), so 15 VUs sharing one single-user database don't interfere.
+//
+// /success, /backtest and /scenarios answer at once with a placeholder when
+// their simulation is not cached, and the browser then fetches the results
+// through elements with hx-trigger="load, ...". followDeferred() issues those
+// same requests, found in the response HTML, so a page that renders its result
+// inline issues none. Only these deferred results and the reseed count as
+// kind:simulation. After the first request a result comes from the server's
+// simulation cache (which the server also warms at startup), so most deferred
+// requests are cache lookups or do not happen at all. reseed=1 is the request
+// that forces a new Monte Carlo run, and it writes nothing to the database.
 //
 // Run it against a dedicated database, never your real one (see perf/README.md).
 
@@ -24,9 +34,11 @@ const DURATION = __ENV.DURATION || "20m";
 // reports its latency separately in the summary.
 const ENDPOINTS = [
   "GET /", "GET /plan", "GET /plan/results", "GET /success", "GET /success/results",
-  "GET /scenarios", "GET /cashflow", "GET /cashflow/year", "GET /backtest",
-  "GET /backtest/scenario", "GET /finances", "GET /finances/{kind}",
-  "GET /finances/summary", "GET /finances/pension", "static",
+  "GET /success/results (reseed)", "GET /scenarios", "GET /scenarios/{id}/odds",
+  "GET /cashflow", "GET /cashflow/year", "GET /backtest", "GET /backtest/summary",
+  "GET /backtest/heat", "GET /backtest/scenario", "GET /finances", "GET /finances/{kind}",
+  "GET /finances/summary", "GET /finances/pension", "GET /finances/health", "GET /tracking",
+  "static",
 ];
 const PER_ENDPOINT = "max>=0"; // always passes; only there to create the sub-metric
 
@@ -39,17 +51,18 @@ export const options = {
       gracefulStop: "30s",
     },
   },
-  // Pass/fail criteria. Pages that run simulations (Monte Carlo, backtest,
-  // scenario comparison) get a looser budget than plain pages.
+  // Pass/fail criteria. Simulation results (Monte Carlo, rolling backtest,
+  // scenario odds) get a looser budget than plain pages.
   thresholds: {
     http_req_failed: ["rate<0.01"],
     checks: ["rate>0.99"],
+    "checks{kind:static}": ["rate>0.99"],
     "http_req_duration{kind:page}": ["p(95)<800"],
     "http_req_duration{kind:partial}": ["p(95)<800"],
     "http_req_duration{kind:simulation}": ["p(95)<3000"],
     journey_duration: ["p(95)<60000"],
   },
-  summaryTrendStats: ["avg", "min", "med", "p(90)", "p(95)", "p(99)", "max"],
+  summaryTrendStats: ["count", "avg", "min", "med", "p(90)", "p(95)", "p(99)", "max"],
 };
 
 for (const n of ENDPOINTS) options.thresholds[`http_req_duration{name:${n}}`] = [PER_ENDPOINT];
@@ -59,10 +72,19 @@ const journeys = new Counter("journeys");
 
 // ---------- request helpers ----------
 
+// Browsers always accept compressed responses. k6 hands back the decompressed
+// body, so the marker checks below still read the HTML.
+const GZIP = { "Accept-Encoding": "gzip" };
+
+const partialParams = (name, kind) => ({
+  headers: { ...GZIP, "HX-Request": "true", "HX-Current-URL": BASE + "/" },
+  tags: { name, kind },
+});
+
 // page: a full page, as hx-boost requests it (whole document swapped in).
 function page(path, name, kind = "page", marker = "<main") {
   const res = http.get(BASE + path, {
-    headers: { "HX-Request": "true", "HX-Boosted": "true", "HX-Current-URL": BASE + "/" },
+    headers: { ...GZIP, "HX-Request": "true", "HX-Boosted": "true", "HX-Current-URL": BASE + "/" },
     tags: { name, kind },
   });
   check(res, {
@@ -74,12 +96,50 @@ function page(path, name, kind = "page", marker = "<main") {
 
 // partial: an htmx fragment request (hx-get on a button, link or slider).
 function partial(path, name, kind = "partial") {
-  const res = http.get(BASE + path, {
-    headers: { "HX-Request": "true", "HX-Current-URL": BASE + "/" },
-    tags: { name, kind },
-  });
+  const res = http.get(BASE + path, partialParams(name, kind));
   check(res, { [`${name} 200`]: (r) => r.status === 200 });
   return res;
+}
+
+const decodeAmp = (s) => s.replace(/&amp;/g, "&");
+
+// Opening tags, allowing ">" inside quoted attribute values.
+const TAG = /<[a-z][^\s>]*\s(?:"[^"]*"|'[^']*'|[^'">])*>/gi;
+const attr = (tag, name) => (tag.match(new RegExp(`\\s${name}="([^"]*)"`)) || [])[1];
+
+// deferredUrls: the hx-get URL of every element htmx would fetch on load.
+function deferredUrls(html) {
+  const urls = new Set();
+  for (const [tag] of html.matchAll(TAG)) {
+    const url = attr(tag, "hx-get");
+    const trigger = attr(tag, "hx-trigger");
+    if (url && trigger && trigger.split(",").some((t) => t.trim().split(/\s+/)[0] === "load")) {
+      urls.add(decodeAmp(url));
+    }
+  }
+  return [...urls];
+}
+
+// followDeferred issues a page's deferred requests together, as htmx does, so
+// /backtest/summary and /backtest/heat share one calculation on the server.
+//
+// There is nothing to poll: the server queues a busy simulation and answers
+// when it is done. It has no "not ready" or retry response. A simulation that
+// fails returns 500, and the browser then shows an error and waits for a click
+// on "try again", so a failure here is counted, not retried. An empty 200 is
+// what the server sends when the client left, which is also a failure here.
+function followDeferred(pageRes) {
+  if (typeof pageRes.body !== "string") return;
+  const urls = deferredUrls(pageRes.body);
+  if (!urls.length) return;
+  const names = urls.map((u) => `GET ${u.split("?")[0].replace(/\/\d+/g, "/{id}")}`);
+  const responses = http.batch(urls.map((u, i) => ["GET", BASE + u, null, partialParams(names[i], "simulation")]));
+  responses.forEach((res, i) => {
+    check(res, {
+      [`${names[i]} 200`]: (r) => r.status === 200,
+      [`${names[i]} has a result`]: (r) => typeof r.body === "string" && r.body.length > 0,
+    });
+  });
 }
 
 function think(min = 1, max = 4) {
@@ -129,7 +189,17 @@ export function setup() {
   const min = slider && Number((slider[0].match(/min="(\d+)"/) || [])[1]);
   const max = slider && Number((slider[0].match(/max="(\d+)"/) || [])[1]);
   if (!crises.length || !min || !max) fail(`could not discover crises (${crises.length}) or cash-flow years (${min}-${max})`);
-  return { crises, years: { min, max } };
+
+  // The assets the page really links, with their ?v= URLs, so this list cannot
+  // go out of date. ECharts is only named in data-echarts: charts.js loads it
+  // on demand, so it is not part of the cold-start batch.
+  const home = http.get(BASE + "/", { tags: { name: "setup" } }).body;
+  const assets = [...new Set([...home.matchAll(/\s(?:src|href)="(\/static\/[^"]+)"/g)].map((m) => decodeAmp(m[1])))];
+  const echarts = decodeAmp((home.match(/\sdata-echarts="(\/static\/[^"]+)"/) || [])[1] || "");
+  if (!assets.length || !echarts) fail(`could not discover static assets (${assets.length}) or the ECharts URL ("${echarts}") on the home page`);
+  console.log(`cold-start assets: ${assets.join(" ")}`);
+  console.log(`on-demand ECharts: ${echarts}`);
+  return { crises, years: { min, max }, assets, echarts };
 }
 
 // ---------- journeys ----------
@@ -145,11 +215,11 @@ function planner() {
     think();
     partial("/plan/results?view=year&real=0", "GET /plan/results");
     think();
-    page("/success", "GET /success", "simulation");
+    followDeferred(page("/success", "GET /success"));
     think(2, 5);
-    partial("/success/results?reseed=1", "GET /success/results", "simulation");
+    partial("/success/results?reseed=1", "GET /success/results (reseed)", "simulation");
     think();
-    page("/scenarios", "GET /scenarios", "simulation");
+    followDeferred(page("/scenarios", "GET /scenarios"));
   });
 }
 
@@ -171,7 +241,7 @@ function cashflow(data) {
 // Backtester: historical results, then a few crises and start years.
 function backtester(data) {
   group("backtester", () => {
-    page("/backtest", "GET /backtest", "simulation");
+    followDeferred(page("/backtest", "GET /backtest"));
     for (let i = 0; i < 3; i++) {
       think(2, 5);
       partial(`/backtest/scenario?crisis=${pick(data.crises)}`, "GET /backtest/scenario");
@@ -181,7 +251,9 @@ function backtester(data) {
   });
 }
 
-// Bookkeeper: reviews finances section by section.
+// Bookkeeper: reviews finances section by section, then the health costs and
+// the net worth record. /tracking only reads saved entries and draws no chart
+// on this data, so neither page needs a simulation or ECharts.
 function bookkeeper() {
   group("bookkeeper", () => {
     page("/finances", "GET /finances");
@@ -193,6 +265,10 @@ function bookkeeper() {
     partial("/finances/summary", "GET /finances/summary");
     think();
     page("/finances/pension", "GET /finances/pension");
+    think();
+    page("/finances/health", "GET /finances/health");
+    think();
+    page("/tracking", "GET /tracking");
   });
 }
 
@@ -204,23 +280,27 @@ const JOURNEYS = [
 ];
 const TOTAL_WEIGHT = JOURNEYS.reduce((n, j) => n + j.weight, 0);
 
-const staticRequest = (p) => ["GET", BASE + p, null, { tags: { name: "static", kind: "static" } }];
+const staticRequest = (p) => ["GET", BASE + p, null, { headers: GZIP, tags: { name: "static", kind: "static" } }];
 let echartsCached = false; // per VU: ECharts is only fetched by pages with a chart
+
+// loadStatic fetches assets together and reports whether all of them arrived.
+// The checks carry their own tag: one broken asset per VU is too little to
+// move the overall http_req_failed or checks rates on a long run.
+function loadStatic(paths) {
+  return http.batch(paths.map(staticRequest))
+    .map((res, i) => check(res, { [`static ${paths[i].split("?")[0]} 200`]: (r) => r.status === 200 }, { kind: "static" }))
+    .every(Boolean);
+}
 
 export default function (data) {
   // First iteration of each VU: load static assets once, like a cold cache.
   if (__ITER === 0) {
-    http.batch(
-      ["/static/css/app.css", "/static/vendor/pico.min.css", "/static/vendor/htmx.min.js",
-        "/static/js/charts.js", "/static/js/app.js",
-        "/static/vendor/alpine.min.js"].map(staticRequest)
-    );
+    loadStatic(data.assets);
   }
   let r = Math.random() * TOTAL_WEIGHT;
   const journey = JOURNEYS.find((j) => (r -= j.weight) < 0) || JOURNEYS[0];
   if (journey.charts && !echartsCached) {
-    echartsCached = true;
-    http.batch([staticRequest("/static/vendor/echarts.min.js")]);
+    echartsCached = loadStatic([data.echarts]);
   }
   const start = Date.now();
   journey.run(data);
@@ -244,12 +324,12 @@ function textSummary(data) {
   const fmt = (v) => (v === undefined ? "-" : `${v.toFixed(1)} ms`);
   lines.push(`requests: ${m.http_reqs.values.count} (${m.http_reqs.values.rate.toFixed(2)}/s), failed: ${(m.http_req_failed.values.rate * 100).toFixed(2)}%`);
   lines.push(`journeys: ${m.journeys ? m.journeys.values.count : 0}, checks passed: ${(m.checks.values.rate * 100).toFixed(2)}%`);
-  lines.push("", "endpoint                      p50       p95       p99       max");
+  lines.push("", "endpoint                          count       p50       p95       p99       max");
   for (const [key, metric] of Object.entries(m)) {
     const match = key.match(/^http_req_duration\{name:(.+)\}$/);
     if (!match) continue;
     const v = metric.values;
-    lines.push(`${match[1].padEnd(28)}${fmt(v.med).padStart(8)}  ${fmt(v["p(95)"]).padStart(8)}  ${fmt(v["p(99)"]).padStart(8)}  ${fmt(v.max).padStart(8)}`);
+    lines.push(`${match[1].padEnd(32)}${String(v.count).padStart(7)}  ${fmt(v.med).padStart(8)}  ${fmt(v["p(95)"]).padStart(8)}  ${fmt(v["p(99)"]).padStart(8)}  ${fmt(v.max).padStart(8)}`);
   }
   lines.push("", "thresholds:");
   for (const [key, metric] of Object.entries(m)) {
