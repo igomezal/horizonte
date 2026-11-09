@@ -143,10 +143,10 @@ func parsePension(lang i18n.Lang, now domain.Month, v map[string][]string, peopl
 
 func estimatePension(who domain.Person, in pension.Input) *pensionView {
 	r := pension.Estimate(in)
-	return &pensionView{Result: r, Person: who.Name, Start: who.Birth.AddMonths(r.RetireAge * 12),
+	return &pensionView{Result: r, Person: who.Name, Start: who.Birth.AddMonths(r.RetireMonths),
 		Years: float64(r.MonthsAtRetire) / 12, MaxBase: pension.MaxBase, MinBase: pension.MinBase,
 		BaseUsed:       math.Max(pension.MinBase, math.Min(pension.MaxBase, in.MonthlyBase)),
-		AlreadyRetired: r.RetireAge*12 < in.AgeMonths}
+		AlreadyRetired: r.RetireMonths < in.AgeMonths}
 }
 
 func (s *Server) pensionPeople(r *http.Request) (finCtx, []domain.Person, error) {
