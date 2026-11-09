@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/igomezal/horizonte/internal/domain"
+	"github.com/igomezal/horizonte/internal/tax/es"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -762,5 +763,33 @@ func TestReturnsAndAppreciation(t *testing.T) {
 	}
 	if got, want := y.Appreciation, y.Last.Balances[1]-200000; math.Abs(got-want) > 0.01 || math.Abs(want-6000) > 1 {
 		t.Errorf("appreciation %.2f, property grew %.2f (want about 6000)", got, want)
+	}
+}
+
+func TestRegionalMinimumShowsInTheSettlementNotInWithholding(t *testing.T) {
+	// 30.000 €/year in Madrid, born 1990. The tax uses Madrid's minimum
+	// (5.956,65); the withholding algorithm only knows the State's (5.550), so
+	// withholding is a little too high and June refunds the difference:
+	// (5.956,65 − 5.550) × 8,5 % = 34,57 €.
+	jan := domain.Month{Year: 2027, Month: 1}
+	a := flat()
+	a.TaxModel, a.TaxRegion = TaxES, "madrid"
+	in := Input{
+		People:      []domain.Person{{ID: 1, Name: "Ana", Birth: domain.Month{Year: 1990, Month: 1}, LifeExpectancy: 39}},
+		Accounts:    []domain.Account{{ID: 1, Kind: domain.AccountCash}},
+		Incomes:     []domain.Income{{Kind: domain.IncomeSalary, OwnerID: ptr(int64(1)), Amount: 250000, PaymentsPerYear: 12}},
+		Assumptions: a,
+		Start:       jan,
+	}
+	res := Simulate(in)
+	y := res.TaxYears[0]
+	if want := es.Compute(es.Income{Age: 37, Salary: 30000}, es.FindRegion("madrid")).Tax; math.Abs(y.IRPF()-want) > 0.01 {
+		t.Errorf("IRPF = %.2f, want %.2f", y.IRPF(), want)
+	}
+	if want := -406.65 * 0.085; math.Abs(y.Settlement-want) > 0.01 {
+		t.Errorf("settlement = %.2f, want %.2f", y.Settlement, want)
+	}
+	if b := y.People[0].Breakdown; math.Abs(b.RegionalMin-5956.65) > 1e-6 || math.Abs(b.Minimum-5550) > 1e-6 {
+		t.Errorf("minimums = %.2f / %.2f", b.Minimum, b.RegionalMin)
 	}
 }

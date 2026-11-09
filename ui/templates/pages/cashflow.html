@@ -95,7 +95,8 @@
           <tr><th scope="row">{{t "irpf.ss"}}</th>{{range .People}}<td class="num">{{money .SocialSecurity}}</td>{{end}}</tr>
           <tr><th scope="row">{{t "irpf.general_base"}}</th>{{range .People}}<td class="num">{{money .GeneralBase}}</td>{{end}}</tr>
           <tr><th scope="row">{{t "irpf.savings_base"}}</th>{{range .People}}<td class="num">{{money .SavingsBase}}</td>{{end}}</tr>
-          <tr><th scope="row">{{t "irpf.minimum"}}</th>{{range .People}}<td class="num">{{money .Minimum}}</td>{{end}}</tr>
+          <tr><th scope="row">{{if .ShowRegionalMin}}{{t "irpf.minimum_state"}}{{else}}{{t "irpf.minimum"}}{{end}}</th>{{range .People}}<td class="num">{{money .Minimum}}</td>{{end}}</tr>
+          {{if .ShowRegionalMin}}<tr><th scope="row">{{t "irpf.regional_minimum"}}</th>{{range .People}}<td class="num">{{money .RegionalMin}}</td>{{end}}</tr>{{end}}
           <tr><th scope="row">{{t "irpf.general_tax"}}</th>{{range .People}}<td class="num">{{money .GeneralTax}}</td>{{end}}</tr>
           <tr><th scope="row">{{t "irpf.savings_tax"}}</th>{{range .People}}<td class="num">{{money .SavingsTax}}</td>{{end}}</tr>
           <tr class="total"><th scope="row">{{t "irpf.tax"}}</th>{{range .People}}<td class="num">{{money .Tax}}</td>{{end}}</tr>

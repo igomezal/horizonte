@@ -43,3 +43,25 @@ func TestTaxRegionsInPlanForm(t *testing.T) {
 		t.Errorf("foral region accepted: %d", rec.Code)
 	}
 }
+
+func TestCashflowShowsTheRegionalMinimumOnlyWhenItDiffers(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	seedCashflow(t, s)
+	form := url.Values{"inflation": {"2"}, "tax_model": {"es"}, "tax_rate": {"20"}, "surplus": {""},
+		"return_cash": {"0"}, "return_deposit": {"2"}, "return_investment": {"7"},
+		"return_pension": {"5"}, "return_realestate": {"3"}, "return_other": {"2"}}
+	for region, want := range map[string]bool{"general": false, "cataluna": false, "madrid": true} {
+		form.Set("tax_region", region)
+		if rec, b := do(s, htmxReq("POST", "/plan/assumptions", form)); rec.Code != http.StatusOK {
+			t.Fatalf("%s: save: %d %s", region, rec.Code, b)
+		}
+		_, body := do(s, httptest.NewRequest("GET", "/cashflow", nil))
+		if got := strings.Contains(body, "Mínimo personal autonómico"); got != want {
+			t.Errorf("%s: regional minimum row shown = %v, want %v", region, got, want)
+		}
+		// "State" only qualifies the allowance when a regional one sits beside it.
+		if got := strings.Contains(body, "Mínimo personal estatal"); got != want {
+			t.Errorf("%s: state qualifier shown = %v, want %v", region, got, want)
+		}
+	}
+}

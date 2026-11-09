@@ -96,3 +96,24 @@ func TestFrozenMatchesIndexedWithoutInflation(t *testing.T) {
 		t.Errorf("no inflation: %v vs %v", a.Months[len(a.Months)-1].NetWorth, b.Months[len(b.Months)-1].NetWorth)
 	}
 }
+
+func TestRegionalMinimumFollowsTheIndexingOption(t *testing.T) {
+	// Madrid's minimum behaves like the State's: indexed, it grows with
+	// prices; frozen, it stays at its euro amount.
+	for _, frozen := range []bool{false, true} {
+		in := salaryPlan(0.03, frozen)
+		in.Assumptions.TaxRegion = "madrid"
+		res := Simulate(in)
+		for _, y := range []int{0, 10} {
+			deflator := res.Months[y*12].Deflator
+			b := res.TaxYears[y].People[0].Breakdown
+			wantState, wantRegional := 5550.0, 5956.65
+			if !frozen {
+				wantState, wantRegional = wantState*deflator, wantRegional*deflator
+			}
+			if !near(b.Minimum, wantState, 1e-6) || !near(b.RegionalMin, wantRegional, 1e-6) {
+				t.Errorf("frozen=%v year %d: minimums %.2f / %.2f, want %.2f / %.2f", frozen, y, b.Minimum, b.RegionalMin, wantState, wantRegional)
+			}
+		}
+	}
+}

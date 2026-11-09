@@ -23,7 +23,8 @@ type Breakdown struct {
 	WorkNet        float64 // net work income after reductions
 	GeneralBase    float64 // base liquidable general
 	SavingsBase    float64 // base liquidable del ahorro
-	Minimum        float64 // personal minimum
+	Minimum        float64 // personal minimum of the State half (art. 57)
+	RegionalMin    float64 // personal minimum of the regional half (art. 56.3)
 	GeneralTax     float64
 	SavingsTax     float64
 	Tax            float64 // total IRPF
@@ -73,6 +74,18 @@ func Compute(in Income, region Region) Breakdown {
 // ComputeWithMaxBase is Compute with another yearly Social Security maximum
 // base, for amounts in euros of a year whose base has moved on from today's.
 func ComputeWithMaxBase(in Income, region Region, maxBase float64) Breakdown {
+	return compute(in, region, maxBase, true)
+}
+
+// ComputeForWithholding is ComputeWithMaxBase as the tax agency's withholding
+// algorithm sees it: the State personal minimum on both halves, since the
+// algorithm has no regional amounts. Only the settlement in June uses the
+// region's own minimum.
+func ComputeForWithholding(in Income, region Region, maxBase float64) Breakdown {
+	return compute(in, region, maxBase, false)
+}
+
+func compute(in Income, region Region, maxBase float64, regionalMinimum bool) Breakdown {
 	var b Breakdown
 
 	// Work income: salary (minus Social Security), public pensions and
@@ -100,21 +113,26 @@ func ComputeWithMaxBase(in Income, region Region, maxBase float64) Breakdown {
 	b.SavingsBase = math.Max(0, in.Savings)
 
 	// Personal minimum: taxed at zero, first against the general base and the
-	// rest against the savings base.
-	b.Minimum = PersonalMinimum
-	if in.Age > 65 {
-		b.Minimum += PersonalMinimumOver65
+	// rest against the savings base (art. 56.2). Each half of the tax uses its
+	// own minimum: the State's (art. 57) against the State half and the
+	// region's (art. 56.3) against the regional half, and each splits it
+	// between the general and the savings base on its own. The savings scale
+	// is one half per level (arts. 66 and 76) and regions cannot change it.
+	b.Minimum = StateMinimum.Amount(in.Age)
+	b.RegionalMin = b.Minimum
+	if regionalMinimum {
+		b.RegionalMin = region.PersonalMinimum(in.Age)
 	}
-	if in.Age > 75 {
-		b.Minimum += PersonalMinimumOver75
-	}
-	minGeneral := math.Min(b.Minimum, b.GeneralBase)
-	minSavings := math.Min(b.Minimum-minGeneral, b.SavingsBase)
+	stateGen := math.Min(b.Minimum, b.GeneralBase)
+	stateSav := math.Min(b.Minimum-stateGen, b.SavingsBase)
+	regGen := math.Min(b.RegionalMin, b.GeneralBase)
+	regSav := math.Min(b.RegionalMin-regGen, b.SavingsBase)
 
 	state, regional := StateGeneral, region.Scale
 	b.GeneralTax = math.Max(0, state.Apply(b.GeneralBase)+regional.Apply(b.GeneralBase)-
-		state.Apply(minGeneral)-regional.Apply(minGeneral))
-	b.SavingsTax = math.Max(0, Savings.Apply(b.SavingsBase)-Savings.Apply(minSavings))
+		state.Apply(stateGen)-regional.Apply(regGen))
+	b.SavingsTax = math.Max(0, SavingsHalf.Apply(b.SavingsBase)-SavingsHalf.Apply(stateSav)+
+		SavingsHalf.Apply(b.SavingsBase)-SavingsHalf.Apply(regSav))
 	b.Tax = b.GeneralTax + b.SavingsTax
 	return b
 }

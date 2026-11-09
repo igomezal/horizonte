@@ -112,16 +112,28 @@ func (t *taxer) real(x es.Income) es.Income {
 
 // compute returns a person's IRPF for a year of nominal income, in nominal euros.
 func (t *taxer) compute(x es.Income) es.Breakdown {
+	return t.computeWith(x, es.ComputeWithMaxBase)
+}
+
+// withholding is compute as the withholding algorithm sees it, which only has
+// State amounts. Monthly withholding uses it, so the June settlement is where
+// the region's own personal minimum shows up.
+func (t *taxer) withholding(x es.Income) es.Breakdown {
+	return t.computeWith(x, es.ComputeForWithholding)
+}
+
+func (t *taxer) computeWith(x es.Income, f func(es.Income, es.Region, float64) es.Breakdown) es.Breakdown {
 	if t.frozen {
-		return es.ComputeWithMaxBase(x, t.region, es.SocialSecurityMaxBase*t.deflator)
+		return f(x, t.region, es.SocialSecurityMaxBase*t.deflator)
 	}
-	b := es.Compute(t.real(x), t.region)
+	b := f(t.real(x), t.region, es.SocialSecurityMaxBase)
 	d := t.deflator
 	b.SocialSecurity *= d
 	b.WorkNet *= d
 	b.GeneralBase *= d
 	b.SavingsBase *= d
 	b.Minimum *= d
+	b.RegionalMin *= d
 	b.GeneralTax *= d
 	b.SavingsTax *= d
 	b.Tax *= d
@@ -139,7 +151,7 @@ func (t *taxer) beginYear(m domain.Month, first bool, deflator float64, expected
 	var tax, gross float64
 	for i, e := range expected {
 		e.Age = t.people[i].AgeAt(domain.Month{Year: m.Year, Month: 12})
-		tax += t.compute(e).Tax
+		tax += t.withholding(e).Tax
 		gross += e.Salary + e.Pension + e.SelfEmployed + e.Rental + e.Other
 	}
 	t.rate = 0

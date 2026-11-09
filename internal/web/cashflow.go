@@ -3,6 +3,7 @@ package web
 import (
 	"cmp"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"slices"
@@ -85,13 +86,16 @@ type irpfView struct {
 	Partial    bool
 	PaidNow    float64 // last year's settlement, paid in June of this year
 	HasPaidNow bool
+	// ShowRegionalMin: some person's regional minimum differs from the State's.
+	ShowRegionalMin bool
 }
 
 type irpfPerson struct {
 	Name                       string
 	Gross, SocialSecurity      float64
 	GeneralBase, SavingsBase   float64
-	Minimum, GeneralTax        float64
+	Minimum, RegionalMin       float64
+	GeneralTax                 float64
 	SavingsTax, Tax, Effective float64
 }
 
@@ -254,12 +258,15 @@ func buildIRPF(years []engine.TaxYear, year int, d float64) *irpfView {
 			in, b := p.Income, p.Breakdown
 			gross := in.Salary + in.Pension + in.PlanWithdrawal + in.SelfEmployed + in.Rental + in.Other + in.Savings
 			ip := irpfPerson{Name: p.Name, Gross: gross / d, SocialSecurity: b.SocialSecurity / d,
-				GeneralBase: b.GeneralBase / d, SavingsBase: b.SavingsBase / d, Minimum: b.Minimum / d,
+				GeneralBase: b.GeneralBase / d, SavingsBase: b.SavingsBase / d, Minimum: b.Minimum / d, RegionalMin: b.RegionalMin / d,
 				GeneralTax: b.GeneralTax / d, SavingsTax: b.SavingsTax / d, Tax: b.Tax / d}
 			if gross > 0.5 {
 				ip.Effective = b.Tax / gross
 			}
 			v.People = append(v.People, ip)
+			if math.Abs(b.RegionalMin-b.Minimum) > 0.005 {
+				v.ShowRegionalMin = true
+			}
 		}
 	}
 	if v != nil {
