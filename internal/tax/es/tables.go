@@ -154,6 +154,17 @@ const (
 	PersonalMinimumOver65 = 1150.0
 	PersonalMinimumOver75 = 1400.0
 
+	// Deduction for obtaining work income (disposición adicional 61 LIRPF, as
+	// raised by RDL 5/2026 from 1 January 2026). It applies to gross employee
+	// income below WorkDeductionUpper when other income is at most
+	// WorkDeductionOtherIncomeLimit: the full amount up to WorkDeductionStep,
+	// then reduced by WorkDeductionSlope of the excess.
+	WorkDeductionMax              = 590.89
+	WorkDeductionStep             = 17094.0
+	WorkDeductionUpper            = 20048.45
+	WorkDeductionSlope            = 0.2
+	WorkDeductionOtherIncomeLimit = 6500.0
+
 	// Pension plan contributions reduce the general base up to this amount
 	// and this share of net work and business income (art. 51–52 LIRPF).
 	PensionContribLimit = 1500.0

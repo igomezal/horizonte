@@ -99,6 +99,7 @@
           {{if .ShowRegionalMin}}<tr><th scope="row">{{t "irpf.regional_minimum"}}</th>{{range .People}}<td class="num">{{money .RegionalMin}}</td>{{end}}</tr>{{end}}
           <tr><th scope="row">{{t "irpf.general_tax"}}</th>{{range .People}}<td class="num">{{money .GeneralTax}}</td>{{end}}</tr>
           <tr><th scope="row">{{t "irpf.savings_tax"}}</th>{{range .People}}<td class="num">{{money .SavingsTax}}</td>{{end}}</tr>
+          {{if .ShowWorkDeduction}}<tr><th scope="row">{{t "irpf.work_deduction"}}</th>{{range .People}}<td class="num{{if gt .WorkDeduction 0.0}} negative{{end}}">{{money (sub 0.0 .WorkDeduction)}}</td>{{end}}</tr>{{end}}
           <tr class="total"><th scope="row">{{t "irpf.tax"}}</th>{{range .People}}<td class="num">{{money .Tax}}</td>{{end}}</tr>
           <tr><th scope="row">{{t "irpf.effective"}}</th>{{range .People}}<td class="num">{{percent .Effective 1}}</td>{{end}}</tr>
         </tbody>

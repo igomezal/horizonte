@@ -793,3 +793,28 @@ func TestRegionalMinimumShowsInTheSettlementNotInWithholding(t *testing.T) {
 		t.Errorf("minimums = %.2f / %.2f", b.Minimum, b.RegionalMin)
 	}
 }
+
+func TestWorkDeductionIsRefundedInTheSettlement(t *testing.T) {
+	// 18.000 €/year (12 × 1.500). SS 1.170; net 14.830; art. 20 takes 7.302
+	// → base 7.528; tax 2 × 1.978 × 9,5 % = 375,82. The DA 61 deduction (about
+	// 409,69) is limited to that tax, so the tax is 0. The withholding
+	// algorithm does not include the deduction, so 375,82 is withheld and the
+	// June settlement refunds all of it.
+	jan := domain.Month{Year: 2027, Month: 1}
+	a := flat()
+	a.TaxModel, a.TaxRegion = TaxES, "general"
+	in := Input{
+		People:      []domain.Person{{ID: 1, Name: "Ana", Birth: domain.Month{Year: 1990, Month: 1}, LifeExpectancy: 39}},
+		Accounts:    []domain.Account{{ID: 1, Kind: domain.AccountCash}},
+		Incomes:     []domain.Income{{Kind: domain.IncomeSalary, OwnerID: ptr(int64(1)), Amount: 150000, PaymentsPerYear: 12}},
+		Assumptions: a,
+		Start:       jan,
+	}
+	y := Simulate(in).TaxYears[0]
+	if math.Abs(y.IRPF()) > 0.01 || math.Abs(y.Withheld-375.82) > 0.01 || math.Abs(y.Settlement+375.82) > 0.01 {
+		t.Errorf("IRPF %.2f, withheld %.2f, settlement %.2f; want 0, 375.82, -375.82", y.IRPF(), y.Withheld, y.Settlement)
+	}
+	if d := y.People[0].Breakdown.WorkDeduction; math.Abs(d-375.82) > 0.01 {
+		t.Errorf("deduction = %.2f, want 375.82 (limited by the tax)", d)
+	}
+}

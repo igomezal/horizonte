@@ -88,6 +88,8 @@ type irpfView struct {
 	HasPaidNow bool
 	// ShowRegionalMin: some person's regional minimum differs from the State's.
 	ShowRegionalMin bool
+	// ShowWorkDeduction: some person gets the DA 61 deduction.
+	ShowWorkDeduction bool
 }
 
 type irpfPerson struct {
@@ -95,7 +97,7 @@ type irpfPerson struct {
 	Gross, SocialSecurity      float64
 	GeneralBase, SavingsBase   float64
 	Minimum, RegionalMin       float64
-	GeneralTax                 float64
+	GeneralTax, WorkDeduction  float64
 	SavingsTax, Tax, Effective float64
 }
 
@@ -259,11 +261,14 @@ func buildIRPF(years []engine.TaxYear, year int, d float64) *irpfView {
 			gross := in.Salary + in.Pension + in.PlanWithdrawal + in.SelfEmployed + in.Rental + in.Other + in.Savings
 			ip := irpfPerson{Name: p.Name, Gross: gross / d, SocialSecurity: b.SocialSecurity / d,
 				GeneralBase: b.GeneralBase / d, SavingsBase: b.SavingsBase / d, Minimum: b.Minimum / d, RegionalMin: b.RegionalMin / d,
-				GeneralTax: b.GeneralTax / d, SavingsTax: b.SavingsTax / d, Tax: b.Tax / d}
+				GeneralTax: b.GeneralTax / d, WorkDeduction: b.WorkDeduction / d, SavingsTax: b.SavingsTax / d, Tax: b.Tax / d}
 			if gross > 0.5 {
 				ip.Effective = b.Tax / gross
 			}
 			v.People = append(v.People, ip)
+			if b.WorkDeduction > 0 {
+				v.ShowWorkDeduction = true
+			}
 			if math.Abs(b.RegionalMin-b.Minimum) > 0.005 {
 				v.ShowRegionalMin = true
 			}

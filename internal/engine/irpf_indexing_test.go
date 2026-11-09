@@ -117,3 +117,29 @@ func TestRegionalMinimumFollowsTheIndexingOption(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkDeductionThresholdsFollowTheIndexingOption(t *testing.T) {
+	// 18.500 € of pay is inside the DA 61 phase-out today. Indexed, the
+	// thresholds grow with prices like the art. 20 ones, so the amount is the
+	// one for today's euros times the deflator; frozen, the nominal pay meets
+	// the fixed thresholds.
+	plan := func(frozen bool) Input {
+		in := salaryPlan(0.03, frozen)
+		in.Incomes[0].Amount = 18500 * 100 / 12
+		return in
+	}
+	indexed, frozen := Simulate(plan(false)), Simulate(plan(true))
+	for _, y := range []int{0, 10} {
+		deflator := indexed.Months[y*12].Deflator
+		in := indexed.TaxYears[y].People[0].Income
+		wantIndexed := es.Compute(es.Income{Age: in.Age, Salary: in.Salary / deflator}, es.FindRegion("general")).WorkDeduction * deflator
+		if got := indexed.TaxYears[y].People[0].Breakdown.WorkDeduction; !near(got, wantIndexed, 1e-6) || got == 0 {
+			t.Errorf("indexed year %d: deduction %.4f, want %.4f", y, got, wantIndexed)
+		}
+		fin := frozen.TaxYears[y].People[0].Income
+		wantFrozen := es.ComputeWithMaxBase(fin, es.FindRegion("general"), es.SocialSecurityMaxBase*deflator).WorkDeduction
+		if got := frozen.TaxYears[y].People[0].Breakdown.WorkDeduction; !near(got, wantFrozen, 1e-6) {
+			t.Errorf("frozen year %d: deduction %.4f, want %.4f", y, got, wantFrozen)
+		}
+	}
+}

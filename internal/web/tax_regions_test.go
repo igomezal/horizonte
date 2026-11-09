@@ -65,3 +65,18 @@ func TestCashflowShowsTheRegionalMinimumOnlyWhenItDiffers(t *testing.T) {
 		}
 	}
 }
+
+func TestCashflowShowsTheWorkDeductionForLowPay(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	mustPost(t, s, "/finances/people", url.Values{"name": {"Ana"}, "birth": {"1990-04"}, "life_expectancy": {"90"}})
+	mustPost(t, s, "/finances/accounts", url.Values{"name": {"Cuenta"}, "kind": {"cash"}, "balance": {"40000"}})
+	mustPost(t, s, "/finances/incomes", url.Values{"name": {"Nómina"}, "kind": {"salary"}, "amount": {"1300"}, "payments": {"14"}})
+	_, body := do(s, httptest.NewRequest("GET", "/cashflow", nil))
+	if !strings.Contains(body, "Deducción por rendimientos del trabajo") {
+		t.Error("the DA 61 deduction row is missing for 18.200 € of pay")
+	}
+	// It is a negative amount in a table, so it is red.
+	if !strings.Contains(body, `<td class="num negative">`) {
+		t.Error("the deduction is not marked negative")
+	}
+}

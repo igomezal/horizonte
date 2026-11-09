@@ -134,6 +134,7 @@ func (t *taxer) computeWith(x es.Income, f func(es.Income, es.Region, float64) e
 	b.SavingsBase *= d
 	b.Minimum *= d
 	b.RegionalMin *= d
+	b.WorkDeduction *= d
 	b.GeneralTax *= d
 	b.SavingsTax *= d
 	b.Tax *= d

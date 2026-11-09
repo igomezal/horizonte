@@ -27,7 +27,8 @@ type Breakdown struct {
 	RegionalMin    float64 // personal minimum of the regional half (art. 56.3)
 	GeneralTax     float64
 	SavingsTax     float64
-	Tax            float64 // total IRPF
+	WorkDeduction  float64 // DA 61 deduction, taken off the tax (already in Tax)
+	Tax            float64 // total IRPF, after the deduction
 }
 
 // Apply returns the tax of a scale on base.
@@ -74,18 +75,32 @@ func Compute(in Income, region Region) Breakdown {
 // ComputeWithMaxBase is Compute with another yearly Social Security maximum
 // base, for amounts in euros of a year whose base has moved on from today's.
 func ComputeWithMaxBase(in Income, region Region, maxBase float64) Breakdown {
-	return compute(in, region, maxBase, true)
-}
-
-// ComputeForWithholding is ComputeWithMaxBase as the tax agency's withholding
-// algorithm sees it: the State personal minimum on both halves, since the
-// algorithm has no regional amounts. Only the settlement in June uses the
-// region's own minimum.
-func ComputeForWithholding(in Income, region Region, maxBase float64) Breakdown {
 	return compute(in, region, maxBase, false)
 }
 
-func compute(in Income, region Region, maxBase float64, regionalMinimum bool) Breakdown {
+// ComputeForWithholding is ComputeWithMaxBase as the tax agency's withholding
+// algorithm (ALGORITMO_2026) sees it: the State personal minimum on both
+// halves, since the algorithm has no regional amounts, and no DA 61 deduction,
+// which it does not include either. Only the settlement in June uses the
+// region's own minimum and the deduction.
+func ComputeForWithholding(in Income, region Region, maxBase float64) Breakdown {
+	return compute(in, region, maxBase, true)
+}
+
+// WorkDeduction is the DA 61 amount before its limit by the tax due, for gross
+// employee income and the person's other income (everything that is not that
+// employee income, pensions included, exempt income excluded).
+func WorkDeduction(gross, other float64) float64 {
+	if gross <= 0 || gross >= WorkDeductionUpper || other > WorkDeductionOtherIncomeLimit {
+		return 0
+	}
+	if gross <= WorkDeductionStep {
+		return WorkDeductionMax
+	}
+	return math.Max(0, WorkDeductionMax-WorkDeductionSlope*(gross-WorkDeductionStep))
+}
+
+func compute(in Income, region Region, maxBase float64, forWithholding bool) Breakdown {
 	var b Breakdown
 
 	// Work income: salary (minus Social Security), public pensions and
@@ -120,7 +135,7 @@ func compute(in Income, region Region, maxBase float64, regionalMinimum bool) Br
 	// is one half per level (arts. 66 and 76) and regions cannot change it.
 	b.Minimum = StateMinimum.Amount(in.Age)
 	b.RegionalMin = b.Minimum
-	if regionalMinimum {
+	if !forWithholding {
 		b.RegionalMin = region.PersonalMinimum(in.Age)
 	}
 	stateGen := math.Min(b.Minimum, b.GeneralBase)
@@ -133,6 +148,28 @@ func compute(in Income, region Region, maxBase float64, regionalMinimum bool) Br
 		state.Apply(stateGen)-regional.Apply(regGen))
 	b.SavingsTax = math.Max(0, SavingsHalf.Apply(b.SavingsBase)-SavingsHalf.Apply(stateSav)+
 		SavingsHalf.Apply(b.SavingsBase)-SavingsHalf.Apply(regSav))
-	b.Tax = b.GeneralTax + b.SavingsTax
+
+	// DA 61 deduction for obtaining work income. It comes off the total tax
+	// (the State and regional halves added) and cannot exceed the part of the
+	// sum of the cuotas íntegras that proportionally corresponds to the net
+	// employee pay (gross less Social Security and the art. 19.2.f expenses,
+	// but not the art. 20 reduction). The text does not spell out the
+	// denominator, so this is a reading: the cuota íntegra of art. 62 and 73
+	// adds the general and the savings bases, and the law speaks of "bases
+	// liquidables" in the plural, so the limit is the general plus savings tax
+	// times the net pay's share of the general plus savings base. Of the AEAT
+	// examples only the first measures a share, on a general base with no
+	// other income, which this reading also gives. The deduction cannot create
+	// a refund by itself.
+	if !forWithholding {
+		notEmployee := in.Pension + in.PlanWithdrawal + in.SelfEmployed + in.Rental + in.Other + in.Savings
+		totalBase := b.GeneralBase + b.SavingsBase
+		if d := WorkDeduction(in.Salary, notEmployee); d > 0 && totalBase > 0 {
+			net := math.Max(0, in.Salary-b.SocialSecurity-WorkOtherExpenses)
+			limit := (b.GeneralTax + b.SavingsTax) * math.Min(1, net/totalBase)
+			b.WorkDeduction = math.Min(d, limit)
+		}
+	}
+	b.Tax = b.GeneralTax + b.SavingsTax - b.WorkDeduction
 	return b
 }
