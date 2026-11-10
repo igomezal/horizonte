@@ -240,3 +240,78 @@ func TestPlanFirePropertyColumn(t *testing.T) {
 		t.Error("with property: want the property column")
 	}
 }
+
+func TestPlanOptsGroupRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		query string
+		want  planOpts
+	}{
+		{"", planOpts{Real: true}},
+		{"group=account", planOpts{Real: true, ByAccount: true}},
+		{"view=month&real=0&group=account", planOpts{Monthly: true, ByAccount: true}},
+		{"group=type", planOpts{Real: true}},
+	} {
+		q, _ := url.ParseQuery(tc.query)
+		got := parsePlanOpts(q)
+		if got != tc.want {
+			t.Errorf("parse %q = %+v, want %+v", tc.query, got, tc.want)
+		}
+		again, _ := url.ParseQuery(string(got.Query()))
+		if parsePlanOpts(again) != got {
+			t.Errorf("round trip of %+v lost information: %s", got, got.Query())
+		}
+	}
+	if q := string(planOpts{Real: true}.Query()); strings.Contains(q, "group") {
+		t.Errorf("default grouping should not appear in the URL: %s", q)
+	}
+	if got := (planOpts{Real: true}).WithByAccount(true).WithMonthly(true).Query(); !strings.Contains(string(got), "group=account") || !strings.Contains(string(got), "view=month") {
+		t.Errorf("toggles must keep each other: %s", got)
+	}
+}
+
+func TestPlanGroupToggleAndChart(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	seedPlan(t, s)
+	for _, a := range []url.Values{
+		{"name": {"Ahorro"}, "kind": {"deposit"}, "balance": {"5000"}},
+		{"name": {"Fondo"}, "kind": {"investment"}, "balance": {"8000"}},
+		{"name": {"Fondo 2"}, "kind": {"investment"}, "balance": {"3000"}},
+		{"name": {"Piso"}, "kind": {"realestate"}, "balance": {"150000"}},
+	} {
+		if rec, _ := do(s, htmxReq("POST", "/finances/accounts", a)); rec.Code != http.StatusOK {
+			t.Fatalf("add account %v", a)
+		}
+	}
+	_, body := do(s, httptest.NewRequest("GET", "/plan?view=month&real=0", nil))
+	for _, want := range []string{
+		`aria-label="Agrupar gráfico"`,
+		`hx-get="/plan/results?real=0&amp;view=month"`, // "Por tipo" drops the group param
+		`hx-get="/plan/results?group=account&amp;real=0&amp;view=month"`,
+		`"byAccount":false`, `"kinds":[{"key":"cash"`, `{"key":"deposit"`, `{"key":"investment"`, `{"key":"realestate"`,
+		`"kind":"investment"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("grouped plan missing %q", want)
+		}
+	}
+	if strings.Contains(body, `"key":"pension"`) {
+		t.Error("kinds without accounts must not be listed")
+	}
+	if strings.Count(body, `aria-current="true"`) != 3 { // one per toggle group
+		t.Errorf("want one active link in each of the 3 toggles, got %d", strings.Count(body, `aria-current="true"`))
+	}
+	if i := strings.Index(body, `<a href="/plan?real=0&amp;view=month"`); i < 0 || !strings.Contains(body[i:i+500], `aria-current="true"`) {
+		t.Error("by type should be the active grouping by default")
+	}
+
+	_, byAcc := do(s, htmxReq("GET", "/plan/results?group=account&view=year", nil))
+	if !strings.Contains(byAcc, `"byAccount":true`) {
+		t.Error("group=account must reach the chart")
+	}
+	if i := strings.Index(byAcc, `<a href="/plan?group=account&amp;real=1&amp;view=year"`); i < 0 || !strings.Contains(byAcc[i:i+500], `aria-current="true"`) {
+		t.Error("by account should be the active grouping")
+	}
+	if !strings.Contains(byAcc, `hx-get="/plan/results?group=account&amp;real=0&amp;view=year"`) {
+		t.Error("the units toggle must keep the account grouping")
+	}
+}

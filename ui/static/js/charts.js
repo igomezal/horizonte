@@ -8,6 +8,9 @@
 // - Identity colours come from the validated --series-1…7 palette, in order,
 //   never cycled: anything past seven is --series-other. Green and red only
 //   mean good and bad (income, savings rate, debt, money running out).
+// - The Plan chart groups accounts by kind by default, with fixed --kind-* colours
+//   (cash, deposit, investment, pension, realestate; other is gray); "by account"
+//   uses the series slots instead.
 // - "Tu plan" (the fixed-return projection) is always a dashed violet line (series-4).
 // - Lines are 1.5-2px; areas are faint washes; stacked fills carry a thin line
 //   in their own colour.
@@ -67,6 +70,11 @@
     return cssVar("--cat-" + key) || cssVar("--series-other");
   }
 
+  // Account kinds keep one colour wherever they appear (the Plan chart grouped by type).
+  function kindColor(key) {
+    return cssVar("--kind-" + key) || cssVar("--series-other");
+  }
+
   function enc(s) {
     return echarts.format.encodeHTML(String(s));
   }
@@ -94,6 +102,13 @@
       '<span style="color:' + muted + '">' + (color ? lineKey(color, opts.dashed) : "") + enc(name) + "</span>" +
       '<span style="color:' + strong + ';font-weight:' + (opts.bold === false ? 500 : 650) +
       ';font-variant-numeric:tabular-nums">' + enc(value) + "</span></div>";
+  }
+
+  // An account under its kind: indented, muted, lighter.
+  function tipSubRow(name, value) {
+    const muted = cssVar("--chart-text");
+    return '<div style="display:flex;justify-content:space-between;gap:1.75em;line-height:1.5;padding-left:21px;font-size:0.92em;color:' + muted + '">' +
+      "<span>" + enc(name) + '</span><span style="font-variant-numeric:tabular-nums">' + enc(value) + "</span></div>";
   }
 
   function tipRule() {
@@ -226,6 +241,19 @@
     const negative = cssVar("--app-negative");
     const surface = cssVar("--surface");
     const accounts = spec.accounts || [];
+    const n = spec.categories.length;
+
+    // Bands of the stack: one per account ("by account": the creation-order palette,
+    // gray after seven) or one per kind present (the sum of its accounts, in the
+    // fixed kind colours). Accounts stay listed under their kind in the tooltip.
+    const bands = spec.byAccount || !spec.kinds
+      ? accounts.map((a, i) => ({ name: a.name, color: slotColor(i), data: a.data, members: [] }))
+      : spec.kinds.map((k) => {
+          const members = accounts.filter((a) => a.kind === k.key);
+          const data = [];
+          for (let i = 0; i < n; i++) data.push(Math.round(members.reduce((t, a) => t + (a.data[i] || 0), 0) * 100) / 100);
+          return { name: k.name, color: kindColor(k.key), data, members };
+        });
 
     opt.xAxis.data = spec.categories;
     ageAxis(opt, spec);
@@ -245,22 +273,26 @@
       const rows = [tipRow(ink, spec.netWorth.name, fmt.format(spec.netWorth.data[i]))];
       const events = (marksAt.get(i) || []).map((t) => '<div style="color:' + ink + ';font-weight:600;line-height:1.5;max-width:22em;white-space:normal">' + enc(t) + "</div>");
       const parts = [];
-      for (let k = accounts.length - 1; k >= 0; k--) { // top of the stack first, like the chart
-        const v = accounts[k].data[i];
-        if (v) parts.push(tipRow(slotColor(k), accounts[k].name, fmt.format(v), { bold: false }));
+      for (let k = bands.length - 1; k >= 0; k--) { // top of the stack first, like the chart
+        const v = bands[k].data[i];
+        if (!v && !bands[k].members.some((a) => a.data[i])) continue;
+        parts.push(tipRow(bands[k].color, bands[k].name, fmt.format(v), { bold: false }));
+        bands[k].members.slice().reverse().forEach((a) => {
+          if (a.data[i]) parts.push(tipSubRow(a.name, fmt.format(a.data[i])));
+        });
       }
       if (spec.debt && spec.debt.data[i]) parts.push(tipRow(negative, spec.debt.name, fmt.format(spec.debt.data[i]), { bold: false }));
       return timeHeader(spec, i) + (events.length ? events.join("") + tipRule() : "") + rows.join("") + (parts.length ? tipRule() + parts.join("") : "");
     };
 
-    const series = accounts.map((s, i) => ({
+    const series = bands.map((s) => ({
       name: s.name,
       type: "line",
       stack: "assets",
       symbol: "none",
       legendIcon: "roundRect",
-      color: slotColor(i),
-      lineStyle: { width: 1.5, color: slotColor(i) }, // thin line in the series colour over a faint wash
+      color: s.color,
+      lineStyle: { width: 1.5, color: s.color }, // thin line in the series colour over a faint wash
       areaStyle: { opacity: 0.14 },
       emphasis: { disabled: true },
       data: s.data,

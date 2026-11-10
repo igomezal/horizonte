@@ -73,6 +73,10 @@
       {{template "plan-toggle" (dict "opts" (.Opts.WithMonthly false) "on" (not .Opts.Monthly) "label" "plan.toggle.yearly")}}
       {{template "plan-toggle" (dict "opts" (.Opts.WithMonthly true) "on" .Opts.Monthly "label" "plan.toggle.monthly")}}
     </div>
+    <div class="segmented" role="group" aria-label="{{t "plan.toggle.group"}}">
+      {{template "plan-toggle" (dict "opts" (.Opts.WithByAccount false) "on" (not .Opts.ByAccount) "label" "plan.toggle.by_type")}}
+      {{template "plan-toggle" (dict "opts" (.Opts.WithByAccount true) "on" .Opts.ByAccount "label" "plan.toggle.by_account")}}
+    </div>
   </div>
 
   <div class="chart chart-tall" data-chart="plan-chart" role="img" aria-label="{{t "plan.chart.label"}}"></div>

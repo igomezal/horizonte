@@ -19,7 +19,7 @@ Page names are shown as English (Spanish) and match the sidebar and the home pag
 | Current finances (Finanzas actuales) | `/finances` | Enter people, milestones, accounts, income, expenses, debts and early repayments by hand. Nothing is linked to a bank |
 | Public pension (Pensión pública) | `/finances/pension` | Estimates a Spanish Social Security retirement pension and adds it to the plan as income |
 | Health costs (Gastos de salud) | `/finances/health` | Estimates health spending by age band and adds it to the plan as expenses |
-| Plan (Plan) | `/plan` | Month-by-month projection of net worth with milestones, assumptions (inflation, taxes, returns, withdrawal strategy), inheritance and a "stop working at FIRE" comparison |
+| Plan (Plan) | `/plan` | Month-by-month projection of net worth (chart stacked by account type, or by account) with milestones, assumptions (inflation, taxes, returns, withdrawal strategy), inheritance and a "stop working at FIRE" comparison |
 | Cash flow (Flujo de caja) | `/cashflow` | One year at a time: Sankey diagram, savings rate, spending by category and the income tax breakdown |
 | Chance of success (Probabilidad de éxito) | `/success` | Monte Carlo simulation: how often the money lasts, a fan chart and when milestones are reached |
 | Historical backtest (Prueba histórica) | `/backtest` | The plan replayed through US market history from every start year and through named crises |

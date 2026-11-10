@@ -97,6 +97,14 @@
   --cat-leisure: #08908c;
   --cat-education: #d65cf9;
   --cat-other: var(--series-other);
+  /* Account kinds (Plan chart grouped by type): fixed colour per kind, no status colours
+     and clear of the violet "Tu plan" line. See DESIGN.md. */
+  --kind-cash: #0ea5e9;
+  --kind-deposit: #0d9488;
+  --kind-investment: #2f55c9;
+  --kind-pension: #ec4899;
+  --kind-realestate: #d4a017;
+  --kind-other: var(--series-other);
   --chart-zero: #94a3b8;
   --sankey-center: #334155; /* centre node: not the "otros" grey */
   --chart-5: #b58105; /* money drawn from savings in the cash-flow diagram */
@@ -172,6 +180,11 @@
     --cat-health: #9e68ae;
     --cat-leisure: #1daa8d;
     --cat-education: #c153e0;
+    --kind-cash: #4aa8e8;
+    --kind-deposit: #13a8a0;
+    --kind-investment: #3b6fe0;
+    --kind-pension: #f9a8d4;
+    --kind-realestate: #facc15;
     --chart-zero: #475569;
     --sankey-center: #cbd5e1;
     --chart-5: #bc8a0a;
@@ -215,6 +228,11 @@
   --cat-health: #9e68ae;
   --cat-leisure: #1daa8d;
   --cat-education: #c153e0;
+  --kind-cash: #4aa8e8;
+  --kind-deposit: #13a8a0;
+  --kind-investment: #3b6fe0;
+  --kind-pension: #f9a8d4;
+  --kind-realestate: #facc15;
   --chart-zero: #475569;
   --sankey-center: #cbd5e1;
   --chart-5: #bc8a0a;

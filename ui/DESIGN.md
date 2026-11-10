@@ -173,10 +173,16 @@ This is a planner, not a server monitor: no live data, polling, WebSockets or fa
   toggle away and every label says which unit is shown.
 - **View toggles** are `.segmented` link groups (`aria-current="true"` marks the active one).
   They update the URL with `hx-push-url`, so a reload or a shared link keeps the view.
-- **Projection chart:** account balances stack in the series palette (in account order, each a 1.5px line over a faint wash),
-  debt is a faint red area below zero with a solid 0 line, net worth is a 2px ink line with its
-  final value at the end, and the month the money runs out is a dashed red marker. The
-  tooltip leads with net worth, then each account top-down like the stack.
+- **Projection chart:** the assets stack **by account type by default**: one band per kind
+  present in the plan (cash, deposit, investment, pension, property, other, in
+  `domain.AccountKinds` order), each the sum of its accounts, in its fixed `--kind-*` colour
+  (see Charts), as a 1.5px line over a faint wash. A third toggle, "Por tipo / Por cuenta"
+  (`?group=account`, absent = by type), switches to one band per account in the creation-order
+  series palette (gray after the seventh). Debt is a faint red area below zero with a solid 0
+  line, net worth is a 2px ink line with its final value at the end, and the month the money
+  runs out is a dashed red marker. The tooltip leads with net worth, then each band top-down
+  like the stack; grouped, each kind shows its total and its accounts indented and muted
+  under it.
 - **Data tables** (`table.projection`): tabular figures, right-aligned amounts, sticky
   header, hairline rows, scrolling inside `.table-wrap` (never the page). Negative amounts
   are red; periods with a shortfall get a faint red row tint.
@@ -364,6 +370,47 @@ This is a planner, not a server monitor: no live data, polling, WebSockets or fa
   are gone: the closest purple pair now is salud/educación, 11.0 normal and not neighbours.
   vivienda and alimentación sit 11-21 from the accent blue (alimentación 11.6 light, 11.3
   dark; labelled in the Sankey). Re-run the checker over all pairs if a value changes.
+- **Account kinds have fixed colours** (`--kind-*`) wherever the Plan chart groups by type, so
+  the same type always has the same colour. No green, red, orange or magenta (status colours
+  and hues that collapse into the investment blue or the "Tu plan" violet under CVD), clear of
+  the debt red and the warning orange, and of the ink net-worth line; "other" is the series
+  gray. Property is a yellow gold and pension a light pink, both lighter than the status
+  colours they could be mistaken for.
+
+  | Kind | Light | Dark |
+  |---|---|---|
+  | cash | `#0EA5E9` sky | `#4AA8E8` |
+  | deposit | `#0D9488` teal | `#13A8A0` |
+  | investment | `#2F55C9` blue | `#3B6FE0` |
+  | pension | `#EC4899` pink | `#F9A8D4` light pink |
+  | realestate | `#D4A017` gold | `#FACC15` yellow |
+  | other | `--series-other` gray (`#8D97A8` / `#64748B`) | |
+
+  **Checker results, all 15 pairs of the six** (OKLab dE x100, the maths of
+  `validate_palette.js --pairs all`, on `#FFFFFF` light and `#111827` dark; the other
+  colours are the debt red `#B91C1C` / `#F87171`, the warning orange `#B45309` / `#F59E0B`,
+  the "Tu plan" violet `#7C3AED` / `#8B7CF0` and the ink `#0F172A` / `#F1F5F9`):
+
+  | | Light | Dark |
+  |---|---|---|
+  | Worst normal-vision pair | 12.4 cash/other | 11.6 cash/deposit |
+  | Worst protan / deutan pair | 5.3 deposit/other / 2.6 pension/other | 7.6 cash/pension / 10.2 cash/deposit |
+  | Worst tritan pair | 9.8 cash/deposit | 4.3 cash/deposit |
+  | Every kind vs debt red, worst of normal / protan / deutan | 19.0 (pension) / 20.7 (pension) / 14.0 (deposit) | 15.1 (pension) / 7.9 (deposit) / 12.1 (deposit) |
+  | Every kind vs warning orange, worst (normal / protan / deutan) | 20.0 (realestate) / 17.4 (deposit) / 13.6 (deposit) | 11.2 / 11.8 / 9.1 (realestate) |
+  | Every kind vs "Tu plan" violet, worst | 12.6 / 5.7 / 6.1 (investment) | 11.1 (investment) / 6.2 (investment) / 6.9 (cash) |
+  | Every kind vs ink line, worst | 32.1 / 33.9 / 31.9 (investment) | 18.3 / 18.9 / 14.3 (pension) |
+  | Validator: lightness band, chroma floor (five hues) | band pass; "other" gray is below the chroma floor by design | band flags the lighter steps (cash, pension, realestate); gray below the chroma floor by design |
+  | Validator: contrast vs surface | **WARN**: cash 2.8, realestate 2.4, other 3.0 on white (< 3:1) | pass (all >= 3:1) |
+
+  The kinds cannot all clear CVD >= 8 or normal >= 15 between themselves (cash/deposit and
+  deposit/other are the closest in light, cash/deposit in dark, with pension/other under
+  deutan in light), so **colour never carries identity alone**: the legend, the tooltip and
+  the band order name every kind. That also covers the light contrast WARN: legend and
+  tooltip labels are always visible, the bands are 1.5px lines over washes, and the chart has
+  a table view of the same numbers. Every kind is at least 15 normal-vision dE from the
+  debt red in both themes; under CVD the closest is deposit (7.9 protan, dark), which is
+  separated from debt by position (debt sits below zero). Re-run the checker over all pairs if a value changes.
 - **"Tu plan"** (fixed-return projection) is always a dashed violet line (`--series-4`).
 - **Marks**: thin lines (1.5-2px); areas are faint washes (opacity <= 0.18) under a line in the
   series colour; uncertainty bands stay washes; bars <= 18px with a 4px rounded end,

@@ -25,10 +25,13 @@ const evPlanChanged = "plan-changed"
 type planOpts struct {
 	Monthly bool // monthly rows instead of yearly
 	Real    bool // today's euros instead of nominal
+	// ByAccount draws one band per account in the chart; the default groups
+	// the accounts by kind.
+	ByAccount bool
 }
 
 func parsePlanOpts(q url.Values) planOpts {
-	return planOpts{Monthly: q.Get("view") == "month", Real: q.Get("real") != "0"}
+	return planOpts{Monthly: q.Get("view") == "month", Real: q.Get("real") != "0", ByAccount: q.Get("group") == "account"}
 }
 
 // Query renders the options as a query string. It is a template.URL so
@@ -46,11 +49,18 @@ func (o planOpts) Query() template.URL {
 	} else {
 		v.Set("real", "0")
 	}
+	if o.ByAccount {
+		v.Set("group", "account")
+	}
 	return template.URL(v.Encode())
 }
 
 func (o planOpts) WithMonthly(m bool) planOpts { o.Monthly = m; return o }
 func (o planOpts) WithReal(r bool) planOpts    { o.Real = r; return o }
+func (o planOpts) WithByAccount(b bool) planOpts {
+	o.ByAccount = b
+	return o
+}
 
 // planRow is one line of the projection table, already in display units.
 type planRow struct {
@@ -66,16 +76,33 @@ type planRow struct {
 
 // projectionChart is the JSON contract for the "projection" chart in charts.js.
 type projectionChart struct {
-	Type       string        `json:"type"`
-	Categories []string      `json:"categories"`
-	Ages       []string      `json:"ages"`
-	AgeFormat  string        `json:"ageFormat"`
-	Accounts   []chartSeries `json:"accounts"`
-	Debt       *chartSeries  `json:"debt,omitempty"`
-	NetWorth   chartSeries   `json:"netWorth"`
-	FailIndex  int           `json:"failIndex"`
-	FailLabel  string        `json:"failLabel,omitempty"`
-	Marks      []chartMark   `json:"marks,omitempty"`
+	Type       string          `json:"type"`
+	Categories []string        `json:"categories"`
+	Ages       []string        `json:"ages"`
+	AgeFormat  string          `json:"ageFormat"`
+	Accounts   []accountSeries `json:"accounts"`
+	// Kinds lists the account kinds present, in display order, for the
+	// grouped view; each account says which kind it belongs to.
+	Kinds     []chartKind  `json:"kinds"`
+	ByAccount bool         `json:"byAccount"`
+	Debt      *chartSeries `json:"debt,omitempty"`
+	NetWorth  chartSeries  `json:"netWorth"`
+	FailIndex int          `json:"failIndex"`
+	FailLabel string       `json:"failLabel,omitempty"`
+	Marks     []chartMark  `json:"marks,omitempty"`
+}
+
+// accountSeries is one account's balance over time and its kind.
+type accountSeries struct {
+	Name string    `json:"name"`
+	Kind string    `json:"kind"`
+	Data []float64 `json:"data"`
+}
+
+// chartKind is one account kind in the grouped projection chart.
+type chartKind struct {
+	Key  string `json:"key"`
+	Name string `json:"name"`
 }
 
 // chartMark is a vertical marker on the projection chart.
@@ -389,9 +416,17 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 		AgeFormat: s.catalog.T(lang, "plan.chart.age"),
 		NetWorth:  chartSeries{Name: s.catalog.T(lang, "plan.net_worth")},
 		FailIndex: -1,
+		ByAccount: opts.ByAccount,
 	}
+	present := map[domain.AccountKind]bool{}
 	for _, a := range res.Accounts {
-		ch.Accounts = append(ch.Accounts, chartSeries{Name: a.Name})
+		ch.Accounts = append(ch.Accounts, accountSeries{Name: a.Name, Kind: string(a.Kind)})
+		present[a.Kind] = true
+	}
+	for _, k := range domain.AccountKinds {
+		if present[k] {
+			ch.Kinds = append(ch.Kinds, chartKind{Key: string(k), Name: s.catalog.T(lang, "account.kind."+string(k))})
+		}
 	}
 	hasDebt := len(in.Debts) > 0
 	if hasDebt {
