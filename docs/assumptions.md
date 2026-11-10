@@ -30,6 +30,11 @@ This page lists what the model does and what it leaves out. The code is the fina
   equivalent monthly compound rate. An account can have its own return. In the
   deterministic projection returns are the same every year; there is no volatility.
   Property growth is shown as appreciation, the other accounts' as returns.
+- **Current finances summary.** "Each month" lists what is active this month, before tax. Early
+  repayments count at what you scheduled (monthly in full, yearly spread over 12 months, one-off
+  only in its month, fees included, never more than what is left of the debt) and reduce
+  "Unallocated"; the projection may pay less when the month's surplus and the money above your
+  reserve do not cover them.
 - **Each month**, income arrives (gross), tax and Social Security are paid, expenses and
   debt instalments are paid, and what is left (the surplus) goes first to each account's
   monthly contribution (limited to the surplus, until the contribution's end milestone)

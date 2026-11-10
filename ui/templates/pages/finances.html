@@ -40,6 +40,7 @@
       <div class="ledger-row"><dt>{{t "summary.income"}}</dt><dd class="amount">{{eur .MonthlyIncome}}</dd></div>
       <div class="ledger-row"><dt>{{t "summary.expenses"}}</dt><dd class="amount">{{if .MonthlyExpenses}}−{{end}}{{eur .MonthlyExpenses}}</dd></div>
       <div class="ledger-row"><dt>{{t "summary.debt_payments"}}</dt><dd class="amount">{{if .MonthlyDebtPayments}}−{{end}}{{eur .MonthlyDebtPayments}}</dd></div>
+      <div class="ledger-row"><dt>{{t "summary.prepayments"}}</dt><dd class="amount">{{if .MonthlyPrepayments}}−{{end}}{{eur .MonthlyPrepayments}}</dd></div>
       <div class="ledger-row"><dt>{{t "summary.contributions"}}</dt><dd class="amount">{{if .MonthlyContributions}}−{{end}}{{eur .MonthlyContributions}}</dd></div>
       <div class="ledger-row total"><dt>{{t "summary.unallocated"}}</dt>
         <dd class="amount {{if neg .MonthlyUnallocated}}negative{{else if .MonthlyUnallocated}}positive{{end}}">{{eur .MonthlyUnallocated}}</dd></div>

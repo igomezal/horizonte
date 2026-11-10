@@ -276,8 +276,12 @@ func (s *Server) loadSummary(ctx context.Context, fc finCtx) (summaryView, error
 	if err != nil {
 		return summaryView{}, err
 	}
+	prepayments, err := s.store.ListPrepayments(ctx, fc.plan)
+	if err != nil {
+		return summaryView{}, err
+	}
 	return summaryView{
-		Summary: domain.Summarize(fc.now, domain.ResolveFixed(milestones, people), accounts, incomes, expenses, debts),
+		Summary: domain.Summarize(fc.now, domain.ResolveFixed(milestones, people), accounts, incomes, expenses, debts, prepayments),
 		Empty:   len(accounts)+len(incomes)+len(expenses)+len(debts) == 0,
 	}, nil
 }

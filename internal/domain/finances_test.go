@@ -125,6 +125,7 @@ func TestSummarize(t *testing.T) {
 			{Amount: 60000, PaymentsPerYear: 1}, // 500 €/month
 		},
 		[]Debt{{Balance: 15000000, MonthlyPayment: 71132}},
+		nil,
 	)
 	if s.Assets != 6000000 || s.Debts != 15000000 || s.NetWorth != -9000000 {
 		t.Errorf("balances = %+v", s)
@@ -135,5 +136,63 @@ func TestSummarize(t *testing.T) {
 	want := Cents(233333 - 125000 - 71132 - 30000)
 	if s.MonthlyUnallocated != want {
 		t.Errorf("unallocated = %d, want %d", s.MonthlyUnallocated, want)
+	}
+}
+
+func TestSummarizePrepayments(t *testing.T) {
+	now := Month{2026, 11}
+	ms := int64(7)
+	r := Resolved{ms: Month{2027, 1}, 9: Month{2026, 9}, 10: Month{2026, 11}}
+	other := int64(8) // never reached
+	debts := []Debt{{ID: 1, Balance: 10000000}, {ID: 2, Balance: 100000}}
+	reachedEnd, reachedStart := int64(9), int64(10)
+	income := []Income{{Amount: 500000, PaymentsPerYear: 12}}
+	cases := []struct {
+		name string
+		p    Prepayment
+		want Cents
+	}{
+		{"monthly", Prepayment{DebtID: 1, Amount: 20000, Frequency: PrepayMonthly}, 20000},
+		{"monthly before span", Prepayment{DebtID: 1, Amount: 20000, Frequency: PrepayMonthly, Start: Month{2027, 1}}, 0},
+		{"monthly after span", Prepayment{DebtID: 1, Amount: 20000, Frequency: PrepayMonthly, End: Month{2026, 10}}, 0},
+		{"yearly spread", Prepayment{DebtID: 1, Amount: 120000, Frequency: PrepayYearly, Start: Month{2026, 3}}, 10000},
+		{"yearly outside span", Prepayment{DebtID: 1, Amount: 120000, Frequency: PrepayYearly, Start: Month{2025, 1}, End: Month{2026, 6}}, 0},
+		{"once this month", Prepayment{DebtID: 1, Amount: 70000, Frequency: PrepayOnce, Start: now}, 70000},
+		{"once other month", Prepayment{DebtID: 1, Amount: 70000, Frequency: PrepayOnce, Start: Month{2026, 12}}, 0},
+		{"start milestone not reached", Prepayment{DebtID: 1, Amount: 20000, Frequency: PrepayMonthly, StartMS: &other}, 0},
+		{"start milestone later", Prepayment{DebtID: 1, Amount: 20000, Frequency: PrepayMonthly, StartMS: &ms}, 0},
+		{"end milestone later", Prepayment{DebtID: 1, Amount: 20000, Frequency: PrepayMonthly, EndMS: &ms}, 20000},
+		{"once with only a start milestone", Prepayment{DebtID: 1, Amount: 70000, Frequency: PrepayOnce, StartMS: &reachedStart}, 70000},
+		{"end milestone already reached", Prepayment{DebtID: 1, Amount: 20000, Frequency: PrepayMonthly, EndMS: &reachedEnd}, 0},
+		{"yearly with no start", Prepayment{DebtID: 1, Amount: 120000, Frequency: PrepayYearly}, 10000},
+		{"monthly with fee", Prepayment{DebtID: 1, Amount: 20000, Frequency: PrepayMonthly, FeeRate: 0.005}, 20100},
+		{"once with fee", Prepayment{DebtID: 1, Amount: 300000, Frequency: PrepayOnce, Start: now, FeeRate: 0.005}, 301500},
+		{"once capped at balance, fee on capped amount", Prepayment{DebtID: 2, Amount: 900000, Frequency: PrepayOnce, Start: now, FeeRate: 0.01}, 101000},
+		{"yearly capped before /12", Prepayment{DebtID: 2, Amount: 1200000, Frequency: PrepayYearly}, 8333},
+		{"deleted debt", Prepayment{DebtID: 99, Amount: 20000, Frequency: PrepayMonthly}, 0},
+	}
+	for _, c := range cases {
+		s := Summarize(now, r, nil, income, nil, debts, []Prepayment{c.p})
+		if s.MonthlyPrepayments != c.want {
+			t.Errorf("%s: prepayments = %d, want %d", c.name, s.MonthlyPrepayments, c.want)
+		}
+		if s.MonthlyUnallocated != 500000-c.want {
+			t.Errorf("%s: unallocated = %d", c.name, s.MonthlyUnallocated)
+		}
+		if s.NetWorth != -10100000 {
+			t.Errorf("%s: net worth changed", c.name)
+		}
+	}
+}
+
+func TestSummarizePrepaymentsShareDebtBalance(t *testing.T) {
+	now := Month{2026, 11}
+	// Two one-offs of 1.500 on a 1.800 card: the second only gets what is left.
+	s := Summarize(now, Resolved{}, nil, nil, nil, []Debt{{ID: 1, Balance: 180000}}, []Prepayment{
+		{DebtID: 1, Amount: 150000, Frequency: PrepayOnce, Start: now},
+		{DebtID: 1, Amount: 150000, Frequency: PrepayOnce, Start: now},
+	})
+	if s.MonthlyPrepayments != 180000 {
+		t.Errorf("prepayments = %d, want 180000", s.MonthlyPrepayments)
 	}
 }

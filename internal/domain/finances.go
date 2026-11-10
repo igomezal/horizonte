@@ -425,18 +425,24 @@ func (d Debt) PayoffMonth(now Month) Month {
 type Summary struct {
 	Assets, Debts, NetWorth Cents
 
-	MonthlyIncome        Cents
-	MonthlyExpenses      Cents
-	MonthlyDebtPayments  Cents
+	MonthlyIncome       Cents
+	MonthlyExpenses     Cents
+	MonthlyDebtPayments Cents
+	// MonthlyPrepayments is what the plan schedules as early repayments this
+	// month, with fees and capped at each debt's balance: monthly ones in
+	// full, yearly ones spread over 12 months, one-off ones only in the month
+	// they fall due.
+	MonthlyPrepayments   Cents
 	MonthlyContributions Cents
-	// MonthlyUnallocated is what is left after expenses, debt payments and
-	// account contributions. Negative means the plan spends more than it earns.
+	// MonthlyUnallocated is what is left after expenses, debt payments, early
+	// repayments and account contributions. Negative means the plan spends more than it earns.
 	MonthlyUnallocated Cents
 }
 
 // Summarize computes the snapshot for month now. r resolves the milestones
 // streams are bound to (conditional milestones count as not reached).
-func Summarize(now Month, r Resolved, accounts []Account, incomes []Income, expenses []Expense, debts []Debt) Summary {
+// Early repayments of debts that no longer exist are ignored.
+func Summarize(now Month, r Resolved, accounts []Account, incomes []Income, expenses []Expense, debts []Debt, prepayments []Prepayment) Summary {
 	var s Summary
 	for _, a := range accounts {
 		s.Assets += a.Balance
@@ -444,9 +450,20 @@ func Summarize(now Month, r Resolved, accounts []Account, incomes []Income, expe
 			s.MonthlyContributions += a.MonthlyContribution
 		}
 	}
+	balances := map[int64]Cents{}
 	for _, d := range debts {
+		balances[d.ID] = d.Balance
 		s.Debts += d.Balance
 		s.MonthlyDebtPayments += d.MonthlyPayment
+	}
+	// Repayments of one debt are processed in the order given (the store lists
+	// them by debt and id, as the engine does), each against what is left.
+	for _, p := range prepayments {
+		if bal, ok := balances[p.DebtID]; ok {
+			cost, repaid := p.monthlyAverageIn(r, now, bal)
+			s.MonthlyPrepayments += cost
+			balances[p.DebtID] = bal - repaid
+		}
 	}
 	for _, i := range incomes {
 		if r.ActiveIn(i.Start, i.End, i.StartMS, i.EndMS, now) {
@@ -459,6 +476,6 @@ func Summarize(now Month, r Resolved, accounts []Account, incomes []Income, expe
 		}
 	}
 	s.NetWorth = s.Assets - s.Debts
-	s.MonthlyUnallocated = s.MonthlyIncome - s.MonthlyExpenses - s.MonthlyDebtPayments - s.MonthlyContributions
+	s.MonthlyUnallocated = s.MonthlyIncome - s.MonthlyExpenses - s.MonthlyDebtPayments - s.MonthlyPrepayments - s.MonthlyContributions
 	return s
 }

@@ -95,6 +95,32 @@ func (p Prepayment) DueIn(r Resolved, now, planStart Month) bool {
 	return true
 }
 
+// monthlyAverageIn is what the repayment costs in month now for a monthly
+// summary: monthly payments in full, yearly ones spread over 12 months while
+// their span includes now, one-off ones only in the month they fall due. Like
+// the engine, each payment is capped at the debt's balance and the fee is
+// charged on top of the amount repaid. It also returns the principal repaid,
+// so the caller can reduce the balance for the next repayment of that debt.
+func (p Prepayment) monthlyAverageIn(r Resolved, now Month, balance Cents) (cost, repaid Cents) {
+	amount := max(0, min(p.Amount, balance))
+	cost = amount + Cents(math.Round(float64(amount)*p.FeeRate))
+	switch p.Frequency {
+	case PrepayOnce:
+		if p.DueIn(r, now, now) {
+			return cost, amount
+		}
+	case PrepayMonthly:
+		if r.ActiveIn(p.Start, p.End, p.StartMS, p.EndMS, now) {
+			return cost, amount
+		}
+	case PrepayYearly:
+		if r.ActiveIn(p.Start, p.End, p.StartMS, p.EndMS, now) {
+			return cost / 12, amount / 12
+		}
+	}
+	return 0, 0
+}
+
 // Annuity returns the fixed monthly payment that repays balance over n months
 // at the nominal annual rate (French amortisation).
 func Annuity(balance, annualRate float64, n int) float64 {

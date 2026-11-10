@@ -473,7 +473,8 @@
   "summary.label": "Resumen",
   "summary.monthly": "Cada mes",
   "summary.net_worth": "Tu patrimonio neto hoy",
-  "summary.note": "Antes de impuestos. Solo cuenta ingresos y gastos activos este mes; las pagas extra y los pagos anuales se reparten entre 12 meses.",
+  "summary.note": "Antes de impuestos. Solo cuenta ingresos y gastos activos este mes; las pagas extra y los pagos anuales se reparten entre 12 meses. Las amortizaciones son lo que has programado, con comisiones: la proyección paga menos si el excedente del mes y el dinero por encima de tu reserva no las cubren.",
+  "summary.prepayments": "Amortizaciones anticipadas",
   "summary.unallocated": "Sin asignar",
 
   "per_month": "%s/mes",

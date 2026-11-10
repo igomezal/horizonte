@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igomezal/horizonte/internal/domain"
 	"github.com/igomezal/horizonte/internal/i18n"
 	"github.com/igomezal/horizonte/internal/store"
 	"github.com/igomezal/horizonte/ui"
@@ -198,6 +199,33 @@ func TestSummaryTotals(t *testing.T) {
 	_, body := do(s, htmxReq("GET", "/finances/summary", nil))
 	// Net worth 20.000 − 5.000; unallocated 2.333 − 900 − 250 − 200 = 983.
 	for _, want := range []string{"15.000 €", "2.333 €", "983 €"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("summary missing %q in %s", want, body)
+		}
+	}
+}
+
+func TestSummaryIncludesPrepayments(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	nowStr := domain.MonthOf(s.now()).String()
+	for _, p := range []struct {
+		path string
+		form url.Values
+	}{
+		{"/finances/incomes", url.Values{"name": {"Nómina"}, "kind": {"salary"}, "amount": {"3000"}, "payments": {"12"}}},
+		{"/finances/debts", url.Values{"name": {"Hipoteca"}, "kind": {"mortgage"}, "balance": {"100000"}, "rate": {"0"}, "payment": {"500"}}},
+		{"/finances/prepayments", url.Values{"debt": {"1"}, "amount": {"200"}, "frequency": {"monthly"}, "mode": {"term"}}},
+		{"/finances/prepayments", url.Values{"debt": {"1"}, "amount": {"1200"}, "frequency": {"yearly"}, "mode": {"term"}}},
+		{"/finances/prepayments", url.Values{"debt": {"1"}, "amount": {"700"}, "frequency": {"once"}, "mode": {"term"}, "start": {nowStr}}},
+		{"/finances/prepayments", url.Values{"debt": {"1"}, "amount": {"9000"}, "frequency": {"once"}, "mode": {"term"}, "start": {"2090-01"}}},
+	} {
+		if rec, body := do(s, htmxReq("POST", p.path, p.form)); rec.Code != http.StatusOK {
+			t.Fatalf("POST %s: %d %s", p.path, rec.Code, body)
+		}
+	}
+	_, body := do(s, htmxReq("GET", "/finances/summary", nil))
+	// Early repayments 200 + 1.200/12 + 700 = 1.000; unallocated 3.000 − 500 − 1.000 = 1.500.
+	for _, want := range []string{"Amortizaciones anticipadas", "−1.000 €", "1.500 €"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("summary missing %q in %s", want, body)
 		}

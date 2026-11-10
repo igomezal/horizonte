@@ -473,7 +473,8 @@
   "summary.label": "Summary",
   "summary.monthly": "Each month",
   "summary.net_worth": "Your net worth today",
-  "summary.note": "Before tax. Only counts income and expenses active this month; extra and yearly payments are spread over 12 months.",
+  "summary.note": "Before tax. Only counts income and expenses active this month; extra and yearly payments are spread over 12 months. Early repayments are what you scheduled, fees included: the projection pays less when the month's surplus and the money above your reserve don't cover them.",
+  "summary.prepayments": "Early repayments",
   "summary.unallocated": "Unallocated",
 
   "per_month": "%s/month",
