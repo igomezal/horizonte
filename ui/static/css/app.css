@@ -2383,3 +2383,49 @@ html.enter[data-enter-skip~="plan-table"] #plan-table {
 .dot-cat-leisure { background: var(--cat-leisure); }
 .dot-cat-education { background: var(--cat-education); }
 .dot-cat-other { background: var(--cat-other); }
+
+/* ---------- Home: "your plan at a glance" card (replaces the example) ---------- */
+.glance {
+  container: glance / inline-size;
+}
+.glance .metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+/* Euro figures never wrap; when the card is narrow the tiles stack so long
+   amounts and sentences fit. */
+.glance .metric-value:not(.metric-text) {
+  white-space: nowrap;
+}
+@container glance (max-width: 30rem) {
+  .glance .metrics {
+    grid-template-columns: 1fr;
+  }
+}
+.glance .card-head .chip {
+  flex: none;
+}
+.glance .metric {
+  min-width: 0;
+}
+/* Sentence values (how long it lasts, next milestone) are smaller and wrap. */
+.glance .metric-text {
+  font-size: 1.0625rem;
+  overflow-wrap: anywhere;
+}
+/* Tiles that are links: border and label pick up the accent, no movement. */
+.metric-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--ease), background-color var(--ease);
+}
+.metric-link:hover {
+  border-color: var(--accent);
+}
+.metric-link:hover .metric-label {
+  color: var(--accent-text);
+}
+.metric-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

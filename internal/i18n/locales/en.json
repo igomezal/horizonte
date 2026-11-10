@@ -19,6 +19,14 @@
 
   "theme.toggle": "Toggle light/dark theme",
 
+  "glance.title": "Your plan at a glance",
+  "glance.chip_error": "No result",
+  "glance.lasts_label": "How long the money lasts",
+  "glance.odds_label": "Chance of success",
+  "glance.next_label": "Next milestone",
+  "glance.next": "%s · %s",
+  "glance.next_none": "No upcoming milestones",
+  "glance.next_add": "add one in %s",
   "home.about": "About this app",
   "home.intro": "Model your whole financial life: income, expenses, accounts, debts and milestones such as financial independence or retirement. Your data is stored only on this machine.",
   "home.offer": "What you can do",

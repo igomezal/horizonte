@@ -2,11 +2,53 @@
 {{with .Data}}
 <section class="hero" aria-labelledby="hero-heading">
   <div class="hero-text">
-    <span class="chip chip-neutral">{{t "status.example"}}</span>
+    {{if not .Glance}}<span class="chip chip-neutral">{{t "status.example"}}</span>{{end}}
     <h1 id="hero-heading">{{t "hero.title_a"}} <span class="hl">{{t "hero.title_b"}}</span></h1>
     <p class="sub">{{t "app.tagline"}}</p>
     <a href="/finances" role="button" class="btn-icon">{{t "home.start_link"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
   </div>
+  {{with .Glance}}
+  <section class="card hero-card glance" aria-labelledby="glance-heading">
+    <div class="card-head">
+      <div>
+        <h2 id="glance-heading">{{.PlanName}}</h2>
+        <span>{{t "glance.title"}}</span>
+      </div>
+      {{template "glance-chip" (dict "Chip" .Chip)}}
+    </div>
+    <div class="metrics">
+      <a class="metric metric-link" href="/finances">
+        <span class="metric-value{{if neg .NetWorth}} negative{{end}}">{{eur .NetWorth}}</span>
+        <span class="metric-label">{{t "summary.net_worth"}}</span>
+      </a>
+      <a class="metric metric-link" href="/plan">
+        {{if .Failed}}<span class="metric-value metric-text negative">{{t "scenarios.fails" .Age}}</span>
+        {{else}}<span class="metric-value metric-text">{{t "scenarios.lasts" .Age}}</span>{{end}}
+        <span class="metric-label">{{t "glance.lasts_label"}}</span>
+      </a>
+      {{if .Odds.Pending}}
+      <div class="metric glance-odds is-pending" data-sim role="status"
+           hx-get="/glance/odds" hx-trigger="load, retry" hx-swap="outerHTML">
+        <span class="metric-value"><span class="skel-t">00 %</span></span>
+        <span class="metric-label">{{t "glance.odds_label"}}</span>
+        <span class="visually-hidden">{{t "scenarios.pending"}}</span>
+        <span class="sim-pending-error">{{t "sim.error_short"}} <button type="button" class="link-btn" data-sim-retry>{{t "sim.retry"}}</button></span>
+      </div>
+      {{else}}{{template "glance-odds" .Odds}}{{end}}
+      {{if .HasNext}}
+      <a class="metric metric-link" href="/plan">
+        <span class="metric-value metric-text">{{t "glance.next" .NextLabel (month .NextMonth)}}</span>
+        <span class="metric-label">{{t "glance.next_label"}}</span>
+      </a>
+      {{else}}
+      <a class="metric metric-link" href="/finances">
+        <span class="metric-value metric-text muted">{{t "glance.next_none"}}</span>
+        <span class="metric-label">{{t "glance.next_label"}} · {{t "glance.next_add" (t "nav.finances")}}</span>
+      </a>
+      {{end}}
+    </div>
+  </section>
+  {{else}}
   <div class="card hero-card">
     <div class="card-head">
       <div>
@@ -22,6 +64,7 @@
       <p class="metric is-teal"><span class="metric-value">{{money (sub .Final .Contributed)}}</span><span class="metric-label"><span class="swatch growth" aria-hidden="true"></span> {{t "demo.growth"}}</span></p>
     </div>
   </div>
+  {{end}}
 </section>
 {{end}}
 
@@ -47,3 +90,18 @@
   <p class="note muted">{{t "home.offer_note"}}</p>
 </section>
 {{end}}
+
+{{/* The card's status chip. Rendered again out of band with the odds tile,
+     so it goes from "calculating" to ready (or "shortfall") with it. */}}
+{{define "glance-chip"}}<span id="glance-chip" class="chip chip-{{.Chip}}" data-error-label="{{t "glance.chip_error"}}"{{if .OOB}} hx-swap-oob="true"{{end}}>{{if eq .Chip "critical"}}{{t "status.shortfall"}}{{else if eq .Chip "updating"}}{{t "scenarios.pending"}}{{else}}{{t "status.ready"}}{{end}}</span>{{end}}
+
+{{/* The success-rate tile, once its Monte Carlo result exists. */}}
+{{define "glance-odds"}}
+<a class="metric metric-link glance-odds" href="/success">
+  <span class="metric-value">{{percent .Rate 0}}</span>
+  <span class="metric-label">{{t "glance.odds_label"}}</span>
+</a>
+{{end}}
+
+{{/* The lazy response: the tile replaces its placeholder and the chip updates. */}}
+{{define "glance-odds-result"}}{{template "glance-odds" .}}{{template "glance-chip" .}}{{end}}

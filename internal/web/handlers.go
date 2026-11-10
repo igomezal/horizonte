@@ -79,11 +79,6 @@ func round2(v float64) float64 {
 	return float64(int64(v*100+0.5)) / 100
 }
 
-func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
-	lang := i18n.FromContext(r.Context())
-	s.page(w, r, http.StatusOK, "home", "home.title", compoundDemo(lang, s.catalog))
-}
-
 // handleSetLang stores the chosen language in a cookie and returns the user
 // to the page they were on.
 func (s *Server) handleSetLang(w http.ResponseWriter, r *http.Request) {

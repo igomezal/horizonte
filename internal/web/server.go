@@ -99,6 +99,7 @@ func New(cfg Config) (*Server, error) {
 	mux.Handle("GET /static/", static)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /{$}", s.handleHome)
+	mux.HandleFunc("GET /glance/odds", s.handleGlanceOdds)
 	mux.HandleFunc("POST /lang", s.handleSetLang)
 
 	mux.HandleFunc("GET /finances", s.handleFinances)

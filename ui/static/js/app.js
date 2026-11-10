@@ -222,6 +222,21 @@
     const elt = e.detail.elt;
     const sim = elt && elt.closest && elt.closest("[data-sim]");
     if (sim) sim.dataset.state = "error";
+    // The plan card's chip must not keep saying "calculating".
+    const chip = sim && sim.closest(".glance") && document.getElementById("glance-chip");
+    if (chip && chip.dataset.errorLabel && !chip.dataset.was) {
+      chip.dataset.was = chip.className + "|" + chip.textContent;
+      chip.className = "chip chip-warning";
+      chip.textContent = chip.dataset.errorLabel;
+    }
+  }
+  function restoreGlanceChip() {
+    const chip = document.getElementById("glance-chip");
+    if (!chip || !chip.dataset.was) return;
+    const i = chip.dataset.was.indexOf("|");
+    chip.className = chip.dataset.was.slice(0, i);
+    chip.textContent = chip.dataset.was.slice(i + 1);
+    delete chip.dataset.was;
   }
   document.addEventListener("htmx:responseError", simFailed);
   document.addEventListener("htmx:sendError", simFailed);
@@ -232,6 +247,7 @@
     const sim = btn.closest("[data-sim]");
     if (!sim) return;
     delete sim.dataset.state;
+    restoreGlanceChip();
     htmx.trigger(sim, "retry");
   });
 
@@ -246,7 +262,7 @@
     clearTimeout(enterTimer);
     enterTimer = setTimeout(() => { root.classList.remove("enter"); delete root.dataset.enterSkip; }, 1400);
   }
-  const RESULT_REGIONS = ".sim-region, #plan-summary, #plan-table";
+  const RESULT_REGIONS = ".sim-region, #plan-summary, #plan-table, .glance-odds";
   // True while the swap in progress replaces a placeholder (a pending region),
   // false when it replaces an existing result (a recalculation).
   let swapFromPending = false;

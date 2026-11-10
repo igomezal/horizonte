@@ -99,6 +99,12 @@ it) for status chips, metric values, euro hero figures, table numbers and chart 
 - **Home hero**: text left (chip, headline with one accent phrase, tagline, primary button
   with an arrow icon), chart card right with metric tiles; built from the example the page
   already computes.
+- **Plan at a glance** (`.glance`, home): when the active plan has people, this card takes the hero's
+  right-hand side instead of the example (no "Ejemplo" chip). Header: plan name, subtitle and a status chip
+  (calculating, ready, or shortfall if the plan runs out). Four `.metric.metric-link` tiles in a 2x2 grid (one column when the card is under 30rem wide; euro figures never wrap),
+  each a link to the page the figure comes from; sentence values use `.metric-text` (smaller, wraps). Only
+  "runs out" and a negative net worth are red. The Monte Carlo tile loads after the page (`.glance-odds.is-pending`
+  with a `.skel-t` bar); it fades in like a result region and the chip changes out of band with it. If the request fails the chip turns amber with an error label until "try again". The next milestone covers milestones, paid-off debts and property sales, like the Plan timeline. No count-up.
 
 ## Status, live and motion: what the app really does
 

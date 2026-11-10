@@ -19,6 +19,14 @@
 
   "theme.toggle": "Cambiar tema claro/oscuro",
 
+  "glance.title": "Tu plan de un vistazo",
+  "glance.chip_error": "Sin resultado",
+  "glance.lasts_label": "Cuánto dura el dinero",
+  "glance.odds_label": "Probabilidad de éxito",
+  "glance.next_label": "Próximo hito",
+  "glance.next": "%s · %s",
+  "glance.next_none": "Sin hitos próximos",
+  "glance.next_add": "añade uno en %s",
   "home.about": "Sobre esta aplicación",
   "home.intro": "Modela toda tu vida financiera: ingresos, gastos, cuentas, deudas e hitos como la independencia financiera o la jubilación. Tus datos se guardan solo en este equipo.",
   "home.offer": "Qué puedes hacer",
