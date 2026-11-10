@@ -173,7 +173,9 @@ func (s *Server) buildCashflowYear(lang i18n.Lang, in engine.Input, res engine.R
 		To: y.Last.Month, From: y.Last.Month.AddMonths(1 - y.Months),
 	}
 	cy.NetIncome = cy.Income - cy.Tax
-	if cy.NetIncome > 0.5 {
+	// A year without income has no savings rate, even when a tax refund
+	// arrives (it would divide the year's spending by the refund).
+	if cy.HasIncome && cy.NetIncome > 0.5 {
 		cy.Rate = cy.Savings / cy.NetIncome
 	}
 	if len(in.People) > 0 {
@@ -332,7 +334,7 @@ func (s *Server) buildCashflowCharts(lang i18n.Lang, in engine.Input, years []en
 		label := strconv.Itoa(y.Year)
 		rate.Categories = append(rate.Categories, label)
 		cat.Categories = append(cat.Categories, label)
-		if net := y.Income - y.Tax; net > 0.5 {
+		if net := y.Income - y.Tax; y.Income > 0.5 && net > 0.5 { // no bar without income, refund or not
 			r := round4(y.Savings() / net)
 			rateSeries.Data = append(rateSeries.Data, &r)
 		} else {

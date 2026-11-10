@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/igomezal/horizonte/internal/engine"
 )
 
 func seedCashflow(t *testing.T, s *Server) {
@@ -88,6 +90,30 @@ func TestCashflowYearWithoutIncome(t *testing.T) {
 	_, body = do(s, htmxReq("GET", "/cashflow/year?y=1999", nil))
 	if !strings.Contains(body, "En 2026") || !strings.Contains(body, "solo de nov 2026 a dic 2026") {
 		t.Errorf("year 1999 should clamp to the partial first year: %s", body)
+	}
+}
+
+// A year whose only money in is the previous year's tax refund (June) has no
+// savings rate: it used to divide the year's spending by the refund and show
+// something like -3.455 %.
+func TestCashflowRefundOnlyYearHasNoRate(t *testing.T) {
+	s, _ := newFinanceServer(t)
+	years := []engine.YearRow{
+		{Year: 2062, Months: 12, Deflator: 1, Income: 20000, Tax: 5000, Expenses: 8000, Flow: &engine.Flow{}},
+		{Year: 2063, Months: 12, Deflator: 1, Income: 0, Tax: -216, Expenses: 7682, Withdrawals: 7466, Flow: &engine.Flow{}},
+	}
+	rate, _ := s.buildCashflowCharts("es", engine.Input{}, years, planOpts{})
+	data := rate.Series[0].Data
+	if data[0] == nil || *data[0] != 0.4667 {
+		t.Errorf("2062 rate = %v, want 0.4667", data[0])
+	}
+	if data[1] != nil {
+		t.Errorf("2063 (refund only) rate = %v, want no bar", *data[1])
+	}
+
+	cy := s.buildCashflowYear("es", engine.Input{}, engine.Result{}, years[1], planOpts{})
+	if cy.HasIncome || cy.Rate != 0 {
+		t.Errorf("refund-only year: HasIncome = %v, Rate = %v", cy.HasIncome, cy.Rate)
 	}
 }
 
