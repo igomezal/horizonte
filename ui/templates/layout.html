@@ -8,7 +8,7 @@
   <title>{{t .TitleKey}} · {{t "app.name"}}</title>
   <script src="{{asset "/static/js/theme-init.js"}}"></script>
   <link rel="icon" href="{{asset "/static/img/favicon.svg"}}" type="image/svg+xml">
-  <link rel="preload" href="{{asset "/static/fonts/instrument-sans-latin-wdth.woff2"}}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{asset "/static/fonts/jetbrains-mono-latin-wght.woff2"}}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{asset "/static/vendor/pico.min.css"}}">
   <link rel="stylesheet" href="{{asset "/static/css/app.css"}}">
   {{- with .Sentry}}{{if .DSN}}
@@ -33,6 +33,13 @@
         <small>{{t "footer.privacy"}}</small>
       </footer>
     </div>
+  </div>
+  <div class="toast" data-toast role="status" aria-live="polite"
+       data-text-offline="{{t "conn.toast_offline"}}" data-text-online="{{t "conn.toast_online"}}">
+    <p data-toast-text></p>
+    <button type="button" class="icon-btn" data-toast-dismiss aria-label="{{t "toast.dismiss"}}">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
   </div>
 </body>
 </html>

@@ -56,9 +56,10 @@
      bars (so nothing moves when it arrives) loads it. */}}
 {{define "bt-summary"}}
 {{$p := .Pending}}
-<section id="bt-summary" class="lead-figure verdict sim-region{{if $p}} is-pending{{else}} sim-fade{{end}}" aria-label="{{t "backtest.title"}}"
+<section id="bt-summary" class="lead-figure verdict sim-region{{if $p}} is-pending{{end}}" aria-label="{{t "backtest.title"}}"
         {{if $p}} data-sim hx-get="/backtest/summary" hx-trigger="load, retry" hx-swap="outerHTML"{{end}}>
   {{if $p}}{{template "sim-busy" (t "bt.pending" .DataFrom.Year .DataTo.Year)}}{{end}}
+  {{if $p}}<span class="chip chip-updating">{{t "scenarios.pending"}}</span>{{else}}<span class="chip chip-live"><span class="when-idle">{{t "status.ready"}}</span><span class="when-busy" hidden>{{t "scenarios.pending"}}</span></span>{{end}}
   {{if $p}}
   <p class="lead"><span class="skel-t">{{t "bt.verdict" 1871 1970 .EndAge}}</span></p>
   <span class="figure"><span class="skel-t">100 %</span></span>
@@ -81,7 +82,7 @@
 {{/* Heat map of every start year (same calculation as bt-summary). */}}
 {{define "bt-heat"}}
 {{$p := .Pending}}
-<div id="bt-heat-wrap" class="sim-region{{if $p}} is-pending{{else}} sim-fade{{end}}"
+<div id="bt-heat-wrap" class="sim-region{{if $p}} is-pending{{end}}"
      {{- if $p}} data-sim hx-get="/backtest/heat" hx-trigger="load, retry" hx-swap="outerHTML"{{end}}>
   {{if $p}}
   {{template "sim-busy" (t "bt.heat_pending")}}
@@ -100,7 +101,7 @@
 
 {{/* One replayed scenario (a crisis or a start year). */}}
 {{define "bt-scenario"}}
-<section id="bt-scenario" class="section bt-scenario sim-region sim-fade" aria-live="polite" aria-labelledby="h-scenario">
+<section id="bt-scenario" class="section bt-scenario sim-region" aria-live="polite" aria-labelledby="h-scenario">
   {{template "sim-busy" (t "bt.busy")}}
   <h2 id="h-scenario">{{t "bt.scenario_title" .Title (month .Start)}}</h2>
   <p class="lead-line">

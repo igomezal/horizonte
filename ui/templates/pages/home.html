@@ -1,35 +1,46 @@
 {{define "content"}}
 {{with .Data}}
-<section class="lead-figure" aria-labelledby="demo-heading">
-  <h1 id="demo-heading">{{t "demo.headline" (money .Monthly) .Years}}</h1>
-  <span class="figure">{{money .Final}}</span>
-  <p class="breakdown">
-    <span class="key"><span class="swatch contributed" aria-hidden="true"></span>{{t "demo.contributed_amount" (money .Contributed)}}</span>
-    <span class="key"><span class="swatch growth" aria-hidden="true"></span>{{t "demo.growth_amount" (money (sub .Final .Contributed))}}</span>
-  </p>
-  <p class="assumptions muted">{{t "demo.assumptions" (money .Initial) (percent .Rate 0)}}</p>
-  <div class="chart" data-chart="demo-chart" role="img" aria-label="{{t "demo.chart_label"}}"></div>
-  <script type="application/json" id="demo-chart">{{json .Chart}}</script>
+<section class="hero" aria-labelledby="hero-heading">
+  <div class="hero-text">
+    <span class="chip chip-neutral">{{t "status.example"}}</span>
+    <h1 id="hero-heading">{{t "hero.title_a"}} <span class="hl">{{t "hero.title_b"}}</span></h1>
+    <p class="sub">{{t "app.tagline"}}</p>
+    <a href="/finances" role="button" class="btn-icon">{{t "home.start_link"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+  </div>
+  <div class="card hero-card">
+    <div class="card-head">
+      <div>
+        <h2 id="demo-heading">{{t "demo.headline" (money .Monthly) .Years}}</h2>
+        <span>{{t "demo.assumptions" (money .Initial) (percent .Rate 0)}}</span>
+      </div>
+    </div>
+    <div class="chart" data-chart="demo-chart" role="img" aria-label="{{t "demo.chart_label"}}"></div>
+    <script type="application/json" id="demo-chart">{{json .Chart}}</script>
+    <div class="metrics">
+      <p class="metric is-green"><span class="metric-value">{{money .Final}}</span><span class="metric-label">{{t "demo.total"}}</span></p>
+      <p class="metric is-blue"><span class="metric-value">{{money .Contributed}}</span><span class="metric-label"><span class="swatch contributed" aria-hidden="true"></span> {{t "demo.contributed"}}</span></p>
+      <p class="metric is-teal"><span class="metric-value">{{money (sub .Final .Contributed)}}</span><span class="metric-label"><span class="swatch growth" aria-hidden="true"></span> {{t "demo.growth"}}</span></p>
+    </div>
+  </div>
 </section>
 {{end}}
 
 <section class="section" aria-labelledby="about-heading">
   <h2 id="about-heading">{{t "home.about"}}</h2>
   <p class="prose">{{t "home.intro"}}</p>
-  <p><a href="/finances">{{t "home.start_link"}}</a></p>
 </section>
 
 <section class="section" aria-labelledby="offer-heading">
   <h2 id="offer-heading">{{t "home.offer"}}</h2>
   <p class="section-desc muted">{{t "home.offer_desc"}}</p>
-  <dl class="ledger offer">
-    <div class="ledger-row"><dt><a href="/finances">{{t "nav.finances"}}</a></dt><dd>{{t "home.offer.finances"}}</dd></div>
-    <div class="ledger-row"><dt><a href="/plan">{{t "nav.plan"}}</a></dt><dd>{{t "home.offer.plan"}}</dd></div>
-    <div class="ledger-row"><dt><a href="/cashflow">{{t "nav.cashflow"}}</a></dt><dd>{{t "home.offer.cashflow"}}</dd></div>
-    <div class="ledger-row"><dt><a href="/success">{{t "nav.success"}}</a></dt><dd>{{t "home.offer.success"}}</dd></div>
-    <div class="ledger-row"><dt><a href="/backtest">{{t "nav.backtest"}}</a></dt><dd>{{t "home.offer.backtest"}}</dd></div>
-    <div class="ledger-row"><dt><a href="/scenarios">{{t "nav.scenarios"}}</a></dt><dd>{{t "home.offer.scenarios"}}</dd></div>
-  </dl>
+  <div class="offer-grid">
+    <a class="card card-link" href="/finances"><strong>{{template "icon-wallet"}}{{t "nav.finances"}}</strong><span>{{t "home.offer.finances"}}</span></a>
+    <a class="card card-link" href="/plan"><strong>{{template "icon-chart"}}{{t "nav.plan"}}</strong><span>{{t "home.offer.plan"}}</span></a>
+    <a class="card card-link" href="/cashflow"><strong>{{template "icon-flow"}}{{t "nav.cashflow"}}</strong><span>{{t "home.offer.cashflow"}}</span></a>
+    <a class="card card-link" href="/success"><strong>{{template "icon-dice"}}{{t "nav.success"}}</strong><span>{{t "home.offer.success"}}</span></a>
+    <a class="card card-link" href="/backtest"><strong>{{template "icon-history"}}{{t "nav.backtest"}}</strong><span>{{t "home.offer.backtest"}}</span></a>
+    <a class="card card-link" href="/scenarios"><strong>{{template "icon-branch"}}{{t "nav.scenarios"}}</strong><span>{{t "home.offer.scenarios"}}</span></a>
+  </div>
   <p class="note muted">{{t "home.offer_note"}}</p>
 </section>
 {{end}}

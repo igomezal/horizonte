@@ -36,9 +36,7 @@
   "demo.assumptions": "Ejemplo con %s iniciales y una rentabilidad del %s anual, con interés compuesto mensual.",
   "demo.chart_label": "Gráfico del saldo año a año, dividido entre lo aportado y el rendimiento.",
   "demo.contributed": "Aportado",
-  "demo.contributed_amount": "%s aportados",
   "demo.growth": "Rendimientos",
-  "demo.growth_amount": "%s de rendimiento",
   "demo.headline": "Lo que hacen %s al mes en %d años",
 
   "chart.clipped": "Los años por debajo de −100 % están recortados; pasa el ratón para ver su valor.",
@@ -110,6 +108,12 @@
   "cashflow.title": "Flujo de caja",
 
   "cf.cats_desc": "Lo que gastas cada año, por categoría, con las cuotas de las deudas en rojo.",
+  "cf.cats_empty": "Todavía no hay gastos.",
+  "cf.cats_empty_link": "Añade tus gastos en Finanzas actuales para verlos por categoría.",
+  "cf.rate_empty": "Todavía no hay ingresos.",
+  "cf.rate_empty_link": "Añade tus ingresos en Finanzas actuales para ver cuánto ahorras cada año.",
+  "cf.sankey_empty": "Este año no hay dinero que entre ni que salga.",
+  "cf.sankey_empty_link": "Añade ingresos y gastos en Finanzas actuales para verlos aquí.",
   "cf.cats_title": "Gastos por categoría",
   "cf.center": "Tu dinero",
   "cf.debts": "Deudas",
@@ -783,5 +787,16 @@
   "error.notfound.body": "La página que buscas no existe.",
   "error.notfound.title": "Página no encontrada",
   "error.server.body": "Se ha producido un error inesperado. Inténtalo de nuevo.",
-  "error.server.title": "Algo ha fallado"
+  "error.server.title": "Algo ha fallado",
+  "hero.title_a": "Tu vida financiera,",
+  "hero.title_b": "año a año",
+  "status.example": "Ejemplo",
+  "status.ready": "Resultado listo",
+  "demo.total": "Total",
+  "conn.online": "En línea",
+  "conn.offline": "Sin conexión",
+  "conn.toast_offline": "Sin conexión. Los cambios no llegarán al servidor hasta que vuelva la red.",
+  "conn.toast_online": "Conexión recuperada.",
+  "toast.dismiss": "Cerrar aviso",
+  "status.shortfall": "Faltan fondos"
 }

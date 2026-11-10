@@ -211,5 +211,5 @@ Horizonte is released under the [MIT License](LICENSE).
 
 Bundled third-party files keep their own licenses: htmx (0BSD), Alpine.js, Pico.css and
 the Sentry browser SDK (MIT), Apache ECharts (Apache 2.0) in `ui/static/vendor/`, and the
-Instrument Sans font (SIL Open Font License, see `ui/static/fonts/LICENSE-OFL.txt`). The
+JetBrains Mono font (SIL Open Font License, see `ui/static/fonts/LICENSE-OFL.txt`). The
 historical market data comes from Robert Shiller's published dataset.

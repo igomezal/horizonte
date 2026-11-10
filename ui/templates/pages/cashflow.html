@@ -34,15 +34,23 @@
 <section class="section" aria-labelledby="h-rate">
   <h2 id="h-rate">{{t "cf.rate_title"}}</h2>
   <p class="section-desc muted">{{t "cf.rate_desc"}}</p>
+  {{if .RateChart.HasData}}
   <div class="chart" data-chart="cf-rate" role="img" aria-label="{{t "cf.rate_title"}}"></div>
   <script type="application/json" id="cf-rate">{{json .RateChart}}</script>
+  {{else}}
+  <p class="empty">{{t "cf.rate_empty"}} <a href="/finances#section-incomes">{{t "cf.rate_empty_link"}}</a></p>
+  {{end}}
 </section>
 
 <section class="section" aria-labelledby="h-cats">
   <h2 id="h-cats">{{t "cf.cats_title"}}</h2>
   <p class="section-desc muted">{{t "cf.cats_desc"}}</p>
+  {{if .CatChart.Series}}
   <div class="chart" data-chart="cf-cats" role="img" aria-label="{{t "cf.cats_title"}}"></div>
   <script type="application/json" id="cf-cats">{{json .CatChart}}</script>
+  {{else}}
+  <p class="empty">{{t "cf.cats_empty"}} <a href="/finances#section-expenses">{{t "cf.cats_empty_link"}}</a></p>
+  {{end}}
 </section>
 {{end}}
 {{end}}
@@ -66,20 +74,24 @@
     {{if gt .Shortfall 0.0}}<p class="negative">{{t "cf.shortfall" (money .Shortfall)}}</p>{{end}}
   </div>
 
+  {{if .Sankey.Links}}
   <div class="chart chart-sankey" data-chart="cf-sankey-{{.Year}}" role="img" aria-label="{{t "cf.sankey_label" .Year}}"></div>
   <script type="application/json" id="cf-sankey-{{.Year}}">{{json .Sankey}}</script>
+  {{else}}
+  <p class="empty">{{t "cf.sankey_empty"}} <a href="/finances#section-incomes">{{t "cf.sankey_empty_link"}}</a></p>
+  {{end}}
 
   <div class="cf-ledger">
     <div>
       <h3>{{t "cf.ins"}} <span class="amount">{{money .InTotal}}</span></h3>
       <dl class="ledger compact">
-        {{range .In}}<div class="ledger-row"><dt><span class="dot dot-{{.Kind}}" aria-hidden="true"></span>{{.Label}}</dt><dd class="amount">{{money .Value}} <span class="muted share">{{percent .Share 0}}</span></dd></div>{{end}}
+        {{range .In}}<div class="ledger-row"><dt><span class="dot dot-{{.Kind}}{{if .Cat}} dot-cat-{{.Cat}}{{end}}" aria-hidden="true"></span>{{.Label}}</dt><dd class="amount">{{money .Value}} <span class="muted share">{{percent .Share 0}}</span></dd></div>{{end}}
       </dl>
     </div>
     <div>
       <h3>{{t "cf.outs"}} <span class="amount">{{money .OutTotal}}</span></h3>
       <dl class="ledger compact">
-        {{range .Out}}<div class="ledger-row"><dt><span class="dot dot-{{.Kind}}" aria-hidden="true"></span>{{.Label}}</dt><dd class="amount">{{money .Value}} <span class="muted share">{{percent .Share 0}}</span></dd></div>{{end}}
+        {{range .Out}}<div class="ledger-row"><dt><span class="dot dot-{{.Kind}}{{if .Cat}} dot-cat-{{.Cat}}{{end}}" aria-hidden="true"></span>{{.Label}}</dt><dd class="amount">{{money .Value}} <span class="muted share">{{percent .Share 0}}</span></dd></div>{{end}}
       </dl>
     </div>
   </div>

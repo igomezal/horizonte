@@ -33,10 +33,12 @@
          hx-get="/plan/results?{{.Opts.Query}}" hx-trigger="plan-changed from:body" hx-target="this" hx-swap="outerHTML">
   <div class="lead-figure verdict">
     {{if .Failed}}
+    <span class="chip chip-critical">{{t "status.shortfall"}}</span>
     <p class="lead">{{t "plan.fail" (month .FailMonth)}}</p>
     <span class="figure negative">{{t "plan.age_figure" .FailAge}}</span>
     <p class="breakdown"><span>{{t "plan.shortfall" (money .Shortfall) .EndAge}}</span></p>
     {{else}}
+    <span class="chip chip-live">{{t "status.ready"}}</span>
     <p class="lead">{{t "plan.ok" .EndAge}}</p>
     <span class="figure{{if lt .EndValue 0.0}} negative{{end}}">{{money .EndValue}}</span>
     <p class="breakdown"><span>{{if .Opts.Real}}{{t "plan.end_value_real"}}{{else}}{{t "plan.end_value_nominal" .EndYear}}{{end}}</span></p>

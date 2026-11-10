@@ -40,7 +40,7 @@
             <div x-show="confirm" x-cloak>
               <span class="confirm-text">{{t "scenarios.delete_confirm"}}</span>
               <form method="post" action="/scenarios/{{.ID}}/delete" class="inline-form">
-                <button type="submit" class="link-btn danger">{{t "form.delete_yes"}}</button>
+                <button type="submit" class="link-btn danger confirm-yes">{{t "form.delete_yes"}}</button>
               </form>
               <button type="button" class="link-btn" @click="confirm = false">{{t "form.keep"}}</button>
             </div>
@@ -138,7 +138,7 @@
   {{template "sim-pending-inline" (t "scenarios.pending")}}
 </td>
 {{else}}
-<td class="num sim-fade">{{percent .MCRate 0}}</td>
-<td class="num sim-fade">{{if .HasHist}}{{percent .HistRate 0}}{{else}}—{{end}}</td>
+<td class="num">{{percent .MCRate 0}}</td>
+<td class="num">{{if .HasHist}}{{percent .HistRate 0}}{{else}}—{{end}}</td>
 {{end}}
 {{end}}

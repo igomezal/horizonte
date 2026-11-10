@@ -1,187 +1,293 @@
-/* "Billete" design system on top of Pico.css. See ui/DESIGN.md.
-   Colors come from the euro banknotes and each one carries a fixed meaning. */
+/* "Monitor" design system on top of Pico.css. See ui/DESIGN.md.
+   Navy dark / cool-grey light, one blue accent, status colours with fixed meanings. */
 
 @font-face {
-  font-family: "Instrument Sans";
-  src: url("/static/fonts/instrument-sans-latin-wdth.woff2") format("woff2");
+  font-family: "JetBrains Mono";
+  src: url("/static/fonts/jetbrains-mono-latin-wght.woff2") format("woff2");
   font-weight: 400 700;
-  font-stretch: 75% 100%;
   font-style: normal;
   font-display: swap;
 }
 
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.82); }
+}
+
 :root {
-  /* Base palette */
-  --papel: #f4f6f8;
-  --papel-raised: #ffffff;
-  --tinta: #16233a;
-  --tinta-soft: #4a5872;
-  --rule: #d9dee6;
-  --azul-20: #2f5da8;
-  --naranja-50: #e39a2d;
-  --verde-100: #3e8e5a;
-  --rojo-10: #b8433d;
+  /* Required tokens */
+  --pulse-animation: pulse 2s infinite;
+  --alert-z-index: 1000;
+  --live-indicator: #22c55e;
+  --critical-color: #dc2626;
+  --update-interval: 5s;
+  --toast-duration: 5s;
 
-  /* Semantic roles */
-  --app-bg: var(--papel);
-  --app-text: var(--tinta);
-  --app-muted: var(--tinta-soft);
-  --app-rule: var(--rule);
-  --app-accent: var(--azul-20);
-  --app-positive: var(--verde-100);
-  --app-negative: var(--rojo-10);
-  --app-contributed: var(--azul-20);
-  --app-growth: var(--naranja-50);
+  /* Layers: base 0 · sticky nav 100 · overlay 200 · modal 300 · toast 500 */
+  --z-nav: 100;
+  --z-overlay: 200;
+  --z-modal: 300;
+  --z-toast: 500;
 
-  /* The sidebar is always ink, like a passbook cover, in both themes. */
-  --side-bg: #16233a;
-  --side-text: #dfe5ee;
-  --side-muted: #8592a8;
-  --side-active-bg: rgba(255, 255, 255, 0.08);
-  --side-active-mark: #8fb0e8;
+  /* Typography */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+  /* Shape and motion */
+  --radius: 0.5rem;
+  --ease: 200ms ease;
+
+  /* Light theme */
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --inset: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --muted: #475569;
+  --accent: #2563eb;
+  --accent-fill: #2563eb; /* fill behind white text: 5.17:1 */
+  --accent-hover: #1d4ed8;
+  --accent-text: #1d4ed8;
+  --on-accent: #ffffff;
+  --shadow-card: 0 2px 12px rgba(15, 23, 42, 0.06);
+  --shadow-lift: 0 6px 20px rgba(15, 23, 42, 0.12);
+
+  /* Status palette: critical / warning / normal (live) / updating */
+  --status-critical: #dc2626;
+  --status-critical-text: #b91c1c;
+  --status-warning: #f59e0b;
+  --status-warning-text: #b45309;
+  --status-normal: #22c55e;
+  --status-normal-text: #15803d;
+  --status-updating: var(--accent);
+
+  /* Semantic roles used by templates and charts */
+  --app-bg: var(--bg);
+  --app-text: var(--text);
+  --app-muted: var(--muted);
+  --app-rule: var(--border);
+  --app-accent: var(--accent);
+  --app-positive: var(--status-normal-text);
+  --app-negative: var(--status-critical-text);
+  --app-contributed: var(--series-1); /* money you put in: blue */
+  --app-growth: var(--series-2); /* money your money earned: teal, not a status colour */
+  --papel-raised: var(--surface);
 
   --app-sidebar-w: 232px;
   --app-measure: 68ch;
 
-  /* Charts: banknote categorical order 20 € → 50 € → 100 € → 10 € → 200 € */
-  /* Categorical series, in this order (validated with the dataviz palette
-     checker: adjacent pairs clear the CVD and normal-vision floors in both
-     modes). Green and red are left out: they mean good and bad. */
-  --series-1: #2f5da8; /* blue */
-  --series-2: #e39a2d; /* orange */
-  --series-3: #1baf7a; /* aqua */
-  --series-4: #6250d6; /* violet */
-  --series-5: #e87ba4; /* magenta */
-  --series-6: #c98500; /* yellow */
-  --series-7: #1d8ad0; /* cyan */
-  --series-other: #8d97a8; /* "other" and anything past seven */
-  --chart-zero: #b9c1cd; /* the 0 line when values go negative */
-  --chart-5: #a88a2e;
-  --chart-text: var(--tinta-soft);
-  --chart-grid: #e3e7ed;
+  /* Categorical chart palette, validated with the dataviz checker (see DESIGN.md).
+     Adjacent pairs clear the CVD and normal-vision floors. Green and red are left
+     out on purpose: they mean good and bad. */
+  --series-1: #2563eb; /* blue */
+  --series-2: #0d9488; /* teal */
+  --series-3: #c2410c; /* orange */
+  --series-4: #7c3aed; /* violet */
+  --series-5: #b58105; /* ochre */
+  --series-6: #db2777; /* pink */
+  --series-7: #4f46e5; /* indigo */
+  --series-other: #8d97a8;
+  /* Expense categories: their own palette (stack order = slot order), kept away from
+     the status colours, the accent blue and the debt red. See DESIGN.md. */
+  --cat-housing: #0a51ae;
+  --cat-food: #2291f8;
+  --cat-transport: #8a1a86;
+  --cat-utilities: #4318e0;
+  --cat-health: #ac74cc;
+  --cat-leisure: #08908c;
+  --cat-education: #d65cf9;
+  --cat-other: var(--series-other);
+  --chart-zero: #94a3b8;
+  --sankey-center: #334155; /* centre node: not the "otros" grey */
+  --chart-5: #b58105; /* money drawn from savings in the cash-flow diagram */
+  --chart-text: #475569;
+  --chart-grid: #e2e8f0;
   --chart-tooltip-bg: #ffffff;
-
-  /* Pico mapping. Pico scales the root font up to 131% on wide screens;
-     keep a fixed 16px base so the dense app UI stays compact. */
-  --pico-font-size: 100%;
-  --pico-font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --pico-background-color: var(--app-bg);
-  --pico-color: var(--app-text);
-  --pico-h1-color: var(--app-text);
-  --pico-h2-color: var(--app-text);
-  --pico-h3-color: var(--app-text);
-  --pico-muted-color: var(--app-muted);
-  --pico-primary: var(--app-accent);
-  --pico-primary-background: var(--app-accent);
-  --pico-primary-border: var(--app-accent);
-  --pico-primary-hover: #244a88;
-  --pico-primary-hover-background: #244a88;
-  --pico-primary-focus: rgba(47, 93, 168, 0.3);
-  --pico-primary-inverse: #ffffff;
-  --pico-muted-border-color: var(--app-rule);
 }
 
+/* Pico mapping. Doubled :root beats Pico's own :root:not([data-theme]) defaults. */
+:root:root {
+  /* Pico mapping. Pico scales the root font up on wide screens; keep 16px. */
+  --pico-font-size: 100%;
+  --pico-font-family: var(--font-ui);
+  --pico-line-height: 1.6;
+  --pico-border-radius: var(--radius);
+  --pico-background-color: var(--bg);
+  --pico-color: var(--text);
+  --pico-h1-color: var(--text);
+  --pico-h2-color: var(--text);
+  --pico-h3-color: var(--text);
+  --pico-muted-color: var(--muted);
+  --pico-primary: var(--accent-text);
+  --pico-primary-background: var(--accent-fill);
+  --pico-primary-border: var(--accent-fill);
+  --pico-primary-hover: var(--accent-text);
+  --pico-primary-hover-background: var(--accent-hover);
+  --pico-primary-focus: rgba(37, 99, 235, 0.3);
+  --pico-primary-inverse: var(--on-accent);
+  --pico-muted-border-color: var(--border);
+  --pico-form-element-background-color: var(--surface);
+  --pico-form-element-border-color: #78869b;
+  --pico-form-element-color: var(--text);
+  --pico-form-element-focus-color: var(--accent);
+  --pico-form-element-active-border-color: var(--accent);
+  --pico-form-element-spacing-vertical: 0.55rem;
+  --pico-form-element-spacing-horizontal: 0.75rem;
+  --pico-card-background-color: var(--surface);
+  --pico-card-border-color: var(--border);
+  --pico-table-border-color: var(--border);
+}
+
+/* Dark theme: navy, never black. Written twice (system preference and explicit choice). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --app-bg: #0f1a2b;
-    --papel-raised: #15233a;
-    --app-text: #e3e8f0;
-    --app-muted: #9aa7bc;
-    --app-rule: #24344d;
-    --app-accent: #7fa6e6;
-    --app-positive: #6cc28b;
-    --app-negative: #e57b74;
-    --app-contributed: #6f98e0;
-    --app-growth: #f0b357;
-    --side-bg: #0a1322;
-    --series-1: #5b8ad8;
-    --series-2: #cc7417;
-    --series-3: #199e70;
-    --series-4: #9085e9;
-    --series-5: #d55181;
-    --series-6: #a98400;
-    --series-7: #3592d6;
-    --series-other: #66738a;
-    --chart-zero: #3a4b66;
-    --chart-5: #cdb062;
-    --chart-text: #9aa7bc;
-    --chart-grid: #1f2e45;
-    --chart-tooltip-bg: #15233a;
-    --pico-primary-hover: #a6c2f0;
-    --pico-primary-hover-background: #5f8bd6;
-    --pico-primary-focus: rgba(127, 166, 230, 0.35);
-    --pico-primary-inverse: #0f1a2b;
+    --bg: #0a0f1e;
+    --surface: #111827;
+    --inset: #0b1220;
+    --border: #1f2937;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --accent: #3b82f6;
+    --accent-fill: #2563eb;
+    --accent-hover: #1d4ed8;
+    --accent-text: #60a5fa;
+    --on-accent: #ffffff;
+    --shadow-card: 0 2px 14px rgba(0, 0, 0, 0.35);
+    --shadow-lift: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --status-critical-text: #f87171;
+    --status-warning-text: #f59e0b;
+    --status-normal-text: #22c55e;
+    --series-1: #3b82f6;
+    --series-2: #13a8a0;
+    --series-3: #d9692a;
+    --series-4: #8b7cf0;
+    --series-5: #bc8a0a;
+    --series-6: #d9669a;
+    --series-7: #6f78e8;
+    --series-other: #64748b;
+    --cat-housing: #465ec4;
+    --cat-food: #4c9cc6;
+    --cat-transport: #b40eae;
+    --cat-utilities: #6440fd;
+    --cat-health: #9e68ae;
+    --cat-leisure: #1daa8d;
+    --cat-education: #c153e0;
+    --chart-zero: #475569;
+    --sankey-center: #cbd5e1;
+    --chart-5: #bc8a0a;
+    --chart-text: #94a3b8;
+    --chart-grid: #1f2937;
+    --chart-tooltip-bg: #111827;
+    --pico-primary-focus: rgba(59, 130, 246, 0.35);
+    --pico-form-element-border-color: #64748b;
   }
 }
 
 :root[data-theme="dark"] {
-  --app-bg: #0f1a2b;
-  --papel-raised: #15233a;
-  --app-text: #e3e8f0;
-  --app-muted: #9aa7bc;
-  --app-rule: #24344d;
-  --app-accent: #7fa6e6;
-  --app-positive: #6cc28b;
-  --app-negative: #e57b74;
-  --app-contributed: #6f98e0;
-  --app-growth: #f0b357;
-  --side-bg: #0a1322;
-  --series-1: #5b8ad8;
-  --series-2: #cc7417;
-  --series-3: #199e70;
-  --series-4: #9085e9;
-  --series-5: #d55181;
-  --series-6: #a98400;
-  --series-7: #3592d6;
-  --series-other: #66738a;
-  --chart-zero: #3a4b66;
-  --chart-5: #cdb062;
-  --chart-text: #9aa7bc;
-  --chart-grid: #1f2e45;
-  --chart-tooltip-bg: #15233a;
-  --pico-primary-hover: #a6c2f0;
-  --pico-primary-hover-background: #5f8bd6;
-  --pico-primary-focus: rgba(127, 166, 230, 0.35);
-  --pico-primary-inverse: #0f1a2b;
+  --bg: #0a0f1e;
+  --surface: #111827;
+  --inset: #0b1220;
+  --border: #1f2937;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --accent: #3b82f6;
+  --accent-fill: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-text: #60a5fa;
+  --on-accent: #ffffff;
+  --shadow-card: 0 2px 14px rgba(0, 0, 0, 0.35);
+  --shadow-lift: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --status-critical-text: #f87171;
+  --status-warning-text: #f59e0b;
+  --status-normal-text: #22c55e;
+  --series-1: #3b82f6;
+  --series-2: #13a8a0;
+  --series-3: #d9692a;
+  --series-4: #8b7cf0;
+  --series-5: #bc8a0a;
+  --series-6: #d9669a;
+  --series-7: #6f78e8;
+  --series-other: #64748b;
+  --cat-housing: #465ec4;
+  --cat-food: #4c9cc6;
+  --cat-transport: #b40eae;
+  --cat-utilities: #6440fd;
+  --cat-health: #9e68ae;
+  --cat-leisure: #1daa8d;
+  --cat-education: #c153e0;
+  --chart-zero: #475569;
+  --sankey-center: #cbd5e1;
+  --chart-5: #bc8a0a;
+  --chart-text: #94a3b8;
+  --chart-grid: #1f2937;
+  --chart-tooltip-bg: #111827;
+  --pico-primary-focus: rgba(59, 130, 246, 0.35);
+  --pico-form-element-border-color: #64748b;
 }
 
 body {
   background: var(--app-bg);
   color: var(--app-text);
   margin: 0;
+  font-family: var(--font-ui);
+  line-height: 1.6;
 }
 
 :focus-visible {
-  outline: 2px solid var(--app-accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* ---------- Type scale (16 · 18 · 21 · 28 · 64) ---------- */
+a {
+  color: var(--accent-text);
+}
+
+/* ---------- Type scale (13 · 14 · 16 · 24 · 36) ---------- */
 h1,
 h2,
 h3 {
-  font-weight: 600;
-  letter-spacing: -0.005em;
+  font-family: var(--font-ui);
+  font-weight: 700;
 }
 h1 {
-  font-size: 1.75rem;
-  line-height: 1.2;
+  font-size: 2.25rem;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
 }
 h2 {
-  font-size: 1.3125rem;
-  line-height: 1.3;
+  font-size: 1.5rem;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
 h3 {
   font-size: 1rem;
   line-height: 1.4;
+  font-weight: 600;
+}
+label {
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
-/* Euro amounts: the one bold element. Narrow width, tabular figures. */
+/* The accent phrase inside a heading. */
+.hl {
+  color: var(--accent-text);
+}
+
+/* Euro amounts and numbers: JetBrains Mono, tabular. */
+.figure,
+.amount,
+table.projection td.num,
+table.projection td.amount,
+.metric-value,
+.chip {
+  font-family: var(--font-mono);
+}
 .figure {
-  font-stretch: 75%;
-  font-weight: 650;
+  font-weight: 700;
   font-variant-numeric: tabular-nums lining-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 .amount {
@@ -200,6 +306,108 @@ h3 {
   color: var(--app-negative);
 }
 
+/* ---------- Status chips: dot + small mono uppercase label ---------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--inset);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.chip::before {
+  content: "";
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--live-indicator);
+}
+.chip-live::before {
+  animation: var(--pulse-animation);
+}
+.chip-updating::before {
+  background: var(--status-updating);
+  animation: var(--pulse-animation);
+}
+.chip-warning::before {
+  background: var(--status-warning);
+}
+.chip-warning {
+  color: var(--status-warning-text);
+}
+.chip-critical::before {
+  background: var(--critical-color);
+}
+.chip-critical {
+  color: var(--status-critical-text);
+}
+
+/* Metric tiles: darker inset tiles inside a card, value on top, label below. */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+}
+.metric {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.metric-value {
+  display: block;
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--text);
+}
+.metric-label {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.metric.is-blue .metric-value { color: var(--accent-text); }
+.metric.is-green .metric-value { color: var(--status-normal-text); }
+.metric.is-orange .metric-value { color: var(--status-warning-text); }
+.metric.is-teal .metric-value { color: var(--series-2); }
+
+/* ---------- Cards ---------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 1.25rem;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.card-head strong {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
+}
+
 /* ---------- Shell ---------- */
 .shell {
   display: grid;
@@ -208,8 +416,9 @@ h3 {
 }
 
 .sidebar {
-  background: var(--side-bg);
-  color: var(--side-text);
+  background: var(--surface);
+  color: var(--text);
+  border-right: 1px solid var(--border);
   padding: 1.25rem 0.75rem;
   position: sticky;
   top: 0;
@@ -221,14 +430,15 @@ h3 {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  font-weight: 650;
+  font-weight: 700;
   font-size: 1.0625rem;
+  letter-spacing: -0.01em;
   text-decoration: none;
-  color: var(--side-text);
+  color: var(--text);
   padding: 0 0.6rem 1.5rem;
 }
 .brand:hover {
-  color: #ffffff;
+  color: var(--accent-text);
 }
 
 /* Pico styles <nav> as a horizontal, centered menu bar; reset that for the vertical sidebar. */
@@ -256,31 +466,30 @@ h3 {
   width: 100%;
   padding: 0.45rem 0.65rem;
   margin: 0;
-  border-radius: 6px;
+  border-radius: var(--radius);
   font-size: 0.875rem;
   line-height: 1.3;
   text-decoration: none;
-  color: var(--side-text);
+  color: var(--muted);
+  transition: background var(--ease), color var(--ease);
 }
 .sidebar nav a:hover {
-  background: var(--side-active-bg);
-  color: #ffffff;
+  background: var(--inset);
+  color: var(--text);
 }
 .sidebar nav a[aria-current="page"] {
-  background: var(--side-active-bg);
-  box-shadow: inset 3px 0 0 var(--side-active-mark);
-  color: #ffffff;
-  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--text);
+  font-weight: 500;
 }
 .sidebar nav .nav-disabled {
-  color: var(--side-muted);
+  color: var(--muted);
   cursor: default;
   /* Align with links that have an 18px icon + gap. */
   padding-left: calc(0.65rem + 18px + 0.6rem);
 }
-.sidebar :focus-visible {
-  outline-color: var(--side-active-mark);
-}
+
 
 /* !important: Pico's element rules (e.g. full-width buttons) must not undo this. */
 .visually-hidden {
@@ -302,11 +511,16 @@ h3 {
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-nav);
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.75rem;
-  padding: 0.75rem 2.5rem;
+  padding: 0.6rem 2.5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 .topbar-actions {
   display: flex;
@@ -323,16 +537,17 @@ h3 {
   padding: 0;
   margin: 0;
   background: transparent;
-  border: 1px solid var(--app-rule);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   color: var(--app-text);
   box-shadow: none;
+  transition: border-color var(--ease), color var(--ease), background var(--ease);
 }
 .icon-btn:hover,
 .icon-btn:focus-visible {
-  background: transparent;
-  border-color: var(--app-accent);
-  color: var(--app-accent);
+  background: var(--inset);
+  border-color: var(--accent);
+  color: var(--accent-text);
 }
 .icon-btn svg {
   display: block;
@@ -340,6 +555,58 @@ h3 {
 .nav-toggle {
   display: none;
   margin-right: auto;
+}
+
+/* Connection indicator: client-side only (navigator.onLine / htmx send errors). */
+.conn {
+  margin-right: 0.25rem;
+}
+.conn.is-offline {
+  color: var(--status-critical-text);
+  border-color: color-mix(in srgb, var(--critical-color) 50%, var(--border));
+}
+.conn.is-offline::before {
+  background: var(--critical-color);
+  animation: none;
+}
+.toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: var(--alert-z-index);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: min(24rem, calc(100vw - 2rem));
+  padding: 0.7rem 0.75rem 0.7rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--live-indicator);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lift);
+  font-size: 0.9375rem;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity var(--ease), transform var(--ease), visibility 0s linear 200ms;
+}
+.toast.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 0s;
+}
+.toast.is-offline {
+  border-left-color: var(--critical-color);
+}
+.toast p {
+  margin: 0;
+  flex: 1;
+}
+.toast .icon-btn {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: none;
 }
 
 /* Theme toggle shows the theme you would switch TO: moon in light, sun in dark. */
@@ -364,8 +631,8 @@ h3 {
 .lang-switch {
   display: inline-flex;
   margin: 0;
-  border: 1px solid var(--app-rule);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   overflow: hidden;
 }
 .lang-switch button {
@@ -383,8 +650,8 @@ h3 {
   color: var(--app-text);
 }
 .lang-switch button.active {
-  background: var(--app-text);
-  color: var(--app-bg);
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 
 /* The content, top bar and footer share one column: up to --app-max wide,
@@ -394,12 +661,16 @@ h3 {
 }
 #content {
   flex: 1;
-  padding: 1.5rem 2.5rem 3rem;
+  padding: 1.25rem 2.5rem 3rem;
   max-width: var(--app-max);
   width: 100%;
   margin: 0 auto;
 }
-.topbar,
+.topbar {
+  width: 100%;
+  /* Full-width bar; its content lines up with the centred page column. */
+  padding-inline: max(2.5rem, calc((100% - var(--app-max)) / 2 + 2.5rem));
+}
 .app-footer {
   width: 100%;
   max-width: var(--app-max);
@@ -414,12 +685,16 @@ h3 {
 
 /* ---------- Sections: separated by space and one rule, never boxed ---------- */
 .section {
-  padding-top: 2rem;
-  margin-top: 2.5rem;
-  border-top: 1px solid var(--app-rule);
+  padding: 1.25rem 1.5rem 1.5rem;
+  margin-top: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
 }
-.section > h2 {
-  margin-bottom: 1rem;
+.section > h2,
+.section > .section-head h2 {
+  margin-bottom: 0.75rem;
 }
 .prose {
   max-width: var(--app-measure);
@@ -476,6 +751,66 @@ h3 {
   width: 100%;
   height: clamp(320px, 24vw, 420px);
   margin-left: -4px;
+}
+
+/* ---------- Buttons ---------- */
+:where(button, [type="submit"], [type="button"], [role="button"]) {
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius);
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.25;
+  transition: background var(--ease), box-shadow var(--ease), transform var(--ease), border-color var(--ease);
+}
+:where(button, [type="submit"], [role="button"]):not(.link-btn):not(.icon-btn):not(.add-btn):not(:disabled):hover {
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+  transform: translateY(-1px);
+}
+:where(button, [type="submit"], [role="button"]):not(.link-btn):not(.icon-btn):not(:disabled):active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+:where(button, [type="submit"], [role="button"]):focus {
+  --pico-box-shadow: none;
+}
+.btn-danger,
+button.btn-danger {
+  background: var(--critical-color);
+  border-color: var(--critical-color);
+  color: #ffffff;
+}
+.btn-danger:hover {
+  background: #b91c1c !important;
+  border-color: #b91c1c !important;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25) !important;
+}
+/* Ghost: 1.5px muted border, accent text, subtle fill on hover. */
+.btn-ghost,
+button.btn-ghost,
+button.secondary,
+button.outline,
+[role="button"].secondary {
+  background: transparent;
+  border: 1.5px solid var(--muted);
+  color: var(--accent-text);
+}
+.btn-ghost:hover,
+button.secondary:hover,
+button.outline:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent-text) !important;
+  box-shadow: none !important;
+}
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+.btn-icon svg {
+  flex: none;
 }
 
 /* ---------- Roadmap: ledger rows ---------- */
@@ -648,7 +983,7 @@ h3 {
   width: auto;
   font-size: inherit;
   font-weight: 500;
-  color: var(--app-accent);
+  color: var(--accent-text);
   box-shadow: none;
   text-decoration: underline;
   text-decoration-color: transparent;
@@ -657,7 +992,7 @@ h3 {
 .link-btn:hover,
 .link-btn:focus-visible {
   background: none;
-  color: var(--app-accent);
+  color: var(--accent-text);
   text-decoration-color: currentColor;
 }
 .link-btn.danger,
@@ -675,9 +1010,9 @@ h3 {
   font-size: 0.9375rem;
   font-weight: 600;
   background: transparent;
-  color: var(--app-accent);
-  border: 1px solid var(--app-accent);
-  border-radius: 6px;
+  color: var(--accent-text);
+  border: 1.5px solid var(--muted);
+  border-radius: var(--radius);
   box-shadow: none;
 }
 /* While the "new" form is open, its own submit button replaces the add button. */
@@ -686,22 +1021,32 @@ h3 {
 }
 .add-btn:hover,
 .add-btn:focus-visible {
-  background: var(--app-accent);
-  border-color: var(--app-accent);
-  color: var(--pico-primary-inverse);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: var(--accent);
+  color: var(--accent-text);
 }
 
 /* ---------- Inline forms ---------- */
-:root {
-  --pico-border-radius: 6px;
-  --pico-form-element-spacing-vertical: 0.45rem;
-  --pico-form-element-spacing-horizontal: 0.7rem;
-}
 .entry-form {
   margin: 0.75rem 0;
   padding: 1.25rem 1.25rem 1rem;
-  background: var(--papel-raised);
-  box-shadow: inset 3px 0 0 var(--app-accent);
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+input:not([type="checkbox"], [type="radio"], [type="range"]),
+select,
+textarea {
+  border-radius: var(--radius);
+  border-width: 1px;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: none !important;
 }
 .entries .entry-form {
   margin: 0;
@@ -720,7 +1065,7 @@ h3 {
 }
 .field label {
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 500;
   margin: 0;
 }
 .field input,
@@ -754,7 +1099,7 @@ h3 {
   color: var(--app-muted);
 }
 .field-error {
-  color: var(--app-negative);
+  color: var(--status-critical-text);
   font-weight: 500;
 }
 .form-error {
@@ -799,8 +1144,8 @@ h3 {
   display: inline-flex;
   width: auto;
   margin: 0;
-  border: 1px solid var(--app-rule);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   box-shadow: none;
   overflow: hidden;
 }
@@ -821,8 +1166,8 @@ h3 {
   color: var(--app-text);
 }
 .segmented a[aria-current="true"] {
-  background: var(--app-text);
-  color: var(--app-bg);
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 .chart-tall {
   height: clamp(440px, 32vw, 600px);
@@ -894,6 +1239,7 @@ h3 {
 
 /* Projection table: tabular figures, hairline rows, sticky header. */
 .table-wrap {
+  position: relative;
   overflow: auto;
   max-height: 34rem;
   border-top: 1px solid var(--app-rule);
@@ -917,16 +1263,22 @@ table.projection thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--app-bg);
+  background: var(--surface);
   font-weight: 600;
   color: var(--app-muted);
-  border-bottom: 1px solid var(--app-text);
+  border-bottom: 1px solid var(--muted);
 }
 table.projection tbody th {
   font-weight: 600;
 }
 table.projection .num {
   text-align: right;
+}
+table.projection td {
+  font-size: 0.8125rem;
+}
+table.projection td.num {
+  font-variant-numeric: tabular-nums lining-nums;
 }
 table.projection td.negative {
   color: var(--app-negative);
@@ -1035,7 +1387,7 @@ table.projection tr.short td {
     position: fixed;
     left: 0;
     top: 0;
-    z-index: 20;
+    z-index: var(--z-overlay);
     width: var(--app-sidebar-w);
     transform: translateX(-100%);
     transition: transform 0.2s ease;
@@ -1048,7 +1400,7 @@ table.projection tr.short td {
     display: inline-flex;
   }
   .topbar {
-    padding: 0.75rem 1rem;
+    padding: 0.6rem 1rem;
   }
   #content {
     padding: 1rem 1rem 2rem;
@@ -1138,8 +1490,9 @@ table.mc-milestones th {
   margin-top: 1rem;
   padding: 0.75rem 1rem;
   font-size: 0.9375rem;
-  background: var(--papel-raised);
-  box-shadow: inset 3px 0 0 var(--app-accent);
+  background: var(--inset);
+  border-radius: var(--radius);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 .dot-partial {
   background: transparent;
@@ -1557,23 +1910,28 @@ html {
   overflow-y: scroll;
 }
 
+/* "Updating" state: a pulsing blue dot (not a spinner). */
 .spinner {
   display: inline-block;
   flex: none;
-  width: 1.5rem;
-  height: 1.5rem;
-  border: 3px solid color-mix(in srgb, var(--app-accent) 22%, transparent);
-  border-top-color: var(--app-accent);
+  width: 0.625rem;
+  height: 0.625rem;
+  margin: 0.45rem 0.2rem 0 0;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  background: var(--status-updating);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-updating) 22%, transparent);
+  animation: var(--pulse-animation);
 }
 .spinner-sm {
-  width: 0.9rem;
-  height: 0.9rem;
-  border-width: 2px;
-  vertical-align: -0.1em;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin: 0;
+  box-shadow: none;
+  vertical-align: 0.05em;
 }
 .sim-elapsed {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
   font-weight: 400;
 }
@@ -1584,9 +1942,9 @@ html {
 .skel-t {
   border-radius: 0.35rem;
   background: linear-gradient(90deg,
-    color-mix(in srgb, var(--app-rule) 55%, transparent) 25%,
-    color-mix(in srgb, var(--app-rule) 100%, transparent) 50%,
-    color-mix(in srgb, var(--app-rule) 55%, transparent) 75%);
+    var(--inset) 25%,
+    color-mix(in srgb, var(--border) 85%, var(--muted)) 50%,
+    var(--inset) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.6s ease-in-out infinite;
 }
@@ -1614,7 +1972,7 @@ html {
 .sim-region[data-state="error"] > .sim-busy {
   display: block !important;
   position: sticky;
-  z-index: 5;
+  z-index: var(--z-overlay);
   top: 35vh;
   height: 0;
   overflow: visible;
@@ -1628,10 +1986,11 @@ html {
   width: max-content;
   max-width: min(30rem, calc(100vw - 2rem));
   padding: 0.85rem 1.25rem;
-  border: 1px solid color-mix(in srgb, var(--app-accent) 45%, var(--app-rule));
-  border-radius: 0.75rem;
-  background: var(--papel-raised);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.12);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-left: 4px solid var(--status-updating);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lift);
   transform: translate(-50%, 0);
   animation: pop-in 0.18s ease-out;
 }
@@ -1667,6 +2026,9 @@ html {
   display: block;
   margin-top: 0.3rem;
 }
+[data-state="error"] .sim-busy-card {
+  border-left-color: var(--critical-color);
+}
 [data-state="error"] .sim-busy-title {
   font-weight: 400;
   color: var(--app-muted);
@@ -1699,15 +2061,6 @@ th.scen-odds-col {
 }
 td.scen-odds-pending {
   text-align: center;
-}
-
-/* New results fade in instead of popping. htmx adds .htmx-added while it
-   settles the swapped content. */
-.sim-fade {
-  transition: opacity 0.35s ease;
-}
-.sim-fade.htmx-added {
-  opacity: 0;
 }
 
 /* Buttons and links waiting for their request: a spinner, and buttons
@@ -1764,7 +2117,7 @@ a.is-busy::after {
    (app.js toggles html.is-loading after a short delay). */
 .nav-progress {
   position: fixed;
-  z-index: 100;
+  z-index: var(--z-toast);
   inset: 0 0 auto 0;
   height: 3px;
   overflow: hidden;
@@ -1777,8 +2130,7 @@ a.is-busy::after {
   display: block;
   width: 40%;
   height: 100%;
-  background: var(--app-accent);
-  box-shadow: 0 0 8px var(--app-accent);
+  background: var(--accent);
   animation: nav-progress 1.2s ease-in-out infinite;
 }
 html.is-loading .nav-progress {
@@ -1789,7 +2141,10 @@ html.is-loading body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spinner,
+  .chip::before,
+  .spinner {
+    animation: none !important;
+  }
   .nav-progress::before,
   button.is-busy::before,
   a.is-busy::after {
@@ -1805,3 +2160,220 @@ html.is-loading body {
     animation: none;
   }
 }
+
+/* ---------- Motion: entry on full page load / boosted navigation only ---------- */
+/* theme-init.js and app.js add html.enter before the page appears and remove
+   it again after the animation, so result swaps (htmx) never replay it. */
+@keyframes enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+html.enter #content > * {
+  animation: enter 480ms ease-out both;
+}
+html.enter #content > :nth-child(2) { animation-delay: 100ms; }
+html.enter #content > :nth-child(3) { animation-delay: 200ms; }
+html.enter #content > :nth-child(4) { animation-delay: 300ms; }
+html.enter #content > :nth-child(5) { animation-delay: 400ms; }
+html.enter #content > :nth-child(n + 6) { animation-delay: 500ms; }
+/* A result swapped in during the entry must not replay it (it has its own
+   fade, app.js; data-enter-skip lists the swapped ids); the rest of the page,
+   including the other result regions, keeps its stagger. */
+html.enter[data-enter-skip~="bt-summary"] #bt-summary,
+html.enter[data-enter-skip~="bt-heat-wrap"] #bt-heat-wrap,
+html.enter[data-enter-skip~="bt-scenario"] #bt-scenario,
+html.enter[data-enter-skip~="mc-results"] #mc-results,
+html.enter[data-enter-skip~="plan-summary"] #plan-summary,
+html.enter[data-enter-skip~="plan-table"] #plan-table {
+  animation: none;
+}
+
+/* Clickable cards (and only those) grow on hover. */
+.card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: transform var(--ease), box-shadow var(--ease), border-color var(--ease);
+}
+.card-link:hover {
+  transform: scale(1.03);
+  box-shadow: var(--shadow-lift);
+  border-color: var(--accent);
+}
+.card-link strong {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--accent-text);
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+.card-link span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+.offer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+.offer-grid .card-link {
+  padding: 1rem 1.25rem;
+}
+
+/* ---------- Home hero: text left, chart card right ---------- */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 2rem 3rem;
+  align-items: center;
+  padding: 1.5rem 0 0.5rem;
+}
+.hero-text .chip {
+  margin-bottom: 1rem;
+}
+.hero-text h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(2.25rem, 4.2vw, 3.25rem);
+}
+.hero-text .sub {
+  max-width: 34rem;
+  margin: 0 0 1.5rem;
+  color: var(--muted);
+  font-size: 1.125rem;
+}
+.hero-card .chart {
+  height: clamp(240px, 20vw, 320px);
+  margin: 0 0 0.75rem -4px;
+}
+.hero-card .card-head .figure {
+  font-size: 1rem;
+}
+.hero-card .assumptions {
+  margin: 0.75rem 0 0;
+}
+.hero-card h2 {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text);
+}
+@media (max-width: 860px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding-top: 0.5rem;
+  }
+}
+
+/* Status-coloured left border for prominent shortfall / failure results. */
+.status-warning {
+  border-left: 4px solid var(--status-warning);
+}
+.status-critical {
+  border-left: 4px solid var(--critical-color);
+}
+.status-normal {
+  border-left: 4px solid var(--live-indicator);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.enter #content > * {
+    animation: none;
+  }
+  .card-link,
+  .card-link:hover {
+    transform: none;
+  }
+  .toast {
+    transition: none;
+  }
+}
+
+/* Plain top-level result blocks become cards too (data cards never scale on hover). */
+.fin-summary,
+.plan-summary,
+.cf-year,
+.mc-results:not(.section),
+#bt-summary:not(.section) {
+  margin-top: 1.25rem;
+  padding: 1.25rem 1.5rem 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+.page-head {
+  margin-bottom: 0.5rem;
+}
+.page-head p {
+  margin-bottom: 0;
+}
+.verdict .chip {
+  margin-bottom: 0.75rem;
+}
+
+/* Destructive confirmation ("Sí, eliminar"): critical red button. */
+.link-btn.danger.confirm-yes,
+.link-btn.danger.confirm-yes:hover {
+  padding: 0.2rem 0.65rem;
+  background: var(--critical-color);
+  color: #ffffff;
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-weight: 600;
+}
+.link-btn.danger.confirm-yes:hover {
+  background: #b91c1c;
+}
+
+@media (max-width: 860px) {
+  .section,
+  .fin-summary,
+  .plan-summary,
+  .cf-year,
+  .mc-results:not(.section),
+  #bt-summary:not(.section) {
+    padding: 1rem;
+  }
+  .toast {
+    left: 1rem;
+    right: 1rem;
+    max-width: none;
+  }
+}
+
+/* Neutral chip: a fact, not a live state (muted dot, no pulse). */
+.chip-neutral::before {
+  background: var(--muted);
+}
+
+/* 3. The ready chip turns into "updating" while its region recalculates. */
+.sim-region.htmx-request .chip-live::before {
+  background: var(--status-updating);
+  animation: var(--pulse-animation);
+}
+.chip .when-busy[hidden] {
+  display: none;
+}
+
+/* 11. No button lift under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  :where(button, [type="submit"], [role="button"]):hover,
+  :where(button, [type="submit"], [role="button"]):active {
+    transform: none;
+  }
+}
+
+/* Ledger swatches next to the Sankey: same colours as the diagram. */
+.dot-cat-housing { background: var(--cat-housing); }
+.dot-cat-food { background: var(--cat-food); }
+.dot-cat-transport { background: var(--cat-transport); }
+.dot-cat-utilities { background: var(--cat-utilities); }
+.dot-cat-health { background: var(--cat-health); }
+.dot-cat-leisure { background: var(--cat-leisure); }
+.dot-cat-education { background: var(--cat-education); }
+.dot-cat-other { background: var(--cat-other); }

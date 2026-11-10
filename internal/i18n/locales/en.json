@@ -36,9 +36,7 @@
   "demo.assumptions": "Example starting with %s at a %s annual return, compounded monthly.",
   "demo.chart_label": "Chart of the balance year by year, split into contributions and growth.",
   "demo.contributed": "Contributed",
-  "demo.contributed_amount": "%s contributed",
   "demo.growth": "Growth",
-  "demo.growth_amount": "%s in growth",
   "demo.headline": "What %s a month becomes in %d years",
 
   "chart.clipped": "Years below −100 % are cut short; hover to see their value.",
@@ -110,6 +108,12 @@
   "cashflow.title": "Cash flow",
 
   "cf.cats_desc": "What you spend each year by category, with debt payments in red.",
+  "cf.cats_empty": "No expenses yet.",
+  "cf.cats_empty_link": "Add your expenses in Current finances to see them by category.",
+  "cf.rate_empty": "No income yet.",
+  "cf.rate_empty_link": "Add your income in Current finances to see how much you save each year.",
+  "cf.sankey_empty": "No money comes in or goes out this year.",
+  "cf.sankey_empty_link": "Add income and expenses in Current finances to see them here.",
   "cf.cats_title": "Expenses by category",
   "cf.center": "Your money",
   "cf.debts": "Debts",
@@ -783,5 +787,16 @@
   "error.notfound.body": "The page you are looking for does not exist.",
   "error.notfound.title": "Page not found",
   "error.server.body": "An unexpected error occurred. Please try again.",
-  "error.server.title": "Something went wrong"
+  "error.server.title": "Something went wrong",
+  "hero.title_a": "Your financial life,",
+  "hero.title_b": "year by year",
+  "status.example": "Example",
+  "status.ready": "Result ready",
+  "demo.total": "Total",
+  "conn.online": "Online",
+  "conn.offline": "Offline",
+  "conn.toast_offline": "You are offline. Changes will not reach the server until the network is back.",
+  "conn.toast_online": "Connection restored.",
+  "toast.dismiss": "Dismiss notice",
+  "status.shortfall": "Shortfall"
 }

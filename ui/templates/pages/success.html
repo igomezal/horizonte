@@ -25,7 +25,7 @@
      Keeping the layout identical means nothing jumps when they arrive. */}}
 {{define "mc-results"}}
 {{$p := .Pending}}
-<section id="mc-results" class="mc-results sim-region{{if $p}} is-pending{{else}} sim-fade{{end}}" aria-label="{{t "success.title"}}" data-sim
+<section id="mc-results" class="mc-results sim-region{{if $p}} is-pending{{end}}" aria-label="{{t "success.title"}}" data-sim
          hx-get="/success/results?seed={{.Seed}}" hx-trigger="{{if $p}}load, {{end}}retry, success-changed from:body" hx-target="this" hx-swap="outerHTML">
   {{if $p}}
   {{template "sim-busy" (t "mc.pending" (number (float .Runs) 0))}}
@@ -33,6 +33,7 @@
   {{template "sim-busy" (t "mc.busy" (number (float .Runs) 0))}}
   {{end}}
   <div class="lead-figure verdict">
+    {{if $p}}<span class="chip chip-updating">{{t "scenarios.pending"}}</span>{{else}}<span class="chip chip-live"><span class="when-idle">{{t "status.ready"}}</span><span class="when-busy" hidden>{{t "scenarios.pending"}}</span></span>{{end}}
     <p class="lead">{{t "mc.verdict" .EndAge}}</p>
     {{if $p}}
     <span class="figure"><span class="skel-t">100 %</span></span>

@@ -8,9 +8,9 @@
 // - Identity colours come from the validated --series-1…7 palette, in order,
 //   never cycled: anything past seven is --series-other. Green and red only
 //   mean good and bad (income, savings rate, debt, money running out).
-// - "Tu plan" (the fixed-return projection) is always a dashed orange line.
-// - Lines are 2px; areas are washes; stacked fills are split by a thin line
-//   in the surface colour instead of a border.
+// - "Tu plan" (the fixed-return projection) is always a dashed violet line (series-4).
+// - Lines are 1.5-2px; areas are faint washes; stacked fills carry a thin line
+//   in their own colour.
 // - Tooltips list every series at the hovered point with a short line key,
 //   the value in bold and the name in muted text.
 // - Time axes show the age under each year when the plan knows it.
@@ -21,6 +21,11 @@
 
   function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  // Chart labels use the monospace face (--font-mono); text elsewhere stays system UI.
+  function monoFont() {
+    return cssVar("--font-mono") || "monospace";
   }
 
   function locale() {
@@ -55,12 +60,11 @@
     return i >= 0 && i < c.length ? c[i] : cssVar("--series-other");
   }
 
-  // Expense categories keep one colour wherever they appear ("other" is
-  // gray). The assignment was searched so that categories next to each other
-  // in a stack, or with one missing category between them, stay distinct.
-  const CATEGORY_SLOT = { housing: 0, food: 1, transport: 4, utilities: 3, health: 5, leisure: 2, education: 6 };
+  // Expense categories keep one colour wherever they appear (stack, Sankey,
+  // ledger; "other" is gray). They have their own --cat-* palette, chosen so
+  // that neighbours in the stack stay distinct and away from the status colours.
   function categoryColor(key) {
-    return key in CATEGORY_SLOT ? slotColor(CATEGORY_SLOT[key]) : cssVar("--series-other");
+    return cssVar("--cat-" + key) || cssVar("--series-other");
   }
 
   function enc(s) {
@@ -117,8 +121,8 @@
     return {
       animation: false,
       color: seriesColors(),
-      textStyle: { fontFamily: getComputedStyle(document.body).fontFamily, color: text },
-      grid: { left: 8, right: 16, top: 40, bottom: 8, containLabel: true },
+      textStyle: { fontFamily: monoFont(), fontSize: 11, color: text },
+      grid: { left: 18, right: 16, top: 40, bottom: 8, containLabel: true }, // left: slack for axis labels (width is estimated)
       // Each series sets its own legendIcon: a block for areas and bars, a stroke for lines.
       legend: { top: 0, left: 0, textStyle: { color: text }, itemWidth: 18, itemHeight: 10, itemGap: 16 },
       tooltip: {
@@ -128,7 +132,7 @@
         borderColor: grid,
         padding: [8, 12],
         textStyle: { color: text, fontSize: 13 },
-        extraCssText: "box-shadow:0 4px 14px rgba(15,26,43,.12);border-radius:6px;",
+        extraCssText: "box-shadow:0 6px 20px rgba(0,0,0,.2);border-radius:8px;font-family:" + monoFont() + ";",
         axisPointer: { type: "line", lineStyle: { color: cssVar("--app-muted"), width: 1, type: "solid" } },
       },
       xAxis: {
@@ -136,12 +140,12 @@
         boundaryGap: false,
         axisLine: { lineStyle: { color: grid } },
         axisTick: { show: false },
-        axisLabel: { color: text, hideOverlap: true },
+        axisLabel: { color: text, hideOverlap: true, fontSize: 11 },
       },
       yAxis: {
         type: "value",
         splitLine: { lineStyle: { color: grid } },
-        axisLabel: { color: text, formatter: (v) => moneyFormatter(true).format(v) },
+        axisLabel: { color: text, fontSize: 11, formatter: (v) => moneyFormatter(true).format(v) },
       },
     };
   }
@@ -155,7 +159,7 @@
       return age ? "{y|" + v + "}\n{a|" + spec.ageFormat.replace("%s", age) + "}" : "{y|" + v + "}";
     };
     opt.xAxis.axisLabel.rich = {
-      y: { color: text, fontSize: 12, lineHeight: 16 },
+      y: { color: text, fontSize: 11, lineHeight: 16 },
       a: { color: text, fontSize: 10, lineHeight: 13, opacity: 0.75 },
     };
   }
@@ -183,7 +187,7 @@
   builders["stacked-area"] = function (spec) {
     const opt = baseOption();
     const fmt = moneyFormatter(false);
-    const surface = cssVar("--app-bg");
+    const surface = cssVar("--surface");
     if (spec.hideLegend) {
       opt.legend.show = false;
       opt.grid.top = 12;
@@ -204,8 +208,8 @@
       symbol: "none",
       legendIcon: "roundRect",
       color: slotColor(i),
-      lineStyle: { width: 1.5, color: surface },
-      areaStyle: { opacity: 0.78 },
+      lineStyle: { width: 1.5, color: slotColor(i) },
+      areaStyle: { opacity: 0.16 },
       emphasis: { disabled: true },
       data: s.data,
     }));
@@ -220,7 +224,7 @@
     const compact = moneyFormatter(true);
     const ink = cssVar("--app-text");
     const negative = cssVar("--app-negative");
-    const surface = cssVar("--app-bg");
+    const surface = cssVar("--surface");
     const accounts = spec.accounts || [];
 
     opt.xAxis.data = spec.categories;
@@ -229,17 +233,24 @@
     opt.legend.right = 0;
     opt.grid.right = 84; // room for the net worth label at the end of the line
 
+    // Milestones by period: their full names also appear in the tooltip, because
+    // the labels above the chart are shortened (or dropped) when space is tight.
+    const marksAt = new Map();
+    (spec.marks || []).forEach((m) => marksAt.set(m.index, (marksAt.get(m.index) || []).concat(m.label)));
+    if (spec.failIndex >= 0) marksAt.set(spec.failIndex, (marksAt.get(spec.failIndex) || []).concat(spec.failLabel));
+
     opt.tooltip.formatter = function (items) {
       if (!items.length) return "";
       const i = items[0].dataIndex;
       const rows = [tipRow(ink, spec.netWorth.name, fmt.format(spec.netWorth.data[i]))];
+      const events = (marksAt.get(i) || []).map((t) => '<div style="color:' + ink + ';font-weight:600;line-height:1.5;max-width:22em;white-space:normal">' + enc(t) + "</div>");
       const parts = [];
       for (let k = accounts.length - 1; k >= 0; k--) { // top of the stack first, like the chart
         const v = accounts[k].data[i];
         if (v) parts.push(tipRow(slotColor(k), accounts[k].name, fmt.format(v), { bold: false }));
       }
       if (spec.debt && spec.debt.data[i]) parts.push(tipRow(negative, spec.debt.name, fmt.format(spec.debt.data[i]), { bold: false }));
-      return timeHeader(spec, i) + rows.join("") + (parts.length ? tipRule() + parts.join("") : "");
+      return timeHeader(spec, i) + (events.length ? events.join("") + tipRule() : "") + rows.join("") + (parts.length ? tipRule() + parts.join("") : "");
     };
 
     const series = accounts.map((s, i) => ({
@@ -249,8 +260,8 @@
       symbol: "none",
       legendIcon: "roundRect",
       color: slotColor(i),
-      lineStyle: { width: 1.25, color: surface }, // the surface-coloured edge separates the bands
-      areaStyle: { opacity: 0.72 },
+      lineStyle: { width: 1.5, color: slotColor(i) }, // thin line in the series colour over a faint wash
+      areaStyle: { opacity: 0.14 },
       emphasis: { disabled: true },
       data: s.data,
     }));
@@ -264,8 +275,8 @@
         symbol: "none",
         legendIcon: "roundRect",
         color: negative,
-        lineStyle: { width: 1.25, color: surface },
-        areaStyle: { opacity: 0.45 },
+        lineStyle: { width: 1.5, color: negative },
+        areaStyle: { opacity: 0.18 },
         emphasis: { disabled: true },
         data: spec.debt.data,
       });
@@ -277,7 +288,7 @@
       symbol: "none",
       z: 5,
       legendIcon: LINE_ICON,
-      lineStyle: { width: 2.25, color: ink, cap: "round", join: "round" },
+      lineStyle: { width: 2, color: ink, cap: "round", join: "round" },
       color: ink,
       emphasis: { disabled: true },
       endLabel: endLabel((p) => compact.format(p.value)),
@@ -291,48 +302,74 @@
     const positive = cssVar("--app-positive");
     const byIndex = new Map();
     (spec.marks || []).forEach((m) => {
-      const g = byIndex.get(m.index) || { index: m.index, labels: [], kind: "debt" };
+      const g = byIndex.get(m.index) || { index: m.index, labels: [], kind: "debt", pri: 3 };
       g.labels.push(m.label);
+      g.pri = Math.min(g.pri, m.pri || 2);
       if (m.kind !== "debt") g.kind = "milestone";
       byIndex.set(m.index, g);
     });
     if (spec.failIndex >= 0) {
-      const g = byIndex.get(spec.failIndex) || { index: spec.failIndex, labels: [], kind: "fail" };
+      const g = byIndex.get(spec.failIndex) || { index: spec.failIndex, labels: [], kind: "fail", pri: 0 };
       g.labels.push(spec.failLabel);
+      g.pri = 0;
       g.kind = "fail";
       byIndex.set(spec.failIndex, g);
     }
     const groups = [...byIndex.values()].sort((a, b) => a.index - b.index);
     const rowGap = 15, fontSize = 11;
-    const plotWidth = Math.max(200, (el ? el.clientWidth : 800) - 160);
+    const narrow = el && el.clientWidth < 640;
+    // Labels are monospace (about 0.62 em per character with padding). The band
+    // has at most 2 rows on a narrow chart (4 on a wide one) so the plot keeps
+    // its height; marks that do not fit keep their line, lose the label, and
+    // are named in the tooltip and in the timeline above the chart. A name is
+    // only cut when it is longer than a row can hold.
+    const maxRows = narrow ? 2 : 4;
+    const maxChars = narrow ? 18 : 48;
+    const short = (t) => (t.length > maxChars ? t.slice(0, maxChars - 1).trimEnd() + "…" : t);
+    const plotWidth = Math.max(200, (el ? el.clientWidth : 800) - 170);
     const step = plotWidth / Math.max(1, spec.categories.length - 1);
-    const rowEnds = [];
-    const lines = groups.map((g) => {
-      const label = g.labels.join(", ");
-      const width = label.length * fontSize * 0.56 + 8;
+    const rows = [];
+    const place = new Map();
+    // When the band is full the least important labels go: "money runs out"
+    // first, then age and FI milestones, then date milestones and sales, debts
+    // paid off last; chronological within a rank.
+    const byPriority = groups.slice().sort((a, b) => a.pri - b.pri || a.index - b.index);
+    byPriority.forEach((g) => {
+      const label = short(g.labels.join(", "));
+      const width = label.length * fontSize * 0.62 + 18;
       const x = g.index * step;
-      let row = rowEnds.findIndex((end) => x - width / 2 > end);
-      if (row < 0) row = rowEnds.length;
-      rowEnds[row] = x + width / 2;
+      // A label near the left edge starts at its line instead of being centred on it.
+      const leftAligned = x - width / 2 < -6;
+      const from = leftAligned ? x : x - width / 2, to = leftAligned ? x + width : x + width / 2;
+      let row = rows.findIndex((taken) => taken.every(([f, t]) => to < f || from > t));
+      if (row < 0 && rows.length < maxRows) { row = rows.length; rows.push([]); }
+      if (row < 0) { place.set(g, { label: null }); return; }
+      rows[row].push([from, to]);
+      place.set(g, { label, row, leftAligned });
+    });
+    const lines = groups.map((g) => {
+      const at = place.get(g);
       const color = g.kind === "fail" ? negative : g.kind === "debt" ? positive : muted;
-      return {
+      const line = {
         xAxis: spec.categories[g.index],
         lineStyle: { color: color, type: g.kind === "debt" ? "dotted" : "dashed", width: g.kind === "fail" ? 1.5 : 1 },
-        label: {
-          formatter: label,
-          color: g.kind === "milestone" ? ink : color,
-          fontWeight: g.kind === "fail" ? 600 : 500,
-          position: "end",
-          distance: 4 + row * rowGap,
-          fontSize: fontSize,
-        },
       };
+      line.label = at.label === null ? { show: false } : {
+        formatter: at.label,
+        color: g.kind === "milestone" ? ink : color,
+        fontWeight: g.kind === "fail" ? 600 : 500,
+        position: "end",
+        align: at.leftAligned ? "left" : "center",
+        distance: 4 + at.row * rowGap,
+        fontSize: fontSize,
+      };
+      return line;
     });
     if (hasNegative) lines.push(zeroLine());
     if (lines.length) {
       net.markLine = { symbol: "none", silent: true, animation: false, data: lines };
     }
-    opt.grid.top = 52 + rowEnds.length * rowGap; // legend plus one band per label row
+    opt.grid.top = 52 + rows.length * rowGap; // legend plus one band per label row
     series.push(net);
     opt.series = series;
     return opt;
@@ -348,7 +385,7 @@
       income: cssVar("--app-positive"),
       savings: cssVar("--chart-5"),
       shortfall: cssVar("--app-negative"),
-      center: cssVar("--app-text"),
+      center: cssVar("--sankey-center"),
       tax: cssVar("--app-muted"),
       expense: cssVar("--series-other"),
       debt: cssVar("--app-negative"),
@@ -356,13 +393,17 @@
     };
     const labels = {};
     spec.nodes.forEach((n) => (labels[n.name] = n.label));
+    // Expense categories reuse their fixed colours from the stacked chart.
+    const nodeColor = (n) => (n.kind === "expense" && n.name.indexOf("cat-") === 0 ? categoryColor(n.name.slice(4)) : colors[n.kind] || text);
+    const byName = {};
+    spec.nodes.forEach((n) => (byName[n.name] = n));
     const narrow = el && el.clientWidth < 640;
     // Tiny flows get no label (they would overlap); they stay in the tooltip and ledger.
     const total = spec.links.filter((l) => l.target === "center").reduce((t, l) => t + l.value, 0) || 1;
     const share = (v) => percentFormatter().format(v / total);
     return {
       animation: false,
-      textStyle: { fontFamily: getComputedStyle(document.body).fontFamily, color: text },
+      textStyle: { fontFamily: monoFont(), fontSize: 11, color: text },
       tooltip: {
         trigger: "item",
         confine: true,
@@ -370,7 +411,7 @@
         borderColor: cssVar("--chart-grid"),
         padding: [8, 12],
         textStyle: { color: text, fontSize: 13 },
-        extraCssText: "box-shadow:0 4px 14px rgba(15,26,43,.12);border-radius:6px;",
+        extraCssText: "box-shadow:0 6px 20px rgba(0,0,0,.2);border-radius:8px;font-family:" + monoFont() + ";",
         formatter: (p) =>
           p.dataType === "edge"
             ? tipHeader(labels[p.data.source] + " → " + labels[p.data.target]) + tipRow(null, share(p.data.value), fmt.format(p.data.value))
@@ -389,7 +430,7 @@
         emphasis: { focus: "adjacency" },
         data: spec.nodes.map((n) => ({
           name: n.name,
-          itemStyle: { color: colors[n.kind] || text, borderWidth: 0, borderRadius: 2 },
+          itemStyle: { color: nodeColor(n), borderWidth: 0, borderRadius: 2 },
           label: {
             color: cssVar("--app-text"),
             fontSize: narrow ? 10 : 12,
@@ -401,8 +442,12 @@
             show: n.kind !== "center" && n.value / total >= 0.025,
           },
         })),
-        links: spec.links.map((l) => ({ source: l.source, target: l.target, value: l.value })),
-        lineStyle: { color: "gradient", opacity: 0.3, curveness: 0.5 },
+        links: spec.links.map((l) => {
+          // Each flow takes the colour of its outer end, not a grey gradient.
+          const outer = byName[l.source === "center" ? l.target : l.source];
+          return { source: l.source, target: l.target, value: l.value, lineStyle: { color: outer ? nodeColor(outer) : text } };
+        }),
+        lineStyle: { opacity: 0.28, curveness: 0.5 },
       }],
     };
   };
@@ -420,7 +465,7 @@
     const hi = Math.min(1, Math.max(0, ...vals));
     const yMin = lo < 0 ? Math.floor(lo * 4) / 4 : 0;
     const yMax = hi > 0 ? Math.ceil(hi * 10) / 10 : 0.1;
-    const pos = cssVar("--app-positive"), neg = cssVar("--app-negative");
+    const pos = cssVar("--app-contributed"), neg = cssVar("--app-negative"); // blue: money you put away
     const clippedAny = raw.some((v) => v != null && (v < yMin || v > yMax));
 
     opt.legend.show = false;
@@ -467,7 +512,7 @@
   builders["stacked-bars"] = function (spec) {
     const opt = baseOption();
     const fmt = moneyFormatter(false);
-    const surface = cssVar("--app-bg");
+    const surface = cssVar("--surface");
     opt.xAxis.data = spec.categories;
     opt.xAxis.boundaryGap = true;
     opt.legend.type = "scroll";
@@ -508,7 +553,7 @@
     const compact = moneyFormatter(true);
     const ink = cssVar("--app-text");
     const blue = slotColor(0);
-    const plan = slotColor(1);
+    const plan = slotColor(3);
     const b = spec.bands;
     const diff = (hi, lo) => hi.map((v, i) => v - lo[i]);
     const L = spec.labels;
@@ -537,7 +582,7 @@
       base("wide", b[0]), band(L.wide, "wide", diff(b[4], b[0]), 0.13),
       base("narrow", b[1]), band(L.narrow, "narrow", diff(b[3], b[1]), 0.2),
       { name: L.median, type: "line", data: b[2], symbol: "none", color: ink, legendIcon: LINE_ICON,
-        lineStyle: { width: 2.25, color: ink }, z: 5, endLabel: endLabel((p) => compact.format(p.value)) },
+        lineStyle: { width: 2, color: ink }, z: 5, endLabel: endLabel((p) => compact.format(p.value)) },
       { name: L.plan, type: "line", data: spec.plan, symbol: "none", color: plan, legendIcon: DASH_ICON,
         lineStyle: { width: 2, type: [6, 4], color: plan }, z: 4 },
     ];
@@ -560,7 +605,7 @@
     opt.tooltip.formatter = (items) => timeHeader(spec, items[0].dataIndex) + tipRow(blue, spec.label, pct.format(items[0].value));
     opt.series = [{
       name: spec.label, type: "line", data: spec.data, symbol: "none", step: "end",
-      color: blue, lineStyle: { width: 2, color: blue }, areaStyle: { color: blue, opacity: 0.1 },
+      color: blue, lineStyle: { width: 2, color: blue }, areaStyle: { color: blue, opacity: 0.08 },
       endLabel: endLabel((p) => pct.format(p.value)),
     }];
     return opt;
@@ -573,7 +618,7 @@
     const fmt = moneyFormatter(true);
     const text = cssVar("--chart-text");
     const pos = cssVar("--app-positive"), neg = cssVar("--app-negative");
-    const surface = cssVar("--app-bg");
+    const surface = cssVar("--surface");
     const ends = spec.cells.filter((c) => !c.failed).map((c) => c.end);
     const maxEnd = Math.max(1, ...ends);
     const ages = spec.cells.filter((c) => c.failed).map((c) => c.failAge);
@@ -603,7 +648,7 @@
         confine: true,
         backgroundColor: cssVar("--chart-tooltip-bg"), borderColor: cssVar("--chart-grid"),
         padding: [8, 12], textStyle: { color: text, fontSize: 13 },
-        extraCssText: "box-shadow:0 4px 14px rgba(15,26,43,.12);border-radius:6px;",
+        extraCssText: "box-shadow:0 6px 20px rgba(0,0,0,.2);border-radius:8px;font-family:" + monoFont() + ";",
         formatter: (p) => {
           const c = p.data.cell;
           return tipHeader(c.year) + '<div style="color:' + cssVar("--app-text") + '">' +
@@ -622,7 +667,7 @@
     const opt = baseOption();
     const fmt = moneyFormatter(false);
     const compact = moneyFormatter(true);
-    const ink = cssVar("--app-text"), plan = slotColor(1), neg = cssVar("--app-negative"), muted = cssVar("--app-muted");
+    const ink = cssVar("--app-text"), plan = slotColor(3), neg = cssVar("--app-negative"), muted = cssVar("--app-muted");
     opt.xAxis.data = spec.categories;
     ageAxis(opt, spec);
     opt.grid.right = 84;
@@ -644,7 +689,7 @@
     if (marks.some((m) => m.xAxis)) opt.grid.top = 70;
     opt.series = [
       { name: spec.labels.scenario, type: "line", data: spec.scenario, symbol: "none", color: ink, legendIcon: LINE_ICON,
-        lineStyle: { width: 2.25, color: ink }, areaStyle: { color: ink, opacity: 0.06 }, z: 5,
+        lineStyle: { width: 2, color: ink }, areaStyle: { color: ink, opacity: 0.04 }, z: 5,
         endLabel: endLabel((p) => compact.format(p.value)),
         markLine: marks.length ? { symbol: "none", silent: true, animation: false, data: marks } : undefined },
       { name: spec.labels.plan, type: "line", data: spec.plan, symbol: "none", color: plan, legendIcon: DASH_ICON,
@@ -696,7 +741,7 @@
   builders.tracking = function (spec) {
     const opt = baseOption();
     const fmt = moneyFormatter(false);
-    const ink = cssVar("--app-text"), plan = slotColor(1);
+    const ink = cssVar("--app-text"), plan = slotColor(3);
     const hasValue = (v) => v != null;
     opt.xAxis.data = spec.categories;
     opt.tooltip.formatter = (items) => {
@@ -713,7 +758,7 @@
     if (spec.actual.some(hasValue)) {
       opt.series.push({ name: spec.labels.actual, type: "line", data: spec.actual, connectNulls: true,
         symbol: "circle", symbolSize: 6, showAllSymbol: true, color: ink, legendIcon: LINE_ICON,
-        lineStyle: { width: 2.25, color: ink }, z: 5 });
+        lineStyle: { width: 2, color: ink }, z: 5 });
     }
     if (spec.baseline.some(hasValue)) {
       opt.series.push({ name: spec.labels.baseline, type: "line", data: spec.baseline, symbol: "none", color: plan,
@@ -845,9 +890,23 @@
     return echartsLoading;
   }
 
+  // ECharts caches text widths per font string, so a measurement taken before
+  // the monospace face has loaded would stay too narrow and clip axis labels.
+  // Charts wait for the font once (a no-op when it is already loaded).
+  let fontLoaded = !(document.fonts && document.fonts.load);
+  let fontLoading = null;
+
   function renderAll(root) {
     const els = (root || document).querySelectorAll("[data-chart]");
     if (!els.length) return;
+    if (!fontLoaded) {
+      if (!fontLoading) {
+        const done = () => { fontLoaded = true; };
+        fontLoading = Promise.all([document.fonts.load('400 11px "JetBrains Mono"'), document.fonts.load('600 12px "JetBrains Mono"')]).then(done, done);
+      }
+      fontLoading.then(() => els.forEach((el) => { if (el.isConnected) renderAll(el.parentNode); }));
+      return;
+    }
     if (typeof echarts !== "undefined") {
       els.forEach(render);
       return;

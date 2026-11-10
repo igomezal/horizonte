@@ -72,7 +72,7 @@
               </span>
               <span x-show="confirm" x-cloak>
                 <span>{{t "form.delete_confirm"}}</span>
-                <button type="button" class="link-btn danger" hx-delete="/tracking/entries/{{.Month.String}}" hx-target="#tracking-body" hx-swap="outerHTML">{{t "form.delete_yes"}}</button>
+                <button type="button" class="link-btn danger confirm-yes" hx-delete="/tracking/entries/{{.Month.String}}" hx-target="#tracking-body" hx-swap="outerHTML">{{t "form.delete_yes"}}</button>
                 <button type="button" class="link-btn" @click="confirm = false">{{t "form.keep"}}</button>
               </span>
             </td>
@@ -96,7 +96,7 @@
     <form hx-post="/tracking/baseline" hx-target="#tracking-body" hx-swap="outerHTML" x-show="confirm" x-cloak>
       <input type="hidden" name="replace" value="1">
       <span class="confirm-text">{{t "tracking.baseline.replace_confirm"}}</span>
-      <button type="submit" class="link-btn danger">{{t "tracking.baseline.replace_yes"}}</button>
+      <button type="submit" class="link-btn danger confirm-yes">{{t "tracking.baseline.replace_yes"}}</button>
       <button type="button" class="link-btn" @click="confirm = false">{{t "form.keep"}}</button>
     </form>
     {{else}}

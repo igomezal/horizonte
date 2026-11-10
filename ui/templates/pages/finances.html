@@ -100,7 +100,7 @@
   </div>
   <div class="entry-actions confirm" x-show="confirm" x-cloak>
     <span>{{if .SalesAtRisk}}{{t "milestones.delete_cancels_sale" .SalesAtRisk}}{{else}}{{t "form.delete_confirm"}}{{end}}</span>
-    <button type="button" class="link-btn danger" hx-delete="/finances/{{.Kind}}/{{.ID}}" hx-target="#section-{{.Kind}}" hx-swap="outerHTML">{{t "form.delete_yes"}}</button>
+    <button type="button" class="link-btn danger confirm-yes" hx-delete="/finances/{{.Kind}}/{{.ID}}" hx-target="#section-{{.Kind}}" hx-swap="outerHTML">{{t "form.delete_yes"}}</button>
     <button type="button" class="link-btn" @click="confirm = false">{{t "form.keep"}}</button>
   </div>
 </div>

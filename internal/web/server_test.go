@@ -195,7 +195,7 @@ func TestStaticAssetsAreVersioned(t *testing.T) {
 		t.Error("page should carry the assets version")
 	}
 	// Every static link carries its own file's hash.
-	for _, p := range []string{"css/app.css", "js/app.js", "vendor/htmx.min.js", "fonts/instrument-sans-latin-wdth.woff2", "img/favicon.svg"} {
+	for _, p := range []string{"css/app.css", "js/app.js", "vendor/htmx.min.js", "fonts/jetbrains-mono-latin-wght.woff2", "img/favicon.svg"} {
 		want := "/static/" + p + "?v=" + st.files[p].hash
 		if !strings.Contains(body, want) {
 			t.Errorf("page missing %q", want)

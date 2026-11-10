@@ -235,6 +235,102 @@
     htmx.trigger(sim, "retry");
   });
 
+  // Entry animation: html.enter is set by theme-init.js on a full load and
+  // here for boosted navigation (before the swap). It is removed once the
+  // animation has played, so result swaps never replay it.
+  let enterTimer = null;
+  function enterOnce() {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    delete root.dataset.enterSkip;
+    root.classList.add("enter");
+    clearTimeout(enterTimer);
+    enterTimer = setTimeout(() => { root.classList.remove("enter"); delete root.dataset.enterSkip; }, 1400);
+  }
+  const RESULT_REGIONS = ".sim-region, #plan-summary, #plan-table";
+  // True while the swap in progress replaces a placeholder (a pending region),
+  // false when it replaces an existing result (a recalculation).
+  let swapFromPending = false;
+  enterOnce();
+  // A page navigation (boosted) animates; any other swap (a result replacing
+  // its placeholder, a section reloading) must never fade in, whatever the
+  // timing, so the first one switches the entry animation off. This is done
+  // with the class rather than per element because htmx re-applies attributes
+  // when it settles a swapped node, which would restart a per-element override.
+  document.addEventListener("htmx:beforeSwap", (e) => {
+    const target = e.detail.target;
+    swapFromPending = !!(target && target.classList && target.classList.contains("is-pending"));
+    if (e.detail.boosted) {
+      if (e.detail.shouldSwap !== false) enterOnce();
+    } else if (target && target.matches && target.matches(RESULT_REGIONS)) {
+      // A result arriving: only the result regions stop their entry animation
+      // (the rest of the page keeps fading in); the result has its own fade.
+      // Only the swapped region stops its entry; static sections keep their stagger.
+      if (root.classList.contains("enter") && target.id) root.dataset.enterSkip = ((root.dataset.enterSkip || "") + " " + target.id).trim();
+    } else {
+      clearTimeout(enterTimer);
+      root.classList.remove("enter");
+      delete root.dataset.enterSkip;
+    }
+  });
+
+  // A result that replaces its placeholder fades in from nothing (opacity only,
+  // 260ms). A recalculation replaces a result the reader is already looking at,
+  // so it only crossfades from the dimmed state: the card never blanks. Never
+  // under reduced motion; the page entry animation is not involved.
+  document.addEventListener("htmx:load", (e) => {
+    const el = e.detail.elt;
+    if (!el || !el.matches || !el.matches(RESULT_REGIONS)) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !el.animate) return;
+    el.animate([{ opacity: swapFromPending ? 0 : 0.45 }, { opacity: 1 }], { duration: 260, easing: "ease-out" });
+  });
+
+  // Connection indicator and toast. Client-side only: navigator.onLine, the
+  // online/offline events and htmx network failures (htmx:sendError). Nothing
+  // polls the server.
+  let offline = !navigator.onLine;
+  let toastTimer = null;
+  function showToast(kind) {
+    const toast = document.querySelector("[data-toast]");
+    if (!toast) return;
+    toast.querySelector("[data-toast-text]").textContent = toast.dataset[kind === "offline" ? "textOffline" : "textOnline"];
+    toast.classList.toggle("is-offline", kind === "offline");
+    toast.classList.add("is-visible");
+    clearTimeout(toastTimer);
+    // --toast-duration comes from the stylesheet (default 5s).
+    const raw = getComputedStyle(root).getPropertyValue("--toast-duration").trim() || "5s";
+    const ms = raw.endsWith("ms") ? parseFloat(raw) : parseFloat(raw) * 1000;
+    toastTimer = setTimeout(hideToast, ms || 5000);
+  }
+  function hideToast() {
+    const toast = document.querySelector("[data-toast]");
+    if (toast) toast.classList.remove("is-visible");
+  }
+  function renderConnection() {
+    document.querySelectorAll("[data-conn]").forEach((el) => {
+      el.classList.toggle("is-offline", offline);
+      el.classList.toggle("chip-live", !offline);
+      const label = el.querySelector("[data-conn-label]");
+      if (label) label.textContent = offline ? el.dataset.labelOffline : el.dataset.labelOnline;
+    });
+  }
+  function setOffline(next, announce) {
+    if (offline === next) return;
+    offline = next;
+    renderConnection();
+    if (announce) showToast(offline ? "offline" : "online");
+  }
+  window.addEventListener("offline", () => setOffline(true, true));
+  window.addEventListener("online", () => setOffline(false, true));
+  document.addEventListener("htmx:sendError", () => setOffline(true, true));
+  document.addEventListener("htmx:afterRequest", (e) => {
+    if (e.detail.xhr && e.detail.xhr.status) setOffline(false, true); // a response came back
+  });
+  document.addEventListener("htmx:afterSettle", renderConnection);
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-toast-dismiss]")) hideToast();
+  });
+  renderConnection(); // the initial state is shown in the chip only, not announced
+
   // Theme toggle (event delegation, so it keeps working after htmx body swaps).
   document.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-theme-toggle]");

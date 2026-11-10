@@ -89,7 +89,7 @@ func TestStaticIsNotCompressedTwice(t *testing.T) {
 	if !strings.Contains(decode(t, rec), "--app-accent") {
 		t.Error("not plain CSS after one gunzip")
 	}
-	font := get(s, s.render.static.URL("/static/fonts/instrument-sans-latin-wdth.woff2"), "Accept-Encoding", "gzip")
+	font := get(s, s.render.static.URL("/static/fonts/jetbrains-mono-latin-wght.woff2"), "Accept-Encoding", "gzip")
 	if font.Code == 200 && font.Header().Get("Content-Encoding") != "" {
 		t.Errorf("font compressed: %q", font.Header().Get("Content-Encoding"))
 	}

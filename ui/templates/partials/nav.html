@@ -41,6 +41,7 @@
   </form>
   {{end}}
   <div class="topbar-actions">
+    <span class="chip chip-live conn" data-conn data-label-online="{{t "conn.online"}}" data-label-offline="{{t "conn.offline"}}"><span data-conn-label>{{t "conn.online"}}</span></span>
     <form method="post" action="/lang" class="lang-switch" aria-label="{{t "lang.label"}}">
       <input type="hidden" name="next" value="{{.Path}}">
       {{$cur := .Lang}}

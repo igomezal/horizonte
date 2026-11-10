@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/igomezal/horizonte/internal/domain"
 	"github.com/igomezal/horizonte/internal/engine"
@@ -46,6 +47,19 @@ type yearBarsChart struct {
 	ClipNote   string         `json:"clipNote,omitempty"` // shown when extreme bars are cut
 }
 
+// HasData reports whether any year has a value (a chart with none is replaced
+// by a sentence in the template).
+func (c yearBarsChart) HasData() bool {
+	for _, s := range c.Series {
+		for _, v := range s.Data {
+			if v != nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 type kindedSeries struct {
 	Name string     `json:"name"`
 	Kind string     `json:"kind,omitempty"` // "debt" draws in red
@@ -57,6 +71,7 @@ type kindedSeries struct {
 type cfLine struct {
 	Label string
 	Kind  string
+	Cat   string // expense category key, for the swatch colour
 	Value float64
 	Share float64 // of the side's total
 }
@@ -181,6 +196,9 @@ func (s *Server) buildCashflowYear(lang i18n.Lang, in engine.Input, res engine.R
 		}
 		ch.Nodes = append(ch.Nodes, node)
 		line := cfLine{Label: node.Label, Kind: node.Kind, Value: node.Value}
+		if key, ok := strings.CutPrefix(node.Name, "cat-"); ok {
+			line.Cat = key
+		}
 		if inflow {
 			ch.Links = append(ch.Links, sankeyLink{Source: node.Name, Target: center.Name, Value: node.Value})
 			cy.In = append(cy.In, line)

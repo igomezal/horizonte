@@ -83,6 +83,9 @@ type chartMark struct {
 	Index int    `json:"index"`
 	Label string `json:"label"`
 	Kind  string `json:"kind"` // "milestone" or "debt"
+	// Pri ranks the label when the band is full: 1 age and FI milestones, 2 date
+	// milestones and sales, 3 debts paid off (the failure month outranks all).
+	Pri int `json:"pri"`
 }
 
 // timelineItem is one entry of the milestone timeline under the verdict.
@@ -449,9 +452,9 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 		}
 		return -1
 	}
-	addMark := func(m domain.Month, label, kind string) {
+	addMark := func(m domain.Month, label, kind string, pri int) {
 		if i := periodOf(m); i >= 0 {
-			ch.Marks = append(ch.Marks, chartMark{Index: i, Label: label, Kind: kind})
+			ch.Marks = append(ch.Marks, chartMark{Index: i, Label: label, Kind: kind, Pri: pri})
 		}
 	}
 	var unreached []timelineItem
@@ -464,14 +467,18 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 			Age: main.AgeAt(h.Month), Reached: true, Past: h.Month.Before(in.Start)}
 		v.Timeline = append(v.Timeline, item)
 		if !item.Past {
-			addMark(h.Month, h.Milestone.Name, "milestone")
+			pri := 2
+			if h.Milestone.Kind != domain.MilestoneDate {
+				pri = 1
+			}
+			addMark(h.Month, h.Milestone.Name, "milestone", pri)
 		}
 	}
 	for _, d := range res.PaidOff {
 		label := s.catalog.T(lang, "plan.event.paid_off", d.Debt.Name)
 		v.Timeline = append(v.Timeline, timelineItem{Label: label, Kind: "debt", Month: d.Month,
 			Age: main.AgeAt(d.Month), Reached: true})
-		addMark(d.Month, label, "debt")
+		addMark(d.Month, label, "debt", 3)
 	}
 	for _, a := range res.SalesSkipped {
 		v.SalesSkipped = append(v.SalesSkipped, a.Name)
@@ -480,7 +487,7 @@ func (s *Server) buildPlanView(lang i18n.Lang, in engine.Input, opts planOpts) p
 		label := s.catalog.T(lang, "plan.event.sold", sale.Account.Name)
 		v.Timeline = append(v.Timeline, timelineItem{Label: label, Kind: "sale", Month: sale.Month,
 			Age: main.AgeAt(sale.Month), Reached: true})
-		addMark(sale.Month, label, "sale")
+		addMark(sale.Month, label, "sale", 2)
 	}
 	if res.Failed() {
 		v.Timeline = append(v.Timeline, timelineItem{Label: s.catalog.T(lang, "plan.chart.fail"), Kind: "fail",

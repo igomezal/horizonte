@@ -46,7 +46,7 @@ func TestStaticMinifiedAndCompressed(t *testing.T) {
 		t.Errorf("app.css not minified: %d bytes from %d", len(css.body), len(raw))
 	}
 	// The font in @font-face points at its versioned URL.
-	font := "/static/fonts/instrument-sans-latin-wdth.woff2?v=" + a.files["fonts/instrument-sans-latin-wdth.woff2"].hash
+	font := "/static/fonts/jetbrains-mono-latin-wght.woff2?v=" + a.files["fonts/jetbrains-mono-latin-wght.woff2"].hash
 	if !bytes.Contains(css.body, []byte(font)) {
 		t.Errorf("app.css should reference %s", font)
 	}
@@ -85,7 +85,7 @@ func TestStaticMinifiedAndCompressed(t *testing.T) {
 		t.Error("gzip;q=0 refuses gzip")
 	}
 	// Already compressed formats are not gzipped.
-	if a.files["fonts/instrument-sans-latin-wdth.woff2"].gz != nil {
+	if a.files["fonts/jetbrains-mono-latin-wght.woff2"].gz != nil {
 		t.Error("woff2 should not be gzipped")
 	}
 }
@@ -166,7 +166,7 @@ func TestStaticBrotli(t *testing.T) {
 	if rec := get(a, url, "Accept-Encoding", "br", "If-None-Match", `"`+f.hash+`-br"`); rec.Code != http.StatusNotModified {
 		t.Errorf("brotli revalidation = %d", rec.Code)
 	}
-	if a.files["fonts/instrument-sans-latin-wdth.woff2"].br.Load() != nil {
+	if a.files["fonts/jetbrains-mono-latin-wght.woff2"].br.Load() != nil {
 		t.Error("woff2 should not be brotli-compressed")
 	}
 }
