@@ -2215,9 +2215,15 @@ html.enter[data-enter-skip~="plan-table"] #plan-table {
 }
 .offer-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  grid-template-columns: 1fr;
   gap: 0.75rem;
   margin: 0 0 1rem;
+}
+/* Nine links: three columns fill three even rows (no orphan card). */
+@media (min-width: 1024px) {
+  .offer-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .offer-grid .card-link {
   padding: 1rem 1.25rem;

@@ -79,6 +79,8 @@ it) for status chips, metric values, euro hero figures, table numbers and chart 
   blocks): surface, 1px border, 8px radius, card shadow. Cards never scale on hover; only
   clickable cards (`.card-link`, the home "what you can do" links) get `scale(1.03)` and a
   shadow lift, and not under reduced motion.
+  The home link grid (`.offer-grid`, nine cards) is one column below 1024px and three equal
+  columns above, so it always fills whole rows; it is a link list, not a feature row.
 - **Status chips** (`.chip` + `chip-live` / `chip-updating` / `chip-warning` /
   `chip-critical`): dot plus mono uppercase label.
 - **Metric tiles** (`.metrics` > `.metric`): inset tile, mono value coloured by meaning
