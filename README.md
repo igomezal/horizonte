@@ -3,12 +3,36 @@
 A self-hosted, privacy-first financial and retirement planner.
 It is built with Go and htmx, runs as a single binary, and stores data in a local SQLite file.
 The UI is in Spanish (default) and English, and amounts are in EUR.
+It is for one person or household: there are no user accounts and no login.
 
-See [PLAN.md](PLAN.md) for the roadmap and phase status.
+Every figure is an estimate for planning, not financial or tax advice.
+
+See [PLAN.md](PLAN.md) for the original implementation plan and what was added after it.
+
+## What it does
+
+Page names are shown as English (Spanish) and match the sidebar and the home page.
+
+| Page | Path | What it is for |
+|---|---|---|
+| Home (Inicio) | `/` | Your plan at a glance (net worth, how long the money lasts, chance of success, next milestone) when the active plan has people; a compound-interest example otherwise. Links to every page below |
+| Current finances (Finanzas actuales) | `/finances` | Enter people, milestones, accounts, income, expenses, debts and early repayments by hand. Nothing is linked to a bank |
+| Public pension (Pensión pública) | `/finances/pension` | Estimates a Spanish Social Security retirement pension and adds it to the plan as income |
+| Health costs (Gastos de salud) | `/finances/health` | Estimates health spending by age band and adds it to the plan as expenses |
+| Plan (Plan) | `/plan` | Month-by-month projection of net worth with milestones, assumptions (inflation, taxes, returns, withdrawal strategy), inheritance and a "stop working at FIRE" comparison |
+| Cash flow (Flujo de caja) | `/cashflow` | One year at a time: Sankey diagram, savings rate, spending by category and the income tax breakdown |
+| Chance of success (Probabilidad de éxito) | `/success` | Monte Carlo simulation: how often the money lasts, a fan chart and when milestones are reached |
+| Historical backtest (Prueba histórica) | `/backtest` | The plan replayed through US market history from every start year and through named crises |
+| Scenarios (Escenarios) | `/scenarios` | Copies of the plan to compare side by side, and JSON import and export |
+| Tracking (Seguimiento) | `/tracking` | Record your real net worth each month and compare it with a baseline saved from a plan |
+
+The top bar shows a Scenario switcher (when there is more than one plan), an online/offline indicator, the language switch and the light/dark toggle. The indicator is computed in the browser (it never polls the server).
+
+What the simulation does and does not model is in [docs/assumptions.md](docs/assumptions.md).
 
 ## Requirements
 
-- Go 1.27+
+- Go 1.27.3 or newer (the version in `go.mod`)
 
 ## Run
 
@@ -24,6 +48,10 @@ Flags:
 | `-addr` | `127.0.0.1:8347` | Listen address. Localhost only by default, so your data is not exposed on the network |
 | `-db` | `horizonte.db` | SQLite database file (git-ignored) |
 | `-dev` | `false` | Read templates and static files from `./ui` on every request, so edits show up without restarting. Without it, static files are minified, compressed (gzip, and brotli for browsers that ask for it, which over plain HTTP Chrome and Firefox don't) and cached by browsers (versioned URLs). Pages, partials and exports are compressed on the fly in both modes |
+| `-healthcheck` | `false` | Ask the server on `-addr` for `/healthz`, then exit with status 0 (healthy) or 1. The Docker health check uses it |
+| `-backup-dir` | `backups` next to the database | Where automatic backups are kept |
+| `-backup-interval` | `24h` | Time between automatic backups; `0` disables the schedule |
+| `-backup-keep` | `7` | Number of backups to keep (at least 1) |
 
 After every start or restart, the app first prepares your plans' simulations, and until the port opens it does not answer. The port opens when that finishes, usually within seconds; past about 60 s it opens anyway and the remaining plans carry on in the background. Any plan left unprepared is calculated the first time you open it.
 
@@ -33,7 +61,7 @@ After every start or restart, the app first prepares your plans' simulations, an
 go build -o bin/server ./cmd/server
 ```
 
-All templates, CSS, JS and vendored libraries (htmx, Alpine.js, ECharts, Pico.css) are embedded in the binary.
+All templates, CSS, JS, fonts and vendored libraries (htmx, Alpine.js, ECharts, Pico.css, the Sentry browser SDK) are embedded in the binary.
 
 ## Docker
 
@@ -44,8 +72,10 @@ docker compose up -d        # build and start on http://localhost:8347
 The database is stored in the `/data` volume (`horizonte-data` in
 `compose.yaml`), outside the container, so it survives restarts, crashes and
 image upgrades. `restart: unless-stopped` brings the app back after a crash or
-a reboot. Writes are committed to disk before they are acknowledged, so
-stopping or killing the container never loses saved changes.
+a reboot. Writes are committed to disk before they are acknowledged (SQLite
+runs with `synchronous=FULL`), so stopping or killing the container never loses
+saved changes. The image runs as the non-root user 65532 and has a health check
+that calls `horizonte -healthcheck`.
 
 To keep the database in a host folder instead of a named volume, mount a
 directory (not the `.db` file: SQLite also keeps `-wal` and `-shm` files next
@@ -65,75 +95,17 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ```
 
 The app has no login, so publish the port on `127.0.0.1` (as above) or put it
-behind an authenticating reverse proxy. Back up by copying `/data` while the
-container is stopped. Set `SENTRY_DSN` in the environment to enable error
-reporting.
+behind an authenticating reverse proxy. `compose.yaml` passes `SENTRY_DSN` and
+`SENTRY_ENVIRONMENT` from your environment; leave them unset to send nothing.
+Backups, restore and Sentry are described in [docs/data-and-privacy.md](docs/data-and-privacy.md).
 
-## Automatic backups
+## Data and privacy
 
-While it runs, Horizonte copies the database with SQLite's `VACUUM INTO`, which is safe with the app in use: when the app starts if a copy is due, and then every 24 hours. It also makes a copy before applying pending schema migrations to an existing database; if that copy fails, the app does not migrate and refuses to start. A failed scheduled copy is logged and reported, and the app keeps serving.
+- Your data lives in one SQLite file (`horizonte.db` by default, plus `-wal` and `-shm` files while the app runs). Nothing is sent anywhere unless you set `SENTRY_DSN`; error reporting is off by default and, when on, sends stack traces, route names and timings, server and browser logs and metrics, and masked Session Replays (10% of browser sessions, all of them in development, plus the minute before an error). Collection is restricted so that figures are never sent.
+- The app copies the database automatically (every 24 hours, and before upgrading its schema), keeping the last 7 copies next to the database.
+- To move data between machines, copy a backup file, or export your plans as JSON on the Scenarios page.
 
-The last 7 copies are kept in a `backups` directory next to the database, named `<database>-<UTC time>.db` (with `-pre-vNNNN` for a copy taken before migrating from schema version NNNN). In Docker that is `/data/backups`, inside the volume, so **copy that directory somewhere else too**: it protects against mistakes and bad upgrades, not against losing the disk.
-
-| Flag | Default | Description |
-|---|---|---|
-| `-backup-dir` | `backups` next to the database | Where copies are kept |
-| `-backup-interval` | `24h` | Time between copies; `0` disables the schedule (the pre-migration copy still happens) |
-| `-backup-keep` | `7` | Number of copies to keep |
-
-To restore, stop the app, replace the database with the copy, delete the old `-wal` and `-shm` files if there are any, and start it again. A copy from an older schema version is migrated on start:
-
-```sh
-cp backups/horizonte-20261109T030000.000Z.db horizonte.db
-rm -f horizonte.db-wal horizonte.db-shm
-```
-
-With the Docker volume, while the container is stopped:
-
-```sh
-docker run --rm -v horizonte-data:/data alpine sh -c 'cd /data && cp backups/<copy>.db horizonte.db \
-  && rm -f horizonte.db-wal horizonte.db-shm && chown 65532:65532 horizonte.db'
-```
-
-## Net worth tracking
-
-The Tracking page (`/tracking`) records what you really own and owe, one entry per calendar month, and compares it with a baseline: a plan's projected month-by-month path, saved on purpose, with one baseline at a time. History and baseline belong to the household, not to a plan, so copying or deleting plans leaves them alone. Everything is in nominal euros, since the app has no record of actual inflation.
-
-The history is included in the all-plans JSON export. Importing such a file only adds months that are missing and keeps the existing baseline unless there is none.
-
-## Error reporting (optional)
-
-Horizonte can report errors and performance data to [Sentry](https://sentry.io), from both the server and the browser.
-It is **off by default**: nothing is sent unless `SENTRY_DSN` is set.
-
-```sh
-SENTRY_DSN=https://<key>@<org>.ingest.de.sentry.io/<project> go run ./cmd/server
-```
-
-| Variable | Default | Description |
-|---|---|---|
-| `SENTRY_DSN` | empty (disabled) | Sentry project DSN |
-| `SENTRY_ENVIRONMENT` | `production` (`development` with `-dev`) | Environment tag |
-| `SENTRY_RELEASE` | git revision | Release tag; can also be set with `-ldflags "-X main.release=horizonte@1.2.3"` |
-
-Because the app holds personal financial data, collection is restricted: no IP addresses, cookies, request bodies or query strings, no browser console output on error events or in replays, and only a few harmless request headers.
-Stack traces, route names and timings are sent.
-
-With Sentry enabled, server logs at info level and above (startup, schema migrations, plan created/activated/deleted, imports and exports, blocked cross-origin posts, server errors) and a few browser logs (failed htmx requests, broken charts) are also sent to Sentry Logs, linked to their traces.
-Logs carry IDs, counts and categories only, never amounts or names you typed; the conventions are documented in `cmd/server/logging.go`.
-Per-request access lines stay on stdout.
-Browser console output (from the app, htmx and Alpine) goes to Sentry Logs only, and only when it can't contain figures: a console message with a currency, a decimal or grouped number, four or more digits in a row, HTML or a serialized object is not sent at all, and query strings are stripped from the rest.
-
-Sentry Metrics cover what traces and issues can't show: Monte Carlo and backtest run time (with runs, horizon and CPU count), import and export outcomes, rejected forms per route, blocked cross-origin posts, database size and plan count at startup, and in the browser the time of htmx requests and chart rendering.
-Plan results such as success rates, ages or amounts are never sent; the conventions are in `internal/web/metrics.go`.
-
-Session Replay records 10% of browser sessions (all of them with `-dev` or `SENTRY_ENVIRONMENT=development`), plus the minute before any error.
-All text and input values are masked and all media is blocked, charts included, so a replay shows the page layout and where you clicked, never your figures.
-Network requests keep only method, status and size, and query strings are stripped from URLs.
-
-## Selling property
-
-A real-estate account can be sold, fully or partly, at a date or milestone. The money, less selling costs, goes to the account you choose (by default the one that receives surplus money). With the Spanish tax model the gain over its cost goes to the savings base and is paid with the tax return the following June, and if the plan ends before that June, the tax is charged in its last month. A main residence sold by an owner over 65 is exempt; reinvestment relief is not modelled. The flat tax model does not tax the sale.
+Where data lives, how to restore a backup, what a JSON export contains and what Sentry sends: [docs/data-and-privacy.md](docs/data-and-privacy.md). The JSON file format: [docs/plan-format.md](docs/plan-format.md).
 
 ## Test
 
@@ -141,24 +113,31 @@ A real-estate account can be sold, fully or partly, at a date or milestone. The 
 go test ./...
 ```
 
+CI (`.github/workflows/ci.yml`) runs `go build ./...`, `go vet ./...`, `go test ./... -count=1`, staticcheck and govulncheck on every push and pull request. Load tests with k6 are in [perf/](perf/README.md).
+
+## Development
+
+[docs/development.md](docs/development.md) covers `-dev` mode, how templates, static files and asset versioning work, adding translations and pages, the tests and the code layout. The visual language is in [ui/DESIGN.md](ui/DESIGN.md).
+
 ## Project layout
 
 ```
 .github/workflows/   CI: build, vet, tests, staticcheck, govulncheck
-cmd/server/          web server entrypoint, logging and Sentry setup
+cmd/server/          web server entrypoint, backups, logging, Sentry setup, health check
 cmd/dataset/         refreshes the embedded historical market data
-internal/domain/     plan model: people, accounts, income, expenses, debts, prepayments, milestones
+docs/                data and privacy, plan file format, assumptions, development guide
+internal/domain/     plan model: people, accounts, income, expenses, debts, prepayments, milestones, net worth tracking
 internal/engine/     pure simulation: monthly projection, withdrawals, taxes, Monte Carlo, backtests
 internal/tax/es/     Spanish IRPF
 internal/pension/es/ Spanish public pension estimate
 internal/history/    embedded historical market data (Shiller)
-internal/backup/     JSON import and export of a plan
+internal/backup/     JSON import and export of plans and net worth history
 internal/xls/        minimal .xls reader used by cmd/dataset
 internal/i18n/       message catalogs (locales/*.json) and EUR/number formatting
-internal/store/      SQLite connection, repositories and SQL migrations
+internal/store/      SQLite connection, repositories, SQL migrations and automatic backups
 internal/web/        routes, handlers, middleware, simulation cache, template rendering
 ui/templates/        layout, partials and pages
-ui/static/           CSS, JS, fonts and vendored libraries
+ui/static/           CSS, JS, fonts (JetBrains Mono) and vendored libraries
 perf/                k6 load tests and a process sampler (see perf/README.md)
 ```
 
@@ -167,7 +146,7 @@ perf/                k6 load tests and a process sampler (see perf/README.md)
 Backtests use Robert Shiller's U.S. stock market data (S&P Composite total returns, 10-year
 Treasury returns and CPI, monthly since 1871), converted into
 `internal/history/shiller_monthly.csv` and embedded in the binary. The app never downloads it
-at runtime.
+at runtime. It is US data, whatever currency your plan is in.
 
 To refresh it with the latest published data:
 
@@ -175,24 +154,20 @@ To refresh it with the latest published data:
 go run ./cmd/dataset update                       # downloads ie_data.xls from Shiller's Yale page
 go run ./cmd/dataset update -url <url>            # another copy (e.g. Shiller's newer site)
 go run ./cmd/dataset update -in ie_data.xls -source <url>   # a file you downloaded yourself
+go run ./cmd/dataset update -out <file>           # write the CSV somewhere else
 ```
 
-Then rebuild. The command checks the converted data (no gaps, plausible values) before
+Then rebuild. The command checks the converted data (no gaps, plausible monthly values) before
 replacing the CSV, and `go test ./internal/history` checks it against well-known years
-(1931, 1974, 2008…).
+(1931, 1974, 2008).
 
 ### Monte Carlo market models
 
-Each plan chooses its model on the Chance of Success page. `Random` (the default) draws
+Each plan chooses its model on the Chance of success page. `Random` (the default) draws
 independent normal monthly returns with fixed inflation. `Historical blocks` strings together
 contiguous 12-month blocks of this data, taking stocks, bonds and inflation from the same
 months, with each series shifted so its long-run mean matches the plan's expected return and
 inflation.
-
-## Adding translations
-
-Add the key to **both** `internal/i18n/locales/es.json` and `en.json`. A test fails if the catalogs differ.
-In templates use `{{t "key"}}`, plus `{{money v}}`, `{{percent v 1}}` and `{{number v 2}}` for locale-aware formatting.
 
 ## Acknowledgements
 

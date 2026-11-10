@@ -544,7 +544,7 @@
   };
 
   // Monte Carlo fan: 10–90 % and 25–75 % bands of net worth (blue washes), the
-  // median (ink, labelled at the end) and "Tu plan" (dashed orange) for
+  // median (ink, labelled at the end) and "Tu plan" (dashed violet) for
   // comparison. Bands are drawn by stacking a transparent base with the
   // band's height.
   builders.fan = function (spec) {
@@ -735,7 +735,7 @@
   };
 
   // Recorded net worth against the saved baseline. The baseline is a plan's
-  // projection, so it takes the dashed orange of "Tu plan". Months can be
+  // projection, so it takes the dashed violet of "Tu plan". Months can be
   // missing from the record: the line carries across them, and a dot marks each
   // month that was actually recorded.
   builders.tracking = function (spec) {

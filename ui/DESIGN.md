@@ -40,14 +40,14 @@ auto-refreshes, so it is unused), `--toast-duration: 5s` (read by `app.js`).
 - `--app-positive` is the "normal" text colour, `--app-negative` the critical text colour. In
   data tables **only negatives are red** (`negative` class); positives are never green.
 - Money you put in is `--app-contributed` (blue, `--series-1`); money your money earned is
-  `--app-growth` (teal, `--series-2`). Green, red and orange are status colours and never
-  identify data series.
+  `--app-growth` (teal, `--series-2`). Green and red are status colours and never identify
+  data series (series 3 is an orange, distinct from the amber warning colour).
 - Gold/yellow is not an accent. Critical uses `#DC2626`, not pure red (saturation cap).
 - Layers: base 0, sticky nav 100 (`--z-nav`), overlay 200 (drawer, simulation card), modal
   300, toast 500; the offline toast uses `--alert-z-index`.
 - Radius 8px (`--radius`) for buttons, inputs, cards, tiles. Chips are pills.
-- Shadows: cards `0 2px 12px rgba(0,0,0,.06)` (stronger in dark), `--shadow-lift` on hover
-  of clickable cards and on toasts. No outer glows.
+- Shadows: cards `0 2px 12px rgba(15,23,42,.06)` (`0 2px 14px rgba(0,0,0,.35)` in dark),
+  `--shadow-lift` on hover of clickable cards and on toasts. No outer glows.
 
 ## Type
 
@@ -79,10 +79,14 @@ it) for status chips, metric values, euro hero figures, table numbers and chart 
   blocks): surface, 1px border, 8px radius, card shadow. Cards never scale on hover; only
   clickable cards (`.card-link`, the home "what you can do" links) get `scale(1.03)` and a
   shadow lift, and not under reduced motion.
-  The home link grid (`.offer-grid`, nine cards) is one column below 1024px and three equal
-  columns above, so it always fills whole rows; it is a link list, not a feature row.
+  The home link grid (`.offer-grid`) has nine cards: Current finances, Public pension, Health
+  costs, Plan, Cash flow, Chance of success, Historical backtest, Scenarios and Tracking. It
+  is one column below 1024px and three equal columns from 1024px up, so it always fills three
+  whole rows; it is a link list, not a feature row. Keep the number of cards a multiple of
+  three. The two tool cards open with `hx-boost="false"` (a full page load).
 - **Status chips** (`.chip` + `chip-live` / `chip-updating` / `chip-warning` /
-  `chip-critical`): dot plus mono uppercase label.
+  `chip-critical` / `chip-neutral`): dot plus mono uppercase label. `chip-neutral` (muted dot,
+  no pulse) is for facts that are not states, like the "Example" chip.
 - **Metric tiles** (`.metrics` > `.metric`): inset tile, mono value coloured by meaning
   (`is-green`, `is-blue`, `is-teal`, `is-orange`), muted label under it.
 - **Primary button**: accent fill, white text, 8px radius, 12px/20px padding, weight 600;
@@ -92,6 +96,8 @@ it) for status chips, metric values, euro hero figures, table numbers and chart 
 - **Inputs**: label above, 1px border, 2px accent focus ring offset 2px, error below in
   critical red (`.field-error`).
 - **Navigation**: the active item has a 3px accent bar, a faint accent fill and weight 500.
+  "Current finances" stays active on every `/finances/...` page, including the Public pension
+  and Health costs tool pages.
 - **Skeletons** (`.skel`, `.skel-t`) shimmer; there are no spinners except the tiny one inside
   a busy button.
 - **Icons**: inline Lucide-style SVG, `stroke="currentColor"`, `aria-hidden="true"`. No emojis.
@@ -129,8 +135,8 @@ This is a planner, not a server monitor: no live data, polling, WebSockets or fa
   *recalculation* replaces a result the reader is looking at, so it crossfades from 0.45 and
   the card never blanks (the old results are already dimmed to 0.3 while it runs).
   `beforeSwap` tells the two apart by whether the swap target was `.is-pending`.
-- **Entry motion**: fade + translateY(16px to 0), 480ms ease-out, 100ms stagger between
-  top-level blocks, **only** on full page load and boosted navigation (`html.enter`, added by
+- **Entry motion**: fade + translateY(16px to 0), 480ms ease-out, a stagger of 100ms per
+  top-level block (the sixth and later all start at 500ms), **only** on full page load and boosted navigation (`html.enter`, added by
   `theme-init.js` / `app.js` and removed after 1.4s). Result regions (`.sim-region`,
   `#plan-summary`, `#plan-table`) keep their entry like every other block; when a result is
   swapped in during the entry, `html[data-enter-skip]` (the swapped ids) stops the entry animation on that region
@@ -199,8 +205,8 @@ This is a planner, not a server monitor: no live data, polling, WebSockets or fa
   ends) or by clicking a bar in any yearly chart; the URL keeps the year.
 - **The hero figure is the savings rate** (savings ÷ net income). A year without income shows
   what came out of savings instead, and says so in words.
-- **Sankey colours:** income green, money drawn from savings ochre (200 €), gaps and debts
-  red, money going into accounts blue, tax neutral ink, and each expense category in its
+- **Sankey colours:** income green, money drawn from savings ochre (`--chart-5`), gaps and debts
+  red, money going into accounts blue, tax in the muted grey, and each expense category in its
   `--cat-*` colour (as in the stacked chart). The centre node has its own token,
   `--sankey-center` (slate `#334155` light, `#CBD5E1` dark), so it never reads as "otros"
   (`--series-other`), and no category uses the ochre of "money drawn from savings". There is no gradient: every link takes the colour of its outer node at
@@ -225,7 +231,7 @@ This is a planner, not a server monitor: no live data, polling, WebSockets or fa
   colouring of the percentage; the words carry the judgement.
 - **Uncertainty is drawn without signal colours:** the fan uses two blue washes (80 % and
   50 % of scenarios) and an ink median labelled with its final value; "Tu plan" is the dashed
-  orange line. The survival curve is a blue step line; when every scenario lasts every year it
+  violet line (`--series-4`). The survival curve is a blue step line; when every scenario lasts every year it
   is replaced by one sentence (a flat 100 % line says nothing).
 - **Results are reproducible** (fixed seed) until the user asks for "otros escenarios"; the
   refresh URL carries the seed so settings changes keep the same scenarios.
@@ -245,7 +251,7 @@ This is a planner, not a server monitor: no live data, polling, WebSockets or fa
   muted outline, a tooltip saying how many years were historical, and they are counted on
   their own line, never in the headline percentage.
 - **Replayed scenario chart:** the scenario as an ink line with a light ink area and its final
-  value at the end, "Tu plan" dashed in orange, a dotted marker where historical data ends and
+  value at the end, "Tu plan" dashed in violet, a dotted marker where historical data ends and
   a dashed red one where the money runs out. The heat-map is capped at 820px wide so its cells
   stay close to square.
 
@@ -262,6 +268,10 @@ This is a planner, not a server monitor: no live data, polling, WebSockets or fa
   plans, each line ends with the plan's name and final value.
 - Creating a scenario is a plain form (name, source plan, assumption preset) and the new
   scenario becomes the active one, so the next step is simply editing it.
+- **Import and export** are plain links and a file form, never a dialog: an "Export" download
+  on each plan's row, an "Export all plans" link, and an "Import a plan" section with a
+  file input and a plain-language error when the file is rejected. The download links use
+  `hx-boost="false"`.
 
 ## Withdrawals (phase 8)
 
@@ -272,6 +282,21 @@ This is a planner, not a server monitor: no live data, polling, WebSockets or fa
   screen readers) instead of drag and drop; every move saves.
 - The verdict gains one muted sentence with the strategy's effect: the range of spending as a
   share of the plan and the year of the lowest point.
+
+## Tools and tracking (after the plan)
+
+- **Public pension and Health costs** (`/finances/pension`, `/finances/health`) are tool pages
+  under Finances: linked from the Incomes and Expenses sections (`.tool-link`) and from the
+  home grid, opened as full page loads (`hx-boost="false"`). Their form recalculates the result
+  region live (`hx-post` on `input` after 400ms and on `change`), so there is no "Calculate"
+  button; the button that adds the figures to the plan says so ("Add as income").
+- **Tracking** (`/tracking`) follows the verdict pattern: one sentence and a hero figure
+  (`.lead-figure`) with the difference between the latest recorded month and the baseline,
+  red only when below it. The chart draws recorded net worth as a 2px ink line with a dot on
+  each recorded month (months can be missing; the line carries across them), and the saved
+  baseline as the dashed violet "Tu plan" line. The legend appears only when both exist, and a
+  solid 0 line when a value is negative. Entries are a `table.projection` with inline forms
+  (`.entry-form`) like the Finances lists; amounts are nominal euros and say so.
 
 ## Charts
 

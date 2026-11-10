@@ -1,8 +1,9 @@
 # Load testing
 
-[k6](https://k6.io) script that simulates people using Horizonte: 15 virtual
-users for 20 minutes by default, each repeating one of four journeys with
-0.5 to 6 s of think time between steps.
+[k6](https://k6.io) scripts that simulate people using Horizonte. The first,
+`perf/k6/navigation.js`, sends HTTP requests: 15 virtual users for 20 minutes by
+default, each repeating one of four journeys with 0.5 to 6 s of think time between
+steps. The second, `perf/k6/browser.js`, drives real browsers (see below).
 
 | Journey    | Weight | Steps |
 |------------|--------|-------|
@@ -14,14 +15,13 @@ users for 20 minutes by default, each repeating one of four journeys with
 Requests send the same `HX-Request`/`HX-Boosted` headers htmx does, and are
 tagged `kind` = `page`, `partial`, `simulation` or `static` (thresholds are
 set per kind) and `name` (per-endpoint latency in the summary). The script
-sends `Accept-Encoding: gzip`, follows the requests that a page's placeholders
-make for their simulation results, and also covers `/tracking` and
-`/finances/health`.
+sends `Accept-Encoding: gzip` and follows the requests that a page's placeholders
+make for their simulation results.
 
 ## Running it
 
 Always use a separate, empty database: `setup()` seeds a sample plan (the
-one the Go tests use) when the database has no people, and the run must
+one the Go tests use) when the active plan has no people, and the run must
 never touch your real data.
 
 ```sh
@@ -51,7 +51,7 @@ export downloads, so it never changes the plan and can run against a real
 server:
 
 ```sh
-k6 run -e BASE_URL=http://192.168.1.128:8347 perf/k6/browser.js
+k6 run -e BASE_URL=http://127.0.0.1:8347 perf/k6/browser.js
 # -e VUS=30 -e DURATION=1h -e CLICKS=15 -e THINK_MIN=2 -e THINK_MAX=8
 # -e SETTLE_TIMEOUT=15 -e SLOW_SETTLE_TIMEOUT=60   (seconds per click)
 # -e SIMULATION_P95=10   (seconds, p95 limit for the simulation pages)
@@ -73,7 +73,8 @@ page renders a placeholder and the browser fetches the result, which can be slow
 under load. When `DURATION` is over, visits stop clicking and close their browser
 on their own, so k6 exits cleanly instead of interrupting them mid-click.
 
-The run fails if more than `CLICK_FAILURE_RATE` of clicks fail (5 % by default,
+The run also fails if the `checks` rate drops to 95 % or below, or the p75 of the
+largest contentful paint (`browser_web_vital_lcp`) reaches 2.5 s. It fails if more than `CLICK_FAILURE_RATE` of clicks fail (5 % by default,
 0 allows none; `synthetic_click_failed`), or if the p95 of
 `synthetic_click_settle` is over 5 s for ordinary pages or over
 `SIMULATION_P95` for simulation pages. A home page that can't be loaded counts
@@ -96,7 +97,12 @@ To record the server's CPU and memory during the run (Windows):
 powershell -File perf/sample-process.ps1 -ProcessId <server pid> -Out perf/results/process.csv
 ```
 
-## Thresholds
+It writes one CSV row every `-Interval` seconds (default 5) for `-Seconds` (default
+1260, a little over the 20-minute HTTP test; raise it for the browser run), or until the
+process exits. `cpu_pct` is the share of the whole machine, and the columns also give
+working set, private memory, threads and handles.
+
+## Thresholds of the HTTP test (`navigation.js`)
 
 | Metric | Limit |
 |--------|-------|
