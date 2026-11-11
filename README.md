@@ -32,7 +32,7 @@ What the simulation does and does not model is in [docs/assumptions.md](docs/ass
 
 ## Requirements
 
-- Go 1.27.3 or newer (the version in `go.mod`)
+- Go 1.27.4 or newer (the version in `go.mod`)
 
 ## Run
 
