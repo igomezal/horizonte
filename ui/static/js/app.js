@@ -300,6 +300,94 @@
     el.animate([{ opacity: swapFromPending ? 0 : 0.45 }, { opacity: 1 }], { duration: 260, easing: "ease-out" });
   });
 
+  // Scroll position and focus across a partial swap. A swap replaces the node
+  // browser scroll anchoring has chosen as its anchor, and (narrow screens
+  // especially) the anchor it picks next is further down the page, so the
+  // viewport jumped there when a toggle in a result card was clicked.
+  // So anchoring is switched off for the length of a partial swap, and the
+  // position is kept by hand instead: the element the reader is working with
+  // (the focused one, which may be a field below a result that changes height)
+  // is measured before the swap and the page scrolled by however far it moved.
+  // Boosted navigation is left alone. A link that had focus is replaced by an
+  // identical one; it gets the focus back (without scrolling) so keyboard
+  // users keep their place.
+  // State is per request, and every way a swap can end (settle, error, a
+  // timeout) releases it, so anchoring never stays off.
+  const swaps = new Map();
+  function releaseAnchor() {
+    if (swaps.size) return;
+    // Two frames later the charts have rendered and the layout has settled.
+    requestAnimationFrame(() => requestAnimationFrame(() => { if (!swaps.size) root.style.overflowAnchor = ""; }));
+  }
+  function endSwap(key, compensate) {
+    const s = swaps.get(key);
+    if (!s) return;
+    clearTimeout(s.timer);
+    swaps.delete(key);
+    if (compensate && s.ref) {
+      const el = s.ref.el.isConnected ? s.ref.el : (s.ref.id && document.getElementById(s.ref.id)) || (s.refocused && s.refocused.isConnected ? s.refocused : null);
+      const active = document.activeElement;
+      // No place to keep when the reference was hidden by the swap (an "Add"
+      // button that gives way to its form measures 0), or when focus moved
+      // into the new content (a form's first field): that is where the reader
+      // is now, so the page is left alone.
+      const placed = el && el.getClientRects().length > 0 && (active === el || active === document.body || active === root);
+      if (placed) {
+        const delta = el.getBoundingClientRect().top - s.ref.top;
+        if (Math.abs(delta) > 0.5) window.scrollBy({ top: delta, left: 0, behavior: "instant" });
+      }
+    }
+    releaseAnchor();
+  }
+  // A link's place among the links of its toggle group (the group's accessible
+  // name plus the position inside it), so links added before the toggles can't
+  // shift it.
+  function linkSlot(a, scope) {
+    const group = a.closest("[role=group]");
+    if (group && scope.contains(group)) {
+      return { group: group.getAttribute("aria-label"), index: Array.from(group.querySelectorAll("a")).indexOf(a) };
+    }
+    return { group: null, index: Array.from(scope.querySelectorAll("a")).indexOf(a) };
+  }
+  function slotLink(slot, scope) {
+    if (slot.group === null) return Array.from(scope.querySelectorAll("a"))[slot.index];
+    const group = Array.from(scope.querySelectorAll("[role=group]")).find((g) => g.getAttribute("aria-label") === slot.group);
+    return group ? group.querySelectorAll("a")[slot.index] : null;
+  }
+  document.addEventListener("htmx:beforeSwap", (e) => {
+    const xhr = e.detail.xhr;
+    if (e.detail.boosted || e.detail.shouldSwap === false || !xhr) return;
+    root.style.overflowAnchor = "none";
+    const target = e.detail.target;
+    const active = document.activeElement;
+    const s = { timer: setTimeout(() => endSwap(xhr, false), 5000), ref: null, slot: null, id: target && target.id, refocused: null };
+    if (active && active !== document.body && active !== root) {
+      s.ref = { el: active, id: active.id, top: active.getBoundingClientRect().top };
+      if (active.tagName === "A" && target && target.contains(active)) s.slot = linkSlot(active, target);
+    }
+    swaps.set(xhr, s);
+  });
+  document.addEventListener("htmx:afterSwap", (e) => {
+    const s = swaps.get(e.detail.xhr);
+    if (!s || !s.slot) return;
+    // outerHTML replaces the target, so the new node is found by its id.
+    const t = s.id ? document.getElementById(s.id) : null;
+    const link = t && slotLink(s.slot, t);
+    if (link) {
+      link.focus({ preventScroll: true });
+      s.refocused = link;
+    }
+  });
+  document.addEventListener("htmx:afterSettle", (e) => endSwap(e.detail.xhr, true));
+  document.addEventListener("htmx:swapError", (e) => endSwap(e.detail.xhr, false));
+  // A swap that only touches detached nodes (hx-swap="delete", an emptied
+  // outerHTML) never reports a settle to the document; end it once the
+  // request is over and any settle (20ms) would have come.
+  document.addEventListener("htmx:afterRequest", (e) => {
+    const xhr = e.detail.xhr;
+    if (xhr && swaps.has(xhr)) setTimeout(() => endSwap(xhr, true), 150);
+  });
+
   // Connection indicator and toast. Client-side only: navigator.onLine, the
   // online/offline events and htmx network failures (htmx:sendError). Nothing
   // polls the server.

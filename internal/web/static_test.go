@@ -170,3 +170,27 @@ func TestStaticBrotli(t *testing.T) {
 		t.Error("woff2 should not be brotli-compressed")
 	}
 }
+
+// The jump on a results toggle (the viewport landing on the section below
+// after a swap) was browser scroll anchoring; app.js switches it off for the
+// length of a partial swap and hands focus back to the replaced link. The
+// toggles must also stay in-place swaps of an element with an id, which is
+// how the focus is found again.
+func TestPartialSwapKeepsScrollAndFocus(t *testing.T) {
+	js, err := fs.ReadFile(ui.FS, "static/js/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`overflowAnchor = "none"`, `overflowAnchor = ""`, "preventScroll: true", "htmx:swapError", "scrollBy"} {
+		if !strings.Contains(string(js), want) {
+			t.Errorf("app.js should contain %q", want)
+		}
+	}
+	plan, err := fs.ReadFile(ui.FS, "templates/pages/plan.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(plan), `hx-target="#plan-summary" hx-swap="outerHTML"`) || !strings.Contains(string(plan), `<section id="plan-summary"`) {
+		t.Error("plan toggles must swap #plan-summary in place")
+	}
+}

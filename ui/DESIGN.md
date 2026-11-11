@@ -135,6 +135,18 @@ This is a planner, not a server monitor: no live data, polling, WebSockets or fa
   *recalculation* replaces a result the reader is looking at, so it crossfades from 0.45 and
   the card never blanks (the old results are already dimmed to 0.3 while it runs).
   `beforeSwap` tells the two apart by whether the swap target was `.is-pending`.
+- **Scroll and focus on swaps** (`app.js`): a partial (non-boosted) swap switches browser
+  scroll anchoring off until it has settled, errored, ended without a settle (150ms after the
+  request) or timed out (`overflow-anchor: none` on
+  `<html>`), because the anchor node is replaced and the next one the browser picks can be far
+  below, which made the Plan toggles throw the viewport down to the assumptions. The position
+  is kept by hand instead: the focused element is measured before the swap and the page is
+  scrolled by however far it moved after it settles, so a field below a result whose height
+  changes (the Plan assumptions) stays where the reader is typing. Nothing is compensated when
+  the reference has no layout after the swap (an "Add" button hidden by its form) or when focus
+  moved into the new content (the form's first field): the reader's place is then the new
+  content. A link that had focus (the toggles) gets the focus back without scrolling, found
+  by its toggle group's label and its position in the group.
 - **Entry motion**: fade + translateY(16px to 0), 480ms ease-out, a stagger of 100ms per
   top-level block (the sixth and later all start at 500ms), **only** on full page load and boosted navigation (`html.enter`, added by
   `theme-init.js` / `app.js` and removed after 1.4s). Result regions (`.sim-region`,
